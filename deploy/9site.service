@@ -1,0 +1,33 @@
+[Unit]
+Description=9site static web server
+Documentation=https://github.com/trash2bin/9site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/var/www/9site
+ExecStart=/var/www/9site/site-server
+
+Restart=on-failure
+RestartSec=3
+
+# Сервер только читает файлы и слушает порт 8080 на localhost.
+# Права ему сверх этого не нужны, поэтому урезаем всё лишнее.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

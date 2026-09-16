@@ -1,0 +1,2 @@
+# Пользователь деплоя может перезапускать только этот сервис и ничего больше.
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart 9site, /usr/bin/systemctl is-active 9site
