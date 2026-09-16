@@ -1,0 +1,969 @@
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("/assets/font/press-start-2p-cyr.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Special Elite";
+  src: url("/assets/font/special-elite.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "VT323";
+  src: url("/assets/font/vt323.woff2") format("woff2");
+  font-display: swap;
+}
+* {
+  box-sizing: border-box;
+}
+:root {
+  color-scheme: dark;
+  --void: #0b0a10;
+  --coal: #17141d;
+  --slab: #221e2b;
+  --bone: #b8b0a0;
+  --ash: #6f6878;
+  --bevel: #4a4655;
+  --bevel-d: #2b2734;
+  --teal: #0e3b3a;
+  --deep: #08070d;
+  --bar: #2a0710;
+  --yellow: #ffff00;
+  --cyan: #00ffff;
+  --magenta: #ff00ff;
+  --blood: #7a0b12;
+  --rust: #8b4513;
+  --matrix: #00ff41;
+  --paper: #17141d;
+  --ink: #b8b0a0;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  background-color: var(--void);
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% 30%, rgba(163, 18, 31, 0.16), rgba(11, 10, 16, 0) 60%),
+    radial-gradient(ellipse 90% 60% at 50% 100%, rgba(0, 0, 0, 0.85), rgba(11, 10, 16, 0) 65%),
+    linear-gradient(rgba(11, 10, 16, 0.8), rgba(11, 10, 16, 0.8)), url("/assets/img/texture-hyper.gif"),
+    url("/assets/tile.svg");
+  background-position:
+    center top,
+    center bottom,
+    center top,
+    center top,
+    0 0;
+  background-size:
+    auto,
+    auto,
+    auto,
+    642px 122px,
+    32px 32px;
+  background-attachment: fixed, fixed, fixed, fixed, scroll;
+  color: var(--ink);
+  font-family: "Comic Sans MS", "Chalkboard SE", cursive;
+  font-size: 16px;
+  line-height: 1.45;
+}
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  width: 210px;
+  height: 260px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.78;
+  pointer-events: none;
+  filter: saturate(1.5) contrast(1.25) brightness(0.95);
+}
+body::before {
+  left: -35px;
+  top: 30%;
+  background-image: url("/assets/img/console-3ds.jpg");
+  transform: rotate(-12deg);
+}
+body::after {
+  right: -40px;
+  top: 53%;
+  background-image: url("/assets/img/console-nes-web.jpg");
+  transform: rotate(10deg);
+}
+a {
+  color: var(--cyan);
+  text-decoration: underline;
+}
+a:visited {
+  color: #ff66ff;
+}
+a:hover {
+  color: var(--yellow);
+}
+a:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--slab);
+  padding: 6px;
+  z-index: 4;
+}
+.skip-link:focus {
+  left: 8px;
+  color: var(--bone);
+}
+.side-sticker {
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.75;
+  filter: saturate(1.6) contrast(1.25);
+}
+.sticker-angel {
+  left: -45px;
+  top: 71%;
+  width: 210px;
+  height: 210px;
+  background-image: url("/assets/img/kaiangel-album-shh1.jpg");
+  transform: rotate(9deg);
+}
+.sticker-tux {
+  right: 14px;
+  top: 9%;
+  width: 168px;
+  height: 168px;
+  background-image: url("/assets/img/tux-windows.gif");
+  transform: rotate(-8deg);
+  opacity: 0.72;
+  border: 3px outset var(--bevel);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
+}
+.site-shell {
+  position: relative;
+  z-index: 1;
+  width: min(800px, calc(100% - 22px));
+  margin: 18px auto;
+  background: var(--paper);
+  border: 4px ridge var(--bevel);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.75);
+}
+.site-header {
+  position: relative;
+  padding: 18px 16px 14px;
+  text-align: center;
+  color: var(--bone);
+  background: #a3121f url("/assets/img/leopard-red.svg") repeat;
+  background-size: 72px 72px;
+  border-bottom: 4px outset var(--bevel);
+}
+.site-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("/assets/img/texture-hyper.gif") repeat;
+  background-size: 321px 61px;
+  mix-blend-mode: overlay;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.site-header > * {
+  position: relative;
+  z-index: 1;
+}
+.site-shell::before,
+.site-shell::after {
+  content: "";
+  position: absolute;
+  width: 115px;
+  height: 115px;
+  background: url("/assets/img/cobweb.svg") no-repeat center / contain;
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 2;
+}
+.site-shell::before {
+  top: -4px;
+  left: -4px;
+}
+.site-shell::after {
+  bottom: -4px;
+  right: -4px;
+  background-image: url("/assets/img/cobweb-br.svg");
+}
+.header-tux {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 104px;
+  height: 104px;
+  border: 3px outset var(--bevel);
+  background: rgba(0, 0, 0, 0.55);
+  transform: rotate(-7deg);
+}
+.tux-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 4px 6px 4px 0;
+  border: 2px outset var(--bevel);
+}
+.tux-figure {
+  display: inline-block;
+  margin: 8px 10px 6px 0;
+  padding: 5px 5px 3px;
+  background: #000;
+  border: 3px outset var(--bevel);
+  text-align: center;
+  vertical-align: top;
+}
+.tux-figure img {
+  display: block;
+  margin: 0 auto;
+  border: 1px solid #555;
+}
+.tux-figure figcaption {
+  margin-top: 4px;
+  color: var(--yellow);
+  font:
+    15px "VT323",
+    monospace;
+}
+.tux-strip {
+  margin: 12px 0 6px;
+  padding: 8px;
+  background: #000;
+  border: 2px inset var(--bevel);
+  text-align: center;
+  font-size: 0;
+}
+.tux-strip img {
+  display: inline-block;
+  margin: 3px;
+  border: 2px outset var(--bevel);
+  vertical-align: middle;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--yellow);
+  font:
+    bold 14px "Courier New",
+    monospace;
+  letter-spacing: 0.08em;
+}
+h1 {
+  margin: 2px 0 0;
+  color: var(--yellow);
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(24px, 5.8vw, 43px);
+  line-height: 1.25;
+  text-shadow:
+    3px 3px 0 #000,
+    -1px -1px 0 var(--bevel);
+}
+.tagline {
+  margin: 10px 0 12px;
+  color: var(--bone);
+  font:
+    17px "VT323",
+    monospace;
+}
+.ticker {
+  overflow: hidden;
+  white-space: nowrap;
+  border: 2px inset var(--bevel);
+  padding: 3px 0;
+  color: var(--yellow);
+  background: #000;
+  font:
+    18px "VT323",
+    monospace;
+}
+.ticker span {
+  display: inline-block;
+  animation: marquee 18s linear infinite;
+}
+.site-nav {
+  padding: 9px 14px;
+  color: var(--bone);
+  background: var(--void) url("/assets/img/texture-hyper.gif") repeat;
+  background-blend-mode: multiply;
+  background-size: 321px 61px;
+  border-bottom: 3px groove var(--bevel);
+  font:
+    19px "VT323",
+    monospace;
+  text-align: center;
+}
+.site-nav a {
+  color: var(--cyan);
+  margin: 0 5px;
+}
+.site-nav a:visited {
+  color: var(--magenta);
+}
+.sep {
+  color: var(--yellow);
+}
+main {
+  padding: 12px;
+}
+.panel {
+  margin: 0 0 14px;
+  padding: 13px 15px 14px;
+  background: var(--coal) url("/assets/img/texture-hyper.gif") repeat;
+  background-size: 642px 122px;
+  background-blend-mode: multiply;
+  border: 3px ridge var(--bevel-d);
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.6);
+}
+.journal-panel {
+  background: #1a1519;
+  transform: rotate(-0.35deg);
+}
+.console-panel {
+  background: #101b1d;
+  transform: rotate(0.25deg);
+}
+.parts-panel {
+  background: #1b1512;
+  transform: rotate(-0.2deg);
+}
+.panel h2 {
+  margin: -2px -3px 12px;
+  padding: 5px 8px;
+  color: var(--yellow);
+  background: #c00000 url("/assets/img/texture-hyper.gif") repeat;
+  background-blend-mode: overlay;
+  background-size: 321px 61px;
+  border: 2px outset var(--bevel);
+  font:
+    22px "Marker Felt",
+    "Palatino Linotype",
+    "Book Antiqua",
+    serif;
+}
+.profile-copy {
+  min-height: 104px;
+}
+.avatar {
+  float: left;
+  width: 80px;
+  height: 80px;
+  margin: 0 14px 8px 0;
+  border: 3px outset var(--bevel);
+  image-rendering: pixelated;
+  background: #0d3b3b;
+}
+p {
+  margin: 8px 0;
+}
+.status {
+  clear: both;
+  margin: 14px 0 0;
+  color: var(--ash);
+  font:
+    bold 13px "Courier New",
+    monospace;
+}
+.blink {
+  color: #ff2b2b;
+  animation: blink 1.5s steps(2, start) infinite;
+}
+.pixel-note {
+  clear: both;
+  margin: 5px 0 0;
+  padding-top: 8px;
+  border-top: 1px dotted #4a8f88;
+  color: #4a8f88;
+  font:
+    13px "Courier New",
+    monospace;
+}
+.pixel-note img {
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
+.entry {
+  padding: 8px 10px;
+  background: #191622;
+  border: 2px dashed #4a8f88;
+}
+.entry-meta {
+  color: #ff5cff;
+  font:
+    17px "VT323",
+    monospace;
+}
+.entry h3 {
+  margin: 5px 0 8px;
+  color: #e8e2cd;
+  font:
+    25px "Marker Felt",
+    "Palatino Linotype",
+    "Book Antiqua",
+    serif;
+}
+.sticker-line {
+  padding: 6px;
+  color: #000;
+  background: #ffff00;
+  border: 2px solid #000;
+  font:
+    13px "Courier New",
+    monospace;
+  text-align: center;
+}
+.sticker-line img {
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
+.wide-collage {
+  display: block;
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+  object-position: center;
+  border: 4px outset var(--bevel);
+  image-rendering: auto;
+  filter: saturate(1.25) contrast(1.1);
+}
+.parts-image {
+  height: 170px;
+  object-position: center 47%;
+}
+.hardware-row {
+  display: block;
+  font-size: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  border: 4px outset var(--bevel);
+  background: #000;
+}
+.hardware-row img {
+  display: inline-block;
+  width: 33.333%;
+  height: 175px;
+  object-fit: cover;
+  vertical-align: middle;
+  filter: saturate(1.45) contrast(1.18);
+}
+.parts-row img {
+  height: 150px;
+  background: var(--coal);
+}
+.garage-signs {
+  margin: 8px 0;
+  text-align: center;
+  transform: rotate(-1deg);
+}
+.garage-signs span {
+  display: inline-block;
+  margin: 2px;
+  padding: 4px 6px;
+  color: #ffff00;
+  background: #111;
+  border: 2px solid #c00000;
+  font:
+    bold 11px "Courier New",
+    monospace;
+  box-shadow: 2px 2px 0 #2f5f5c;
+}
+.garage-signs span:nth-child(2) {
+  color: #000;
+  background: #ffff00;
+}
+.garage-signs span:nth-child(3) {
+  color: #fff;
+  background: #c00000;
+}
+.garage-signs span:nth-child(4) {
+  color: #000;
+  background: #00ffff;
+}
+.banner-strip {
+  display: block;
+  margin: 12px 0 2px;
+  text-align: center;
+}
+.banner-strip span {
+  display: inline-block;
+  min-width: 105px;
+  margin: 3px 1px;
+  padding: 5px 4px;
+  color: var(--bone);
+  background: var(--bar);
+  border: 2px outset var(--bevel);
+  font:
+    bold 11px "Courier New",
+    monospace;
+  box-shadow: 2px 2px 0 #000;
+}
+.banner-strip span:nth-child(2) {
+  color: #000;
+  background: #00ffff;
+}
+.banner-strip span:nth-child(3) {
+  color: #000;
+  background: #ffff00;
+}
+.banner-strip span:nth-child(4) {
+  background: #ff00ff;
+}
+.catalog-intro {
+  font:
+    18px "VT323",
+    monospace;
+}
+.parts-grid {
+  display: block;
+  font-size: 0;
+  margin: 12px 0 2px;
+}
+.part-card {
+  display: inline-block;
+  width: calc(33.333% - 9px);
+  min-width: 145px;
+  min-height: 154px;
+  margin: 4px;
+  padding: 8px;
+  font-size: 16px;
+  vertical-align: top;
+  background: var(--slab);
+  border: 3px ridge var(--bevel-d);
+  box-shadow: 3px 3px 0 #2f5f5c;
+}
+.part-card img {
+  display: block;
+  margin: 0 auto 3px;
+  image-rendering: pixelated;
+  filter: saturate(1.4) contrast(1.15);
+}
+.part-card h3 {
+  margin: 2px 0;
+  color: #c8c2b6;
+  font-size: 17px;
+  text-shadow: 1px 1px 0 #000;
+}
+.part-card p {
+  margin: 2px 0;
+  font:
+    11px "Courier New",
+    monospace;
+}
+.part-card strong {
+  display: block;
+  color: #ff3b3b;
+  font:
+    bold 15px "Courier New",
+    monospace;
+  letter-spacing: -1px;
+}
+.part-card a {
+  display: block;
+  margin-top: 5px;
+  color: var(--cyan);
+  font:
+    bold 12px "Courier New",
+    monospace;
+}
+.part-card.alt-card {
+  background: #241d16;
+  transform: rotate(0.5deg);
+}
+.part-card.alt-card:nth-child(even) {
+  transform: rotate(-0.8deg);
+}
+.part-card:nth-child(3n) {
+  font-family: "Comic Sans MS", cursive;
+  border-style: dashed;
+  box-shadow: -3px 3px 0 #ff00ff;
+}
+.part-card:nth-child(4n) {
+  font-family: Impact, "Arial Black", sans-serif;
+  transform: rotate(1.2deg);
+  background: #131f22;
+  border: 4px double var(--bevel);
+}
+.part-card:nth-child(5n) {
+  font-family: "Courier New", monospace;
+  transform: rotate(-1.4deg);
+  background: #ffff00;
+  color: #000;
+  border-color: #c00000;
+}
+.part-card:nth-child(5n) h3,
+.part-card:nth-child(5n) a {
+  color: #000080;
+}
+.part-card:nth-child(5n) strong {
+  color: #8b0000;
+}
+.part-card:nth-child(7n) {
+  font-family: Georgia, serif;
+  transform: rotate(0.8deg);
+  background-image: url("/assets/img/texture-badge.gif");
+  background-repeat: repeat;
+  background-blend-mode: multiply;
+}
+.part-card:nth-child(11n) {
+  font-family: "Times New Roman", serif;
+  transform: rotate(-2deg);
+  border-width: 5px 2px 2px 5px;
+}
+.part-card:nth-child(13n) {
+  font-family: "Comic Sans MS", cursive;
+  background: #2b1620;
+  color: #e8c8d4;
+}
+.inventory-log {
+  margin: 13px 0 5px;
+  padding: 9px;
+  color: var(--matrix);
+  background: #050505;
+  border: 3px inset var(--bevel);
+  font:
+    12px/1.55 "Courier New",
+    monospace;
+}
+.inventory-log b {
+  color: #ffff00;
+}
+.rotation-panel {
+  background: #1a0709 url("/assets/img/leopard-red.svg") repeat;
+  background-size: 120px 120px;
+  background-blend-mode: multiply;
+  transform: rotate(0.18deg);
+}
+.album-row {
+  display: block;
+  font-size: 0;
+  margin: 10px 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  border: 4px outset var(--bevel);
+  background: #000;
+}
+.album-row img {
+  display: inline-block;
+  width: 20%;
+  height: 140px;
+  object-fit: cover;
+  vertical-align: middle;
+  filter: saturate(1.5) contrast(1.15);
+}
+.garage-links {
+  padding: 7px;
+  background: var(--slab);
+  border: 2px outset var(--bevel);
+  font:
+    bold 12px "Courier New",
+    monospace;
+  text-align: center;
+}
+.garage-links a {
+  margin: 0 4px;
+  color: var(--cyan);
+}
+.catalog-note {
+  color: #ff3b3b;
+  font:
+    bold 12px "Courier New",
+    monospace;
+  text-align: center;
+}
+.interest-list,
+.links-list {
+  margin: 8px 0 2px;
+  padding-left: 25px;
+}
+.interest-list li,
+.links-list li {
+  margin: 5px 0;
+}
+.interest-list li::marker {
+  color: #4a8f88;
+  content: "✦  ";
+}
+.links-list li::marker {
+  color: var(--magenta);
+  content: "↗  ";
+}
+.muted {
+  color: var(--ash);
+}
+.small {
+  font-size: 13px;
+}
+.webring {
+  margin-top: 14px;
+  padding: 7px;
+  text-align: center;
+  background: #12191c;
+  border: 2px inset var(--bevel);
+  font:
+    bold 13px "Courier New",
+    monospace;
+}
+.webring a {
+  color: #ff5cff;
+}
+.guestbook {
+  background: #1a1519;
+}
+.mailbox {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 8px 12px;
+  background: #000;
+  border: 3px outset var(--bevel);
+  font:
+    bold 19px "Courier New",
+    monospace;
+}
+.mailbox a {
+  color: var(--cyan);
+}
+.swag-panel {
+  background: #131820;
+}
+.swag-panel h2 {
+  background: #7a0b12 url("/assets/img/leopard-red.svg") repeat;
+  background-size: 60px 60px;
+}
+.swag-banners {
+  margin: 12px 0 2px;
+  padding: 8px;
+  text-align: center;
+  background: var(--slab);
+  border: 2px outset var(--bevel);
+}
+.swag-banners a {
+  display: inline-block;
+  margin: 3px 2px;
+  line-height: 0;
+  vertical-align: top;
+}
+.swag-banners img {
+  border: 1px solid var(--bevel);
+}
+.swag-banners a:hover {
+  transform: rotate(-2deg) scale(1.06);
+}
+.site-footer {
+  padding: 15px 12px 14px;
+  color: var(--bone);
+  background: var(--deep) url("/assets/img/leopard-red.svg") repeat;
+  background-size: 130px 130px;
+  background-blend-mode: multiply;
+  border-top: 4px inset var(--bevel);
+  text-align: center;
+  font-size: 14px;
+}
+.footer-tools {
+  display: block;
+}
+.counter {
+  display: inline-block;
+  margin: 0 auto 10px;
+  padding: 5px 8px;
+  color: var(--yellow);
+  background: #000;
+  border: 2px inset var(--bevel);
+  font:
+    bold 12px "Courier New",
+    monospace;
+}
+.counter span {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 2px;
+  padding: 0 2px;
+  color: var(--bone);
+  background: #2a2733;
+  border: 1px inset var(--bevel);
+}
+.button-row {
+  display: block;
+}
+.button-row a {
+  display: inline-block;
+  margin: 3px 1px;
+  line-height: 0;
+  vertical-align: top;
+}
+.button-row img {
+  border: 1px solid var(--bevel);
+  image-rendering: auto;
+}
+.button-row a:hover {
+  transform: rotate(-2deg) scale(1.04);
+}
+.button88 {
+  display: inline-block;
+  width: 88px;
+  height: 31px;
+  margin: 3px 2px;
+  padding: 3px 2px;
+  overflow: hidden;
+  color: var(--bone) !important;
+  background: var(--slab);
+  border: 2px outset var(--bevel);
+  font:
+    bold 9px/10px "Courier New",
+    monospace;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: top;
+}
+.button88:hover {
+  transform: rotate(-3deg);
+  color: #000 !important;
+  background: var(--yellow);
+}
+.button88.hot {
+  background: var(--blood);
+}
+.button88.cyan {
+  color: #000 !important;
+  background: var(--cyan);
+}
+.site-footer p {
+  margin: 8px 0 0;
+}
+.site-footer a {
+  color: var(--cyan);
+}
+.footer-note {
+  color: var(--ash);
+  font:
+    12px "Courier New",
+    monospace;
+}
+@keyframes marquee {
+  0%,
+  8% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .ticker span,
+  .blink {
+    animation: none;
+  }
+}
+@media (max-width: 560px) {
+  body {
+    font-size: 16px;
+    background-size:
+      auto,
+      642px 122px,
+      32px 32px;
+  }
+  body::before,
+  body::after {
+    display: none;
+  }
+  .side-sticker {
+    display: none;
+  }
+  .site-shell {
+    width: calc(100% - 8px);
+    margin: 4px auto;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.7);
+  }
+  .site-header {
+    padding: 14px 8px 11px;
+  }
+  h1 {
+    font-size: 35px;
+  }
+  .site-nav {
+    line-height: 2;
+  }
+  .site-nav a {
+    white-space: nowrap;
+  }
+  main {
+    padding: 7px;
+  }
+  .panel {
+    padding: 10px 11px;
+  }
+  .hardware-row img {
+    height: 105px;
+  }
+  .parts-grid {
+    margin-left: -2px;
+    margin-right: -2px;
+  }
+  .part-card {
+    width: calc(50% - 10px);
+    min-width: 0;
+    min-height: 148px;
+    margin: 3px;
+  }
+  .album-row img {
+    height: 92px;
+  }
+  .header-tux {
+    width: 56px;
+    height: 56px;
+    right: 3px;
+    top: 3px;
+  }
+  .tux-figure {
+    max-width: 100%;
+    margin-right: 6px;
+  }
+  .tux-strip img {
+    max-width: 88px;
+  }
+}
+@media print {
+  body {
+    background: #fff;
+  }
+  .site-shell {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+  }
+  .ticker,
+  .button-row,
+  .tux-strip,
+  .header-tux {
+    display: none;
+  }
+  .site-header,
+  .site-nav,
+  .site-footer {
+    color: #000;
+    background: #fff;
+  }
+  h1,
+  .site-header h1,
+  .panel h2 {
+    color: #000;
+    text-shadow: none;
+  }
+}

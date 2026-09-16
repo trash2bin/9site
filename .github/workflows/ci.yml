@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Бюджет HTML+CSS в байтах (60 КБ).
+  SIZE_LIMIT: "61440"
+
+jobs:
+  checks:
+    name: Проверки
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Prettier — проверка формата
+        run: npm run format:check
+
+      - name: Stylelint — CSS
+        run: npm run lint:css
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l main.go)"
+          if [ -n "$unformatted" ]; then
+            echo "Не отформатировано: $unformatted"
+            gofmt -d main.go
+            exit 1
+          fi
+          echo "OK"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Сборка сервера
+        run: go build -o /tmp/site-server .
+
+      - name: Бюджет HTML+CSS
+        run: bash scripts/check-size.sh
+
+  # Деплой включается только когда на сервере всё готово:
+  # заведи repository variable DEPLOY_ENABLED=true и секреты SSH_* (см. README).
+  deploy:
+    name: Деплой
+    needs: checks
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+      SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || 22 }} -o StrictHostKeyChecking=yes
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Собрать сервер под Linux
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -ldflags="-s -w" -o build/site-server .
+
+      - name: Настроить SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "ключ на месте"
+
+      - name: Залить статику
+        run: |
+          set -euo pipefail
+          rsync -avz -e "$SSH_OPTS" \
+            index.html style.css "$TARGET:$DEPLOY_PATH/"
+          rsync -avz --delete-after -e "$SSH_OPTS" \
+            assets/ "$TARGET:$DEPLOY_PATH/assets/"
+
+      - name: Залить бинарник
+        run: |
+          set -euo pipefail
+          rsync -avz -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
+          $SSH_OPTS "$TARGET" \
+            "install -m 755 /tmp/site-server.new '$DEPLOY_PATH/site-server' && rm -f /tmp/site-server.new"
+
+      - name: Перезапустить сервис
+        if: vars.DEPLOY_RESTART_CMD != ''
+        run: $SSH_OPTS "$TARGET" "${{ vars.DEPLOY_RESTART_CMD }}"
+
+      - name: Итог
+        run: echo "Задеплоен коммит ${{ github.sha }}"

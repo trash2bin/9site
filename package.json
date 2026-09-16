@@ -1,0 +1,24 @@
+{
+  "name": "web1-personal-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ivan's Little Web — статичный сайт в эстетике Web 1.0",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint:css": "stylelint style.css",
+    "lint:css:fix": "stylelint style.css --fix",
+    "lint:go": "gofmt -l main.go && go vet ./...",
+    "size": "bash scripts/check-size.sh",
+    "lint": "npm run format:check && npm run lint:css && npm run lint:go && npm run size",
+    "fix": "npm run format && npm run lint:css:fix"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.7",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^38.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
