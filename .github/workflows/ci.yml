@@ -74,12 +74,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
+      # Обязательны только SSH_HOST и SSH_PRIVATE_KEY. Остальное
+      # подставляется по умолчанию, переопределять не нужно.
       SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
-      SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || 22 }} -o StrictHostKeyChecking=yes
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+      SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
+      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'sudo systemctl restart 9site' }}
+      TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
+      SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
     steps:
       - uses: actions/checkout@v7
 
@@ -124,8 +127,7 @@ jobs:
           "
 
       - name: Перезапустить сервис
-        if: vars.DEPLOY_RESTART_CMD != ''
-        run: $SSH_OPTS "$TARGET" "${{ vars.DEPLOY_RESTART_CMD }}"
+        run: $SSH_OPTS "$TARGET" "$RESTART_CMD"
 
       # Проверяем не только что процесс запустился, но и что он отвечает
       # по-настоящему: сайт отдаётся, а закрытые файлы остаются закрытыми.
