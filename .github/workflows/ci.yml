@@ -22,9 +22,9 @@ jobs:
     name: Проверки
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,7 +38,7 @@ jobs:
       - name: Stylelint — CSS
         run: npm run lint:css
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: false
@@ -68,7 +68,7 @@ jobs:
     name: Деплой
     needs: checks
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main' &&
       vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
@@ -81,9 +81,9 @@ jobs:
       TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
       SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || 22 }} -o StrictHostKeyChecking=yes
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: false
@@ -114,12 +114,39 @@ jobs:
         run: |
           set -euo pipefail
           rsync -avz -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
-          $SSH_OPTS "$TARGET" \
-            "install -m 755 /tmp/site-server.new '$DEPLOY_PATH/site-server' && rm -f /tmp/site-server.new"
+          # Ставим рядом и подменяем через mv: переименование в пределах
+          # одной файловой системы атомарно, поэтому сервис ни на миг не
+          # остаётся без бинарника и не ловит Text file busy.
+          $SSH_OPTS "$TARGET" "
+            install -m 755 /tmp/site-server.new '$DEPLOY_PATH/site-server.new' &&
+            mv -f '$DEPLOY_PATH/site-server.new' '$DEPLOY_PATH/site-server' &&
+            rm -f /tmp/site-server.new
+          "
 
       - name: Перезапустить сервис
         if: vars.DEPLOY_RESTART_CMD != ''
         run: $SSH_OPTS "$TARGET" "${{ vars.DEPLOY_RESTART_CMD }}"
+
+      # Проверяем не только что процесс запустился, но и что он отвечает
+      # по-настоящему: сайт отдаётся, а закрытые файлы остаются закрытыми.
+      - name: Проверить, что сайт отвечает
+        run: |
+          set -euo pipefail
+
+          check() {
+            local url="$1" want="$2" code
+            code="$($SSH_OPTS "$TARGET" "curl -s -o /dev/null -w '%{http_code}' '$url'" || true)"
+            printf '  %-34s %s\n' "$url" "${code:-нет ответа}"
+            if [ "$code" != "$want" ]; then
+              echo "Ожидался код $want, получен ${code:-нет ответа}"
+              return 1
+            fi
+          }
+
+          check http://127.0.0.1:8080/           200
+          check http://127.0.0.1:8080/style.css  200
+          check http://127.0.0.1:8080/main.go    404
+          check http://127.0.0.1/                200
 
       - name: Итог
         run: echo "Задеплоен коммит ${{ github.sha }}"
