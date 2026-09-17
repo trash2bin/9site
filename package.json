@@ -8,7 +8,7 @@
     "format:check": "prettier --check .",
     "lint:css": "stylelint style.css",
     "lint:css:fix": "stylelint style.css --fix",
-    "lint:go": "gofmt -l main.go && go vet ./...",
+    "lint:go": "gofmt -l . && go vet ./...",
     "size": "bash scripts/check-size.sh",
     "lint": "npm run format:check && npm run lint:css && npm run lint:go && npm run size",
     "fix": "npm run format && npm run lint:css:fix"

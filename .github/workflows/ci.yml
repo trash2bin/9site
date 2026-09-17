@@ -14,12 +14,12 @@ permissions:
   contents: read
 
 env:
-  # Бюджет HTML+CSS в байтах (60 КБ).
+  # HTML+CSS budget in bytes (60 KiB).
   SIZE_LIMIT: "61440"
 
 jobs:
   checks:
-    name: Проверки
+    name: Checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,10 +29,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Установить зависимости
+      - name: Install dependencies
         run: npm ci
 
-      - name: Prettier — проверка формата
+      - name: Prettier — format check
         run: npm run format:check
 
       - name: Stylelint — CSS
@@ -45,10 +45,10 @@ jobs:
 
       - name: gofmt
         run: |
-          unformatted="$(gofmt -l main.go)"
+          unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
-            echo "Не отформатировано: $unformatted"
-            gofmt -d main.go
+            echo "Not formatted: $unformatted"
+            gofmt -d .
             exit 1
           fi
           echo "OK"
@@ -56,16 +56,16 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - name: Сборка сервера
+      - name: Build server
         run: go build -o /tmp/site-server .
 
-      - name: Бюджет HTML+CSS
+      - name: HTML+CSS budget
         run: bash scripts/check-size.sh
 
-  # Деплой включается только когда на сервере всё готово:
-  # заведи repository variable DEPLOY_ENABLED=true и секреты SSH_* (см. README).
+  # Deploy only switches on once the server is ready: set the repository
+  # variable DEPLOY_ENABLED=true and fill in the SSH_* secrets (see README).
   deploy:
-    name: Деплой
+    name: Deploy
     needs: checks
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
@@ -74,8 +74,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      # Обязательны только SSH_HOST и SSH_PRIVATE_KEY. Остальное
-      # подставляется по умолчанию, переопределять не нужно.
+      # Only SSH_HOST and SSH_PRIVATE_KEY are required. The rest fall back
+      # to defaults, so there is no need to override them.
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
@@ -91,21 +91,21 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Собрать сервер под Linux
+      - name: Build Linux server binary
         run: |
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -trimpath -ldflags="-s -w" -o build/site-server .
 
-      - name: Настроить SSH
+      - name: Set up SSH
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          echo "ключ на месте"
+          echo "key in place"
 
-      - name: Залить статику
+      - name: Upload static files
         run: |
           set -euo pipefail
           rsync -avz -e "$SSH_OPTS" \
@@ -113,34 +113,34 @@ jobs:
           rsync -avz --delete-after -e "$SSH_OPTS" \
             assets/ "$TARGET:$DEPLOY_PATH/assets/"
 
-      - name: Залить бинарник
+      - name: Upload server binary
         run: |
           set -euo pipefail
           rsync -avz -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
-          # Ставим рядом и подменяем через mv: переименование в пределах
-          # одной файловой системы атомарно, поэтому сервис ни на миг не
-          # остаётся без бинарника и не ловит Text file busy.
+          # Install next to the old binary and swap with mv: a rename inside
+          # one filesystem is atomic, so the service never goes a moment
+          # without a binary and never hits "Text file busy".
           $SSH_OPTS "$TARGET" "
             install -m 755 /tmp/site-server.new '$DEPLOY_PATH/site-server.new' &&
             mv -f '$DEPLOY_PATH/site-server.new' '$DEPLOY_PATH/site-server' &&
             rm -f /tmp/site-server.new
           "
 
-      - name: Перезапустить сервис
+      - name: Restart service
         run: $SSH_OPTS "$TARGET" "$RESTART_CMD"
 
-      # Проверяем не только что процесс запустился, но и что он отвечает
-      # по-настоящему: сайт отдаётся, а закрытые файлы остаются закрытыми.
-      - name: Проверить, что сайт отвечает
+      # Check not only that the process started but that it actually
+      # responds: the site is served and the closed files stay closed.
+      - name: Check that the site responds
         run: |
           set -euo pipefail
 
           check() {
             local url="$1" want="$2" code
             code="$($SSH_OPTS "$TARGET" "curl -s -o /dev/null -w '%{http_code}' '$url'" || true)"
-            printf '  %-34s %s\n' "$url" "${code:-нет ответа}"
+            printf '  %-34s %s\n' "$url" "${code:-no response}"
             if [ "$code" != "$want" ]; then
-              echo "Ожидался код $want, получен ${code:-нет ответа}"
+              echo "Expected $want, got ${code:-no response}"
               return 1
             fi
           }
@@ -151,14 +151,14 @@ jobs:
           check http://127.0.0.1:8080/visits.dat 404
           check http://127.0.0.1/                200
 
-      # Счётчик — единственное живое место на сайте, поэтому проверяем
-      # не код ответа, а что число действительно растёт от захода к заходу.
-      - name: Проверить счётчик визитов
+      # The counter is the only live part of the site, so check the number
+      # itself rather than the status code: it has to grow on every request.
+      - name: Check the visit counter
         run: |
           set -euo pipefail
 
-          # Каждый вызов — ровно один запрос к главной, поэтому число
-          # внутри .counter обязано увеличиться на единицу.
+          # Each call is exactly one request to the main page, so the number
+          # inside .counter must increase by one.
           visits() {
             $SSH_OPTS "$TARGET" "curl -s http://127.0.0.1:8080/" \
               | tr -d '\n' \
@@ -169,21 +169,21 @@ jobs:
 
           first="$(visits)"
           second="$(visits)"
-          printf '  до: %s, после: %s\n' "$first" "$second"
+          printf '  before: %s, after: %s\n' "$first" "$second"
 
           if [ -z "$first" ] || [ -z "$second" ]; then
-            echo "Счётчик не найден в ответе"
+            echo "Counter not found in the response"
             exit 1
           fi
 
-          # 10# — иначе bash примет ведущие нули за восьмеричную запись
-          # и упадёт на числе вроде 008.
+          # 10# keeps bash from reading leading zeros as octal and failing
+          # on a number like 008.
           diff=$((10#$second - 10#$first))
           if [ "$diff" != "1" ]; then
-            echo "Ожидался рост на 1, получен $diff"
+            echo "Expected a growth of 1, got $diff"
             exit 1
           fi
-          echo "Счётчик увеличивается"
+          echo "Counter is growing"
 
-      - name: Итог
-        run: echo "Задеплоен коммит ${{ github.sha }}"
+      - name: Summary
+        run: echo "Deployed commit ${{ github.sha }}"
