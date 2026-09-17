@@ -7,6 +7,10 @@ node_modules/
 *.log
 *.pid
 
+# локальный счётчик визитов (в проде лежит в /var/lib/9site)
+/visits.dat
+/visits.dat.tmp
+
 # отладочные скриншоты в корне (на /assets не влияет)
 /*.png
 /*.jpg

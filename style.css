@@ -1,17 +1,33 @@
+/* Кодировка разбита на две части: у Press Start 2P и Pixelify Sans разные
+   файлы для латиницы и кириллицы, а unicode-range говорит браузеру, какой
+   из них качать. Без этого русские буквы падали в системный шрифт. */
 @font-face {
   font-family: "Press Start 2P";
-  src: url("/assets/font/press-start-2p-cyr.woff2") format("woff2");
+  src: url("/assets/font/press-start-2p-latin.woff2") format("woff2");
   font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122;
 }
 @font-face {
-  font-family: "Special Elite";
-  src: url("/assets/font/special-elite.woff2") format("woff2");
+  font-family: "Press Start 2P";
+  src: url("/assets/font/press-start-2p-cyrillic.woff2") format("woff2");
   font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
 @font-face {
-  font-family: "VT323";
-  src: url("/assets/font/vt323.woff2") format("woff2");
+  font-family: "Pixelify Sans";
+  src: url("/assets/font/pixelify-sans-latin.woff2") format("woff2");
   font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122;
+}
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("/assets/font/pixelify-sans-cyrillic.woff2") format("woff2");
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
 * {
   box-sizing: border-box;
@@ -233,7 +249,7 @@ a:focus-visible {
   margin-top: 4px;
   color: var(--yellow);
   font:
-    15px "VT323",
+    15px "Pixelify Sans",
     monospace;
 }
 .tux-strip {
@@ -272,7 +288,7 @@ h1 {
   margin: 10px 0 12px;
   color: var(--bone);
   font:
-    17px "VT323",
+    17px "Pixelify Sans",
     monospace;
 }
 .ticker {
@@ -283,7 +299,7 @@ h1 {
   color: var(--yellow);
   background: #000;
   font:
-    18px "VT323",
+    18px "Pixelify Sans",
     monospace;
 }
 .ticker span {
@@ -298,7 +314,7 @@ h1 {
   background-size: 321px 61px;
   border-bottom: 3px groove var(--bevel);
   font:
-    19px "VT323",
+    19px "Pixelify Sans",
     monospace;
   text-align: center;
 }
@@ -399,7 +415,7 @@ p {
 .entry-meta {
   color: #ff5cff;
   font:
-    17px "VT323",
+    17px "Pixelify Sans",
     monospace;
 }
 .entry h3 {
@@ -519,7 +535,7 @@ p {
 }
 .catalog-intro {
   font:
-    18px "VT323",
+    18px "Pixelify Sans",
     monospace;
 }
 .parts-grid {
@@ -756,6 +772,33 @@ p {
 }
 .swag-banners a:hover {
   transform: rotate(-2deg) scale(1.06);
+}
+.social-links {
+  margin: 10px 0 2px;
+  padding: 9px 11px;
+  background: #191622;
+  border: 2px inset var(--bevel);
+  font:
+    13px/1.7 "Pixelify Sans",
+    monospace;
+  text-align: left;
+  list-style: none;
+}
+
+/* Длинные адреса переносятся, но остаются в своей колонке — иначе
+   вторая строка ссылки прижимается к самому краю и путается с меткой. */
+.social-links li {
+  display: flex;
+  gap: 5px;
+}
+.social-links b {
+  flex: 0 0 88px;
+  color: var(--yellow);
+}
+.social-links a {
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .site-footer {
   padding: 15px 12px 14px;

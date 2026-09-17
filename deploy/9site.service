@@ -11,6 +11,12 @@ Group=deploy
 WorkingDirectory=/var/www/9site
 ExecStart=/var/www/9site/site-server
 
+# Счётчик визитов пишется в /var/lib/9site. Каталог создаёт сам systemd и
+# отдаёт пользователю сервиса; при ProtectSystem=strict он остаётся
+# единственным местом, доступным на запись.
+StateDirectory=9site
+Environment=VISITS_FILE=/var/lib/9site/visits.dat
+
 Restart=on-failure
 RestartSec=3
 

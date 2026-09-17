@@ -148,7 +148,42 @@ jobs:
           check http://127.0.0.1:8080/           200
           check http://127.0.0.1:8080/style.css  200
           check http://127.0.0.1:8080/main.go    404
+          check http://127.0.0.1:8080/visits.dat 404
           check http://127.0.0.1/                200
+
+      # Счётчик — единственное живое место на сайте, поэтому проверяем
+      # не код ответа, а что число действительно растёт от захода к заходу.
+      - name: Проверить счётчик визитов
+        run: |
+          set -euo pipefail
+
+          # Каждый вызов — ровно один запрос к главной, поэтому число
+          # внутри .counter обязано увеличиться на единицу.
+          visits() {
+            $SSH_OPTS "$TARGET" "curl -s http://127.0.0.1:8080/" \
+              | tr -d '\n' \
+              | awk -F'class="counter"' '{print $2}' \
+              | head -c 200 \
+              | grep -o '<span>[0-9]</span>' | grep -o '[0-9]' | tr -d '\n'
+          }
+
+          first="$(visits)"
+          second="$(visits)"
+          printf '  до: %s, после: %s\n' "$first" "$second"
+
+          if [ -z "$first" ] || [ -z "$second" ]; then
+            echo "Счётчик не найден в ответе"
+            exit 1
+          fi
+
+          # 10# — иначе bash примет ведущие нули за восьмеричную запись
+          # и упадёт на числе вроде 008.
+          diff=$((10#$second - 10#$first))
+          if [ "$diff" != "1" ]; then
+            echo "Ожидался рост на 1, получен $diff"
+            exit 1
+          fi
+          echo "Счётчик увеличивается"
 
       - name: Итог
         run: echo "Задеплоен коммит ${{ github.sha }}"
