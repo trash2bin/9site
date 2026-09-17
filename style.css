@@ -773,33 +773,6 @@ p {
 .swag-banners a:hover {
   transform: rotate(-2deg) scale(1.06);
 }
-.social-links {
-  margin: 10px 0 2px;
-  padding: 9px 11px;
-  background: #191622;
-  border: 2px inset var(--bevel);
-  font:
-    13px/1.7 "Pixelify Sans",
-    monospace;
-  text-align: left;
-  list-style: none;
-}
-
-/* Длинные адреса переносятся, но остаются в своей колонке — иначе
-   вторая строка ссылки прижимается к самому краю и путается с меткой. */
-.social-links li {
-  display: flex;
-  gap: 5px;
-}
-.social-links b {
-  flex: 0 0 88px;
-  color: var(--yellow);
-}
-.social-links a {
-  color: var(--cyan);
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
 .site-footer {
   padding: 15px 12px 14px;
   color: var(--bone);

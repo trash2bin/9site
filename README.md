@@ -185,7 +185,7 @@ SIZE_LIMIT=30720 npm run size   # строгая проверка на 30 КБ
 
 - Порт 8080 захардкожен, HTTPS и домена нет.
 - Базы данных нет, форма гостевой книги — ссылка на email.
-- В блоке SWAG CONNECT подставлены только ссылки на Telegram, Spotify, Twitter и Reddit. GitHub (`https://github.com/USERNAME`) и Steam (`https://steamcommunity.com/id/USERNAME`) — заглушки, нужны настоящие адреса; они лежат в `index.html` в списке `.social-links` и на кнопках `github.gif` / `steam.gif`.
+- В блоке SWAG CONNECT все шесть профилей ведут на настоящие аккаунты (Telegram, Spotify, GitHub, Twitter, Reddit, Steam). Текстового списка с адресами больше нет: остались только кнопки 88×31, а ссылки лежат в их `href`.
 - Счётчик считает заходы, а не посетителей: `F5` и обновления страницы увеличивают число. Защита от накрутки не делалась.
 - Каталог демонстрационный, заказы не оформляет.
 - Часть картинок тяжелее 50 КБ, хотя ТЗ просило ужимать каждую до этого предела: `car-parts.png` (862 КБ), `junkyard-engines.jpg` (735 КБ), `avatar-anime.gif` (649 КБ), `kaiangel-album-shh1.jpg` (578 КБ), `console-3ds.jpg` (430 КБ).
