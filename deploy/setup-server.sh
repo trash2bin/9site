@@ -8,11 +8,23 @@
 #
 # Скрипт можно запускать повторно: он не ломает уже сделанное.
 #
+# Домен и адрес для писем Let's Encrypt можно переопределить:
+#
+#   DOMAIN=site.example.com LE_EMAIL=me@example.com bash setup-server.sh
+#
 set -euo pipefail
 
 DEPLOY_USER="deploy"
 DEPLOY_PATH="/var/www/9site"
 SERVICE_NAME="9site"
+
+# Домен, на который выпускается сертификат. A-запись домена должна указывать
+# на этот сервер, иначе проверка Let's Encrypt не пройдёт.
+DOMAIN="${DOMAIN:-9swag.myftp.biz}"
+# Отсюда certbot отдаёт проверочные файлы, см. nginx-9site.conf.
+ACME_ROOT="/var/www/html"
+# Адрес для писем о проблемах с продлением. Пустой означает выпуск без него.
+LE_EMAIL="${LE_EMAIL:-}"
 
 say() { printf '\n== %s\n' "$*"; }
 
@@ -31,7 +43,7 @@ done
 
 say "Пакеты"
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx rsync curl
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx rsync curl certbot
 
 say "Пользователь $DEPLOY_USER"
 if id -u "$DEPLOY_USER" >/dev/null 2>&1; then
@@ -78,17 +90,71 @@ visudo -c -f "/etc/sudoers.d/$SERVICE_NAME-deploy" >/dev/null
 echo "  $DEPLOY_USER может перезапускать $SERVICE_NAME без пароля"
 
 say "nginx"
-install -m 644 "$SCRIPT_DIR/nginx-9site.conf" "/etc/nginx/sites-available/$SERVICE_NAME"
-ln -sfn "/etc/nginx/sites-available/$SERVICE_NAME" "/etc/nginx/sites-enabled/$SERVICE_NAME"
 # Дефолтный сайт nginx помечен default_server и перехватывает все запросы,
 # поэтому его надо убрать, иначе наша конфигурация не получит трафик.
 if [ -e /etc/nginx/sites-enabled/default ]; then
   rm -f /etc/nginx/sites-enabled/default
   echo "  дефолтный сайт отключён"
 fi
+
+# Сертификат не выпустить, пока сайт не отвечает по HTTP, а конфиг с
+# listen 443 nginx не примет, пока сертификата нет. Поэтому при первом
+# запуске сначала поднимаем временный HTTP-блок с путём для проверок
+# Let's Encrypt, получаем сертификат и только потом ставим настоящий конфиг.
+CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+if [ -f "$CERT" ]; then
+  echo "  сертификат для $DOMAIN уже есть, выпуск пропущен"
+else
+  say "Сертификат Let's Encrypt"
+  install -d -m 755 "$ACME_ROOT"
+  cat >"/etc/nginx/sites-available/$SERVICE_NAME" <<BOOTSTRAP
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name $DOMAIN;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root $ACME_ROOT;
+        default_type "text/plain";
+        try_files \$uri =404;
+    }
+
+    # Пока сертификата нет, сайт отдаём по HTTP как раньше: этот конфиг
+    # может застать сервис живым, ронять его на время выпуска незачем.
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+BOOTSTRAP
+  ln -sfn "/etc/nginx/sites-available/$SERVICE_NAME" "/etc/nginx/sites-enabled/$SERVICE_NAME"
+  nginx -t
+  systemctl reload nginx
+  echo "  временный HTTP-блок поднят, проверка пройдёт"
+
+  CERTBOT=(certbot certonly --webroot -w "$ACME_ROOT" -d "$DOMAIN" --non-interactive --agree-tos)
+  if [ -n "$LE_EMAIL" ]; then
+    CERTBOT+=(-m "$LE_EMAIL")
+    echo "  письма о продлении пойдут на $LE_EMAIL"
+  else
+    # Без адреса Let's Encrypt не предупредит, если продление сломается.
+    CERTBOT+=(--register-unsafely-without-email)
+    echo "  LE_EMAIL не задан, выпускаю сертификат без адреса для писем"
+  fi
+  "${CERTBOT[@]}"
+fi
+
+sed "s/__DOMAIN__/$DOMAIN/g" "$SCRIPT_DIR/nginx-9site.conf" >"/etc/nginx/sites-available/$SERVICE_NAME"
+chmod 644 "/etc/nginx/sites-available/$SERVICE_NAME"
+ln -sfn "/etc/nginx/sites-available/$SERVICE_NAME" "/etc/nginx/sites-enabled/$SERVICE_NAME"
 nginx -t
 systemctl reload nginx
 echo "  конфигурация проверена, nginx перезагружен"
+echo "  сайт слушает http://$DOMAIN и https://$DOMAIN"
 
 say "Firewall"
 # Сначала открываем SSH и только потом включаем ufw, иначе можно
@@ -100,12 +166,22 @@ if [ "$SSH_PORT" != "22" ]; then
   ufw allow "$SSH_PORT/tcp" >/dev/null
   echo "  SSH слушает нестандартный порт $SSH_PORT, открыл и его"
 fi
-ufw allow 'Nginx HTTP' >/dev/null
+# Nginx Full открывает и 80, и 443.
+ufw allow 'Nginx Full' >/dev/null
 ufw --force enable >/dev/null
 ufw status | sed 's/^/  /'
 
+say "Сертификат"
+# Сертификат продлевает таймер из пакета certbot, он ходит тем же путём
+# /.well-known/acme-challenge/, что описан в nginx-9site.conf.
+if [ -f "$CERT" ]; then
+  systemctl list-timers certbot.timer --no-pager | sed 's/^/  /'
+  echo "  продление проверяется командой: certbot renew --dry-run"
+fi
+
 say "Что дальше"
 cat <<INFO
+Сайт: https://$DOMAIN
 Пропиши эти значения в GitHub, в Settings -> Secrets and variables -> Actions.
 
 Переменные (вкладка Variables):
