@@ -1,0 +1,134 @@
+/* Анимации и переопределения под условия просмотра: узкий экран, печать,
+   отключённая анимация.
+
+   Идут последними в цепочке @import, поэтому перебивают основные правила.
+   Медиазапрос на 560px — единственная точка мобильной вёрстки главной.
+
+   Здесь же лежат @keyframes: анимации заданы по имени в layout.css (.ticker)
+   и panels.css (.blink), а сами кадры вынесены сюда, потому что правила из
+   @keyframes в каскаде не участвуют и от порядка импортов не зависят. */
+
+@keyframes marquee {
+  0%,
+  8% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .ticker span,
+  .blink {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  body {
+    font-size: 16px;
+    background-size:
+      auto,
+      642px 122px,
+      32px 32px;
+  }
+  body::before,
+  body::after {
+    display: none;
+  }
+  .side-sticker {
+    display: none;
+  }
+  .site-shell {
+    width: calc(100% - 8px);
+    margin: 4px auto;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.7);
+  }
+  .site-header {
+    padding: 14px 8px 11px;
+  }
+  h1 {
+    font-size: 35px;
+  }
+  .site-nav {
+    line-height: 2;
+  }
+  .site-nav a {
+    white-space: nowrap;
+  }
+  main {
+    padding: 7px;
+  }
+  .panel {
+    padding: 10px 11px;
+  }
+  .hardware-row img {
+    height: 105px;
+  }
+  .parts-grid {
+    margin-left: -2px;
+    margin-right: -2px;
+  }
+  .part-card {
+    width: calc(50% - 10px);
+    min-width: 0;
+    min-height: 148px;
+    margin: 3px;
+  }
+  .album-row img {
+    height: 92px;
+  }
+  .header-tux {
+    width: 56px;
+    height: 56px;
+    right: 3px;
+    top: 3px;
+  }
+  .tux-figure {
+    max-width: 100%;
+    margin-right: 6px;
+  }
+  .tux-strip img {
+    max-width: 88px;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+  .site-shell {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+  }
+  .ticker,
+  .button-row,
+  .tux-strip,
+  .header-tux {
+    display: none;
+  }
+  .site-header,
+  .site-nav,
+  .site-footer {
+    color: #000;
+    background: #fff;
+  }
+  h1,
+  .site-header h1,
+  .panel h2 {
+    color: #000;
+    text-shadow: none;
+  }
+}

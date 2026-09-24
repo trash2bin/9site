@@ -1,0 +1,47 @@
+/* Подвал макета: пять колонок ссылок и пустая полоса под ними (место под
+   копирайт и соцсети). */
+
+.footer {
+  background-color: var(--footer);
+  color: var(--paper);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 30px;
+  padding-block: 70px 60px;
+}
+
+.footer-title {
+  margin-bottom: 18px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.footer-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.footer-list a {
+  color: var(--on-dark);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.footer-list a:hover {
+  color: var(--paper);
+}
+
+/* Полоса под колонками: в макете пустая, место под копирайт и соцсети */
+.footer-bar {
+  height: 64px;
+  background-color: var(--footer-deep);
+}

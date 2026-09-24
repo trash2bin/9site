@@ -1,0 +1,134 @@
+/* Баннер макета — единственный блок главной, собранный из стилей второй
+   страницы: гротеск вместо пиксельных шрифтов, круглые кнопки, никаких
+   ridge/outset. Фон белый, окантовка ярко-синяя, внутри — пунктирная рамка,
+   как на бейдже.
+
+   Все дочерние селекторы идут через .maket-banner: без этого глобальные
+   a:hover и a:visited красят текст в жёлтый и розовый прямо на белом фоне. */
+
+/* Баннер макета — единственный блок страницы, собранный из стилей второй
+   страницы: гротеск вместо пиксельных шрифтов, круглые кнопки, никаких
+   ridge/outset. Фон белый, окантовка ярко-синяя, внутри — пунктирная рамка,
+   как на бейдже.
+   Все дочерние селекторы идут через .maket-banner: без этого глобальные
+   a:hover и a:visited красят текст в жёлтый и розовый прямо на белом фоне. */
+.maket-banner {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 22px;
+  padding: 20px 22px;
+  border: 3px solid #0033ff;
+  color: #0033ff;
+  font-family: var(--maket-font);
+  text-decoration: none;
+  background-color: #fff;
+}
+
+.maket-banner::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px dashed #0033ff;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.maket-banner > * {
+  position: relative;
+  z-index: 1;
+}
+
+.maket-banner:focus-visible {
+  outline-color: #0033ff;
+}
+
+.maket-banner .maket-banner-tag {
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background-color: #0033ff;
+}
+
+.maket-banner .maket-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.maket-banner .maket-banner-title {
+  color: #0033ff;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.maket-banner .maket-banner-note {
+  color: #5b6488;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.maket-banner .maket-banner-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.maket-banner .maket-banner-badge {
+  width: auto;
+  height: 37px;
+}
+
+.maket-banner .maket-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border: 2px solid #0033ff;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background-color: #0033ff;
+}
+
+.maket-banner .maket-banner-cta svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+.maket-banner:hover .maket-banner-cta,
+.maket-banner:focus-visible .maket-banner-cta {
+  color: #0033ff;
+  background-color: #fff;
+}
+
+.maket-banner:hover .maket-banner-cta svg {
+  transform: translateX(3px);
+}
+
+@media (max-width: 560px) {
+  .maket-banner .maket-banner-title {
+    font-size: 19px;
+  }
+  .maket-banner .maket-banner-badge {
+    display: none;
+  }
+}

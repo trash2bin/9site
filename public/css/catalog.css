@@ -1,0 +1,194 @@
+/* Гаражный каталог: сетка из 30 карточек запчастей, журнал инвентаря и
+   секция «сейчас в плеере».
+
+   Разнобой шрифтов и наклонов в карточках намеренный: семейство, поворот и
+   рамку задают .part-card:nth-child(...), поэтому правка одного n меняет
+   вид только каждой n-й карточки. */
+
+.catalog-intro {
+  font:
+    18px "Pixelify Sans",
+    monospace;
+}
+
+.parts-grid {
+  display: block;
+  font-size: 0;
+  margin: 12px 0 2px;
+}
+
+.part-card {
+  display: inline-block;
+  width: calc(33.333% - 9px);
+  min-width: 145px;
+  min-height: 154px;
+  margin: 4px;
+  padding: 8px;
+  font-size: 16px;
+  vertical-align: top;
+  background: var(--slab);
+  border: 3px ridge var(--bevel-d);
+  box-shadow: 3px 3px 0 #2f5f5c;
+}
+
+.part-card img {
+  display: block;
+  margin: 0 auto 3px;
+  image-rendering: pixelated;
+  filter: saturate(1.4) contrast(1.15);
+}
+
+.part-card h3 {
+  margin: 2px 0;
+  color: #c8c2b6;
+  font-size: 17px;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.part-card p {
+  margin: 2px 0;
+  font:
+    11px "Courier New",
+    monospace;
+}
+
+.part-card strong {
+  display: block;
+  color: #ff3b3b;
+  font:
+    bold 15px "Courier New",
+    monospace;
+  letter-spacing: -1px;
+}
+
+.part-card a {
+  display: block;
+  margin-top: 5px;
+  color: var(--cyan);
+  font:
+    bold 12px "Courier New",
+    monospace;
+}
+
+.part-card.alt-card {
+  background: #241d16;
+  transform: rotate(0.5deg);
+}
+
+.part-card.alt-card:nth-child(even) {
+  transform: rotate(-0.8deg);
+}
+
+.part-card:nth-child(3n) {
+  font-family: "Comic Sans MS", cursive;
+  border-style: dashed;
+  box-shadow: -3px 3px 0 #ff00ff;
+}
+
+.part-card:nth-child(4n) {
+  font-family: Impact, "Arial Black", sans-serif;
+  transform: rotate(1.2deg);
+  background: #131f22;
+  border: 4px double var(--bevel);
+}
+
+.part-card:nth-child(5n) {
+  font-family: "Courier New", monospace;
+  transform: rotate(-1.4deg);
+  background: #ffff00;
+  color: #000;
+  border-color: #c00000;
+}
+
+.part-card:nth-child(5n) h3,
+.part-card:nth-child(5n) a {
+  color: #000080;
+}
+
+.part-card:nth-child(5n) strong {
+  color: #8b0000;
+}
+
+.part-card:nth-child(7n) {
+  font-family: Georgia, serif;
+  transform: rotate(0.8deg);
+  background-image: url("/assets/img/texture-badge.gif");
+  background-repeat: repeat;
+  background-blend-mode: multiply;
+}
+
+.part-card:nth-child(11n) {
+  font-family: "Times New Roman", serif;
+  transform: rotate(-2deg);
+  border-width: 5px 2px 2px 5px;
+}
+
+.part-card:nth-child(13n) {
+  font-family: "Comic Sans MS", cursive;
+  background: #2b1620;
+  color: #e8c8d4;
+}
+
+.inventory-log {
+  margin: 13px 0 5px;
+  padding: 9px;
+  color: var(--matrix);
+  background: #050505;
+  border: 3px inset var(--bevel);
+  font:
+    12px/1.55 "Courier New",
+    monospace;
+}
+
+.inventory-log b {
+  color: #ffff00;
+}
+
+.rotation-panel {
+  background: #1a0709 url("/assets/img/leopard-red.svg") repeat;
+  background-size: 120px 120px;
+  background-blend-mode: multiply;
+  transform: rotate(0.18deg);
+}
+
+.album-row {
+  display: block;
+  font-size: 0;
+  margin: 10px 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  border: 4px outset var(--bevel);
+  background: #000;
+}
+
+.album-row img {
+  display: inline-block;
+  width: 20%;
+  height: 140px;
+  object-fit: cover;
+  vertical-align: middle;
+  filter: saturate(1.5) contrast(1.15);
+}
+
+.garage-links {
+  padding: 7px;
+  background: var(--slab);
+  border: 2px outset var(--bevel);
+  font:
+    bold 12px "Courier New",
+    monospace;
+  text-align: center;
+}
+
+.garage-links a {
+  margin: 0 4px;
+  color: var(--cyan);
+}
+
+.catalog-note {
+  color: #ff3b3b;
+  font:
+    bold 12px "Courier New",
+    monospace;
+  text-align: center;
+}

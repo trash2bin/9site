@@ -6,8 +6,8 @@
   "scripts": {
     "format": "prettier --config config/prettierrc.json --ignore-path config/prettierignore --write .",
     "format:check": "prettier --config config/prettierrc.json --ignore-path config/prettierignore --check .",
-    "lint:css": "stylelint --config config/stylelintrc.json public/style.css",
-    "lint:css:fix": "stylelint --config config/stylelintrc.json public/style.css --fix",
+    "lint:css": "stylelint --config config/stylelintrc.json \"public/**/*.css\"",
+    "lint:css:fix": "stylelint --config config/stylelintrc.json \"public/**/*.css\" --fix",
     "lint:go": "gofmt -l . && go vet ./...",
     "size": "bash scripts/check-size.sh",
     "lint": "npm run format:check && npm run lint:css && npm run lint:go && npm run size",

@@ -1,0 +1,120 @@
+/* Первый экран макета: фото под тёмной заливкой, меню, вертикальный
+   логотип, заголовок с подводкой. */
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: clamp(560px, 88vh, 820px);
+  padding-block: 34px 56px;
+  padding-inline: var(--pad-content);
+  overflow: hidden;
+  color: var(--paper);
+}
+
+/* Фон hero — ч/б фактура складчатых панелей, лежит под контентом */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: url("/assets/img/junkyard-engines.jpg") center / cover no-repeat;
+  filter: grayscale(1) contrast(1.1);
+}
+
+/* Затемнение, чтобы белый заголовок и меню читались на фото */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(20, 20, 20, 0.78) 0%,
+    rgba(20, 20, 20, 0.3) 45%,
+    rgba(20, 20, 20, 0.82) 100%
+  );
+}
+
+.hero-nav {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+}
+
+.hero-nav-link {
+  padding-bottom: 6px;
+  border-bottom: 2px solid transparent;
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.hero-nav-link:hover {
+  border-bottom-color: var(--accent);
+}
+
+.hero-nav-link.is-active {
+  border-bottom-color: var(--accent);
+}
+
+.hero-logo {
+  position: absolute;
+  top: 34px;
+  right: var(--pad-content);
+  z-index: 1;
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-decoration: none;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+}
+
+.hero-body {
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  max-width: 620px;
+}
+
+.dash {
+  display: block;
+  width: 46px;
+  height: 2px;
+  background-color: var(--paper);
+}
+
+.hero-title {
+  margin: 18px 0 14px;
+  font-size: clamp(32px, 4.2vw, 46px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.hero-text {
+  max-width: 520px;
+  margin-bottom: 22px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.8;
+}
+
+.hero-scroll {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 24px;
+}

@@ -1,0 +1,69 @@
+/* Секции ссылок и гостевой книги: списки интересов и ссылок, кольцо
+   сайтов, страница connect и почтовый адрес.
+
+   Здесь же утилиты .muted и .small: в исходном файле они стояли между
+   секциями links и guestbook, и оставлены на том же месте — порядок правил
+   в разбивке совпадает с порядком в исходнике. */
+
+.interest-list,
+.links-list {
+  margin: 8px 0 2px;
+  padding-left: 25px;
+}
+
+.interest-list li,
+.links-list li {
+  margin: 5px 0;
+}
+
+.interest-list li::marker {
+  color: #4a8f88;
+  content: "✦  ";
+}
+
+.links-list li::marker {
+  color: var(--magenta);
+  content: "↗  ";
+}
+
+.muted {
+  color: var(--ash);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.webring {
+  margin-top: 14px;
+  padding: 7px;
+  text-align: center;
+  background: #12191c;
+  border: 2px inset var(--bevel);
+  font:
+    bold 13px "Courier New",
+    monospace;
+}
+
+.webring a {
+  color: #ff5cff;
+}
+
+.guestbook {
+  background: #1a1519;
+}
+
+.mailbox {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 8px 12px;
+  background: #000;
+  border: 3px outset var(--bevel);
+  font:
+    bold 19px "Courier New",
+    monospace;
+}
+
+.mailbox a {
+  color: var(--cyan);
+}

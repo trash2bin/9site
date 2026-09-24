@@ -14,8 +14,9 @@ import (
 )
 
 // staticRoot — каталог, внутри которого лежит вся статика сайта:
-// index.html, style.css и assets/. Локально это public/ рядом с main.go,
-// в проде systemd подставляет абсолютный путь через STATIC_ROOT.
+// index.html, design.html, style.css с css/ и assets/. Локально это public/
+// рядом с main.go, в проде systemd подставляет абсолютный путь через
+// STATIC_ROOT.
 var staticRoot = envOr("STATIC_ROOT", "public")
 
 // envOr читает переменную окружения, подставляя значение по умолчанию.
@@ -33,6 +34,11 @@ var allowedStatic = map[string]bool{
 	"/style.css":  true,
 	"/design.css": true,
 }
+
+// cssPrefix — каталог с разобранными на слои стилями, единственный, кроме
+// assets, который отдаётся наружу целиком. Внутри только css: файлы
+// генерируются руками, ничего исполняемого туда не попадает.
+const cssPrefix = "/css/"
 
 // pageRoutes — адреса без .html: браузер просит короткий путь, а сервер
 // отдаёт страницу из staticRoot. Ключ — то, что видно в строке адреса,
@@ -190,7 +196,8 @@ func staticOnly(next http.Handler) http.Handler {
 		// иначе такой запрос обошёл бы проверку префикса.
 		cleaned := path.Clean(r.URL.Path)
 
-		if !allowedStatic[cleaned] && !strings.HasPrefix(cleaned, assetsPrefix) {
+		if !allowedStatic[cleaned] && !strings.HasPrefix(cleaned, assetsPrefix) &&
+			!strings.HasPrefix(cleaned, cssPrefix) {
 			http.NotFound(w, r)
 			return
 		}
@@ -224,12 +231,76 @@ func checkPages() error {
 	return nil
 }
 
+// styleEntries — точки входа стилей, которые грузит браузер.
+var styleEntries = []string{"style.css", "design.css"}
+
+// checkStyles проверяет, что все файлы, подключённые через @import в точках
+// входа, лежат на месте. Пропавший файл слоя иначе дал бы только 404 на
+// стиль: страница открылась бы без вёрстки и без внятной ошибки в логе.
+//
+// Разбор нарочно простой: в проекте ровно одна форма записи —
+// @import url("путь"); — и отдельный CSS-парсер здесь ни к чему.
+func checkStyles() error {
+	var imports int
+
+	for _, entry := range styleEntries {
+		name := filepath.Join(staticRoot, entry)
+		text, err := os.ReadFile(name)
+		if err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+
+		for _, line := range strings.Split(string(text), "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "@import") {
+				continue
+			}
+
+			rel := importPath(line)
+			if rel == "" {
+				return fmt.Errorf("%s: не разобран импорт %q", name, line)
+			}
+
+			// Путь в @import записан от корня статики — тот же адрес, по
+			// которому файл просит браузер. Локально он же лежит в staticRoot.
+			file := filepath.Join(staticRoot, filepath.FromSlash(rel))
+			if _, err := os.Stat(file); err != nil {
+				return fmt.Errorf("%s (%s): %w", file, rel, err)
+			}
+			imports++
+		}
+	}
+
+	log.Printf("стили: %d слоёв подключено из %s", imports, strings.Join(styleEntries, ", "))
+	return nil
+}
+
+// importPath вытаскивает путь из строки @import url("путь").
+func importPath(line string) string {
+	const open, close = `url("`, `")`
+
+	start := strings.Index(line, open)
+	if start < 0 {
+		return ""
+	}
+	rest := line[start+len(open):]
+
+	end := strings.Index(rest, close)
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
+}
+
 func main() {
 	loadCounter()
 	if err := checkIndex(); err != nil {
 		log.Fatal(err)
 	}
 	if err := checkPages(); err != nil {
+		log.Fatal(err)
+	}
+	if err := checkStyles(); err != nil {
 		log.Fatal(err)
 	}
 

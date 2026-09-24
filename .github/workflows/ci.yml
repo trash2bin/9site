@@ -114,7 +114,13 @@ jobs:
           # первому деплою упасть по неочевидной причине, если не создаст.
           $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/public' && chmod 755 '$DEPLOY_PATH/public'"
           rsync -avz -e "$SSH_OPTS" \
-            public/index.html public/style.css "$TARGET:$DEPLOY_PATH/public/"
+            public/index.html public/style.css public/design.html public/design.css \
+            "$TARGET:$DEPLOY_PATH/public/"
+          # Слои стилей копируются отдельно: --delete-after убирает файлы,
+          # оставшиеся на сервере от прежней разбивки, иначе public/css
+          # постепенно копит мусор, который всё равно раздаётся наружу.
+          rsync -avz --delete-after -e "$SSH_OPTS" \
+            public/css/ "$TARGET:$DEPLOY_PATH/public/css/"
           rsync -avz --delete-after -e "$SSH_OPTS" \
             public/assets/ "$TARGET:$DEPLOY_PATH/public/assets/"
 
@@ -152,6 +158,9 @@ jobs:
 
           check http://127.0.0.1:8080/           200
           check http://127.0.0.1:8080/style.css  200
+          check http://127.0.0.1:8080/css/base.css 200
+          check http://127.0.0.1:8080/design.css 200
+          check http://127.0.0.1:8080/maket      200
           check http://127.0.0.1:8080/main.go    404
           check http://127.0.0.1:8080/visits.dat 404
           check http://127.0.0.1/                200

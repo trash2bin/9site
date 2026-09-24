@@ -1,0 +1,73 @@
+/* Пункт «Take action»: тёмная полоса с подпиской поля ввода и кнопка. */
+
+.action {
+  padding-block: 60px;
+  background-color: var(--ink);
+  color: var(--paper);
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 40px;
+}
+
+.action-title {
+  font-size: clamp(18px, 1.9vw, 24px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.signup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 24px;
+  justify-content: flex-end;
+}
+
+.field {
+  flex: 1 1 180px;
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background-color: transparent;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.field input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.field input:focus {
+  border-bottom-color: var(--accent);
+}
+
+.signup-button {
+  padding: 12px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 2px;
+  background-color: transparent;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.signup-button:hover {
+  border-color: var(--accent);
+  background-color: var(--accent);
+}

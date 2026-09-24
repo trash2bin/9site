@@ -1,0 +1,142 @@
+/* Низ страницы: панель SWAG CONNECT, подвал с кнопками 88×31 и счётчиком
+   визитов.
+
+   Число визитов подставляет сервер в .counter, стили рассчитаны на пять
+   знаков. */
+
+.swag-panel {
+  background: #131820;
+}
+
+.swag-panel h2 {
+  background: #7a0b12 url("/assets/img/leopard-red.svg") repeat;
+  background-size: 60px 60px;
+}
+
+.swag-banners {
+  margin: 12px 0 2px;
+  padding: 8px;
+  text-align: center;
+  background: var(--slab);
+  border: 2px outset var(--bevel);
+}
+
+.swag-banners a {
+  display: inline-block;
+  margin: 3px 2px;
+  line-height: 0;
+  vertical-align: top;
+}
+
+.swag-banners img {
+  border: 1px solid var(--bevel);
+}
+
+.swag-banners a:hover {
+  transform: rotate(-2deg) scale(1.06);
+}
+
+.site-footer {
+  padding: 15px 12px 14px;
+  color: var(--bone);
+  background: var(--deep) url("/assets/img/leopard-red.svg") repeat;
+  background-size: 130px 130px;
+  background-blend-mode: multiply;
+  border-top: 4px inset var(--bevel);
+  text-align: center;
+  font-size: 14px;
+}
+
+.footer-tools {
+  display: block;
+}
+
+.counter {
+  display: inline-block;
+  margin: 0 auto 10px;
+  padding: 5px 8px;
+  color: var(--yellow);
+  background: #000;
+  border: 2px inset var(--bevel);
+  font:
+    bold 12px "Courier New",
+    monospace;
+}
+
+.counter span {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 2px;
+  padding: 0 2px;
+  color: var(--bone);
+  background: #2a2733;
+  border: 1px inset var(--bevel);
+}
+
+.button-row {
+  display: block;
+}
+
+.button-row a {
+  display: inline-block;
+  margin: 3px 1px;
+  line-height: 0;
+  vertical-align: top;
+}
+
+.button-row img {
+  border: 1px solid var(--bevel);
+  image-rendering: auto;
+}
+
+.button-row a:hover {
+  transform: rotate(-2deg) scale(1.04);
+}
+
+.button88 {
+  display: inline-block;
+  width: 88px;
+  height: 31px;
+  margin: 3px 2px;
+  padding: 3px 2px;
+  overflow: hidden;
+  color: var(--bone) !important;
+  background: var(--slab);
+  border: 2px outset var(--bevel);
+  font:
+    bold 9px/10px "Courier New",
+    monospace;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: top;
+}
+
+.button88:hover {
+  transform: rotate(-3deg);
+  color: #000 !important;
+  background: var(--yellow);
+}
+
+.button88.hot {
+  background: var(--blood);
+}
+
+.button88.cyan {
+  color: #000 !important;
+  background: var(--cyan);
+}
+
+.site-footer p {
+  margin: 8px 0 0;
+}
+
+.site-footer a {
+  color: var(--cyan);
+}
+
+.footer-note {
+  color: var(--ash);
+  font:
+    12px "Courier New",
+    monospace;
+}

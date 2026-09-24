@@ -1,0 +1,124 @@
+/* Основа главной: переменные палитры, фон страницы с фактурами, ссылки и
+   служебная ссылка «к содержанию».
+
+   Переменные (:root) — единственное место, где заданы цвета: всё остальное
+   в css/ ссылается на них, менять палитру надо здесь. */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+  --void: #0b0a10;
+  --coal: #17141d;
+  --slab: #221e2b;
+  --bone: #b8b0a0;
+  --ash: #6f6878;
+  --bevel: #4a4655;
+  --bevel-d: #2b2734;
+  --teal: #0e3b3a;
+  --deep: #08070d;
+  --bar: #2a0710;
+  --yellow: #ffff00;
+  --cyan: #00ffff;
+  --magenta: #ff00ff;
+  --blood: #7a0b12;
+  --rust: #8b4513;
+  --matrix: #00ff41;
+  --paper: #17141d;
+  --ink: #b8b0a0;
+  --maket-font: "Montserrat", "Helvetica Neue", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--void);
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% 30%, rgba(163, 18, 31, 0.16), rgba(11, 10, 16, 0) 60%),
+    radial-gradient(ellipse 90% 60% at 50% 100%, rgba(0, 0, 0, 0.85), rgba(11, 10, 16, 0) 65%),
+    linear-gradient(rgba(11, 10, 16, 0.8), rgba(11, 10, 16, 0.8)), url("/assets/img/texture-hyper.gif"),
+    url("/assets/tile.svg");
+  background-position:
+    center top,
+    center bottom,
+    center top,
+    center top,
+    0 0;
+  background-size:
+    auto,
+    auto,
+    auto,
+    642px 122px,
+    32px 32px;
+  background-attachment: fixed, fixed, fixed, fixed, scroll;
+  color: var(--ink);
+  font-family: "Comic Sans MS", "Chalkboard SE", cursive;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  width: 210px;
+  height: 260px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.78;
+  pointer-events: none;
+  filter: saturate(1.5) contrast(1.25) brightness(0.95);
+}
+
+body::before {
+  left: -35px;
+  top: 30%;
+  background-image: url("/assets/img/console-3ds.jpg");
+  transform: rotate(-12deg);
+}
+
+body::after {
+  right: -40px;
+  top: 53%;
+  background-image: url("/assets/img/console-nes-web.jpg");
+  transform: rotate(10deg);
+}
+
+a {
+  color: var(--cyan);
+  text-decoration: underline;
+}
+
+a:visited {
+  color: #ff66ff;
+}
+
+a:hover {
+  color: var(--yellow);
+}
+
+a:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--slab);
+  padding: 6px;
+  z-index: 4;
+}
+
+.skip-link:focus {
+  left: 8px;
+  color: var(--bone);
+}

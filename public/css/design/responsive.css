@@ -1,0 +1,104 @@
+/* Адаптив макета: на 900px оверлап-блоки складываются в одну колонку и
+   фото уходит под текст, на 640px уменьшаются заголовок и отступы. */
+
+@media (max-width: 900px) {
+  .hero {
+    padding-inline: var(--gutter);
+  }
+
+  .hero-logo {
+    top: 26px;
+    right: var(--gutter);
+    font-size: 11px;
+  }
+
+  .hero-body {
+    max-width: 100%;
+  }
+
+  .split .container {
+    margin-top: -90px;
+  }
+
+  .split-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .split-tight .container {
+    margin-top: -80px;
+  }
+
+  .photo-dunes,
+  .photo-peaks {
+    min-height: 260px;
+  }
+
+  .headline-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .headline-body {
+    grid-column: 1;
+  }
+
+  .place-grid,
+  .place-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .words .container {
+    margin-top: -90px;
+  }
+
+  .words-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .photo-portrait {
+    width: 100%;
+    height: 240px;
+  }
+
+  .words-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .signup {
+    justify-content: flex-start;
+  }
+
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    min-height: 520px;
+  }
+
+  .hero-nav {
+    gap: 10px 18px;
+  }
+
+  .hero-title {
+    font-size: 30px;
+  }
+
+  .card-orange {
+    padding: 32px 24px;
+  }
+
+  .card-orange-wide {
+    padding: 32px 24px 36px;
+  }
+
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

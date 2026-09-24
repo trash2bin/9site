@@ -1,0 +1,216 @@
+/* Содержимое панелей: профиль, интересы, журнал, консоли, гаражный
+   каталог, ссылки, гостевая книга.
+
+   Каждый блок привязан к своей секции из index.html: заголовок панели
+   общий, дальше стили конкретных абзацев, заметок и врезок. Ссылки, кольцо
+   сайтов и гостевая книга лежат в css/links.css, каталог — в
+   css/catalog.css. */
+
+.panel h2 {
+  margin: -2px -3px 12px;
+  padding: 5px 8px;
+  color: var(--yellow);
+  background: #c00000 url("/assets/img/texture-hyper.gif") repeat;
+  background-blend-mode: overlay;
+  background-size: 321px 61px;
+  border: 2px outset var(--bevel);
+  font:
+    22px "Marker Felt",
+    "Palatino Linotype",
+    "Book Antiqua",
+    serif;
+}
+
+.profile-copy {
+  min-height: 104px;
+}
+
+.avatar {
+  float: left;
+  width: 80px;
+  height: 80px;
+  margin: 0 14px 8px 0;
+  border: 3px outset var(--bevel);
+  image-rendering: pixelated;
+  background: #0d3b3b;
+}
+
+p {
+  margin: 8px 0;
+}
+
+.status {
+  clear: both;
+  margin: 14px 0 0;
+  color: var(--ash);
+  font:
+    bold 13px "Courier New",
+    monospace;
+}
+
+.blink {
+  color: #ff2b2b;
+  animation: blink 1.5s steps(2, start) infinite;
+}
+
+.pixel-note {
+  clear: both;
+  margin: 5px 0 0;
+  padding-top: 8px;
+  border-top: 1px dotted #4a8f88;
+  color: #4a8f88;
+  font:
+    13px "Courier New",
+    monospace;
+}
+
+.pixel-note img {
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
+
+.entry {
+  padding: 8px 10px;
+  background: #191622;
+  border: 2px dashed #4a8f88;
+}
+
+.entry-meta {
+  color: #ff5cff;
+  font:
+    17px "Pixelify Sans",
+    monospace;
+}
+
+.entry h3 {
+  margin: 5px 0 8px;
+  color: #e8e2cd;
+  font:
+    25px "Marker Felt",
+    "Palatino Linotype",
+    "Book Antiqua",
+    serif;
+}
+
+.sticker-line {
+  padding: 6px;
+  color: #000;
+  background: #ffff00;
+  border: 2px solid #000;
+  font:
+    13px "Courier New",
+    monospace;
+  text-align: center;
+}
+
+.sticker-line img {
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
+
+.wide-collage {
+  display: block;
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+  object-position: center;
+  border: 4px outset var(--bevel);
+  image-rendering: auto;
+  filter: saturate(1.25) contrast(1.1);
+}
+
+.parts-image {
+  height: 170px;
+  object-position: center 47%;
+}
+
+.hardware-row {
+  display: block;
+  font-size: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  border: 4px outset var(--bevel);
+  background: #000;
+}
+
+.hardware-row img {
+  display: inline-block;
+  width: 33.333%;
+  height: 175px;
+  object-fit: cover;
+  vertical-align: middle;
+  filter: saturate(1.45) contrast(1.18);
+}
+
+.parts-row img {
+  height: 150px;
+  background: var(--coal);
+}
+
+.garage-signs {
+  margin: 8px 0;
+  text-align: center;
+  transform: rotate(-1deg);
+}
+
+.garage-signs span {
+  display: inline-block;
+  margin: 2px;
+  padding: 4px 6px;
+  color: #ffff00;
+  background: #111;
+  border: 2px solid #c00000;
+  font:
+    bold 11px "Courier New",
+    monospace;
+  box-shadow: 2px 2px 0 #2f5f5c;
+}
+
+.garage-signs span:nth-child(2) {
+  color: #000;
+  background: #ffff00;
+}
+
+.garage-signs span:nth-child(3) {
+  color: #fff;
+  background: #c00000;
+}
+
+.garage-signs span:nth-child(4) {
+  color: #000;
+  background: #00ffff;
+}
+
+.banner-strip {
+  display: block;
+  margin: 12px 0 2px;
+  text-align: center;
+}
+
+.banner-strip span {
+  display: inline-block;
+  min-width: 105px;
+  margin: 3px 1px;
+  padding: 5px 4px;
+  color: var(--bone);
+  background: var(--bar);
+  border: 2px outset var(--bevel);
+  font:
+    bold 11px "Courier New",
+    monospace;
+  box-shadow: 2px 2px 0 #000;
+}
+
+.banner-strip span:nth-child(2) {
+  color: #000;
+  background: #00ffff;
+}
+
+.banner-strip span:nth-child(3) {
+  color: #000;
+  background: #ffff00;
+}
+
+.banner-strip span:nth-child(4) {
+  background: #ff00ff;
+}
