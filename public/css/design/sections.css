@@ -46,15 +46,15 @@
 
 .photo-dunes,
 .photo-peaks {
-  min-height: 420px;
+  min-height: clamp(420px, 50vw, 720px);
 }
 
 .photo-interior {
-  height: clamp(360px, 44vw, 540px);
+  height: clamp(220px, 23vw, 330px);
 }
 
 .photo-pattern {
-  height: clamp(200px, 24vw, 300px);
+  height: clamp(300px, 33vw, 480px);
 }
 
 .photo-pattern img {
@@ -62,9 +62,8 @@
 }
 
 .photo-portrait {
-  flex: 0 0 auto;
-  width: 200px;
-  height: 200px;
+  aspect-ratio: 2 / 1;
+  width: 100%;
 }
 
 .loader {
@@ -89,7 +88,7 @@
 }
 
 .split {
-  padding-bottom: 90px;
+  padding-block: 0 80px;
   background-color: var(--paper);
 }
 
@@ -99,33 +98,35 @@
   margin-top: -160px;
 }
 
+/* Строка 1: карточка слева и фото справа. Строка 2: текст под фото.
+   Строки растянуты (align-items: stretch), поэтому оранжевая карточка
+   автоматически тянется вниз до конца текста и читается буквой «Г»
+   вместе с верхним левым углом фото. */
 .split-grid {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   align-items: stretch;
+  column-gap: 0;
+}
+
+.split-grid .card-orange {
+  grid-column: 1;
+  grid-row: 1 / -1;
+}
+
+.split-grid .photo {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.split-grid .headline-body {
+  align-self: end;
+  padding-top: 48px;
 }
 
 .split-tight .container {
   margin-top: -120px;
-}
-
-.headline {
-  padding-block: 70px 90px;
-  background-color: var(--paper);
-}
-
-.headline-grid {
-  display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-}
-
-.headline-body {
-  grid-column: 2;
-  max-width: 620px;
-}
-
-.headline-outro {
-  padding-block: 50px 110px;
 }
 
 .section-title {
@@ -167,8 +168,15 @@
   fill: currentcolor;
 }
 
+/* Текст справа от оранжевой карточки. Отступ от карточки тот же, что и
+   в .place-grid (40px), поэтому заголовки встают в одну вертикаль. */
+.headline-body {
+  max-width: 660px;
+  padding-left: 40px;
+}
+
 .place {
-  padding-block: 90px 100px;
+  padding-block: 44px 80px;
   background-color: var(--paper);
 }
 
@@ -199,15 +207,22 @@
   margin-top: -130px;
 }
 
+/* Блок «Words & Such» нарисован перевёрнутой «Г» (L): вертикальная нога
+   слева и полная ширина внизу, а верхний правый угол вырезан под фото.
+   Поэтому фото прижато к верхнему правому углу (67% ширины, 2:1),
+   а заголовок занимает ногу и выравнивается по центру фото. */
 .card-orange-wide {
-  padding: 40px 40px 46px;
+  padding: 0;
 }
 
 .words-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 67%;
   align-items: center;
-  justify-content: space-between;
-  gap: 40px;
+}
+
+.words-head .card-title-lead {
+  padding-inline: 40px;
 }
 
 .card-title-lead {
@@ -219,5 +234,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 40px;
-  margin-top: 32px;
+  margin-top: 0;
+  padding: 36px 40px 46px;
 }

@@ -20,8 +20,28 @@
     margin-top: -90px;
   }
 
+  /* Селекторы повторяют специфичность базовых правил выше, иначе
+     одноколоночная раскладка не перебьёт их. */
   .split-grid {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+
+  .split-grid .card-orange {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .split-grid .photo {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .split-grid .headline-body {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: start;
+    padding-top: 32px;
   }
 
   .split-tight .container {
@@ -51,17 +71,20 @@
   }
 
   .words-head {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .words-head .card-title-lead {
+    padding: 32px 24px;
   }
 
   .photo-portrait {
-    width: 100%;
-    height: 240px;
+    aspect-ratio: 2 / 1;
   }
 
   .words-cols {
     grid-template-columns: minmax(0, 1fr);
+    padding: 24px 24px 36px;
   }
 
   .action-grid {
@@ -100,5 +123,9 @@
 
   .footer-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .footer-bar {
+    height: 120px;
   }
 }

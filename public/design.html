@@ -56,7 +56,9 @@
     </header>
 
     <main id="content">
-      <!-- 3. Оранжевая карточка + фото. Оверлап: секция наезжает на hero сверху -->
+      <!-- 3. Оранжевая карточка + фото + текст под фото. Всё в одной секции,
+           чтобы оранжевый блок тянулся вниз до самого текста. Оверлап:
+           секция наезжает на hero сверху. -->
       <section class="split" id="about">
         <div class="container split-grid">
           <div class="card-orange">
@@ -73,12 +75,8 @@
           <figure class="photo photo-dunes">
             <img src="/assets/img/auto-engine.jpg" alt="Плейсхолдер: дюны на закате" loading="lazy" decoding="async" />
           </figure>
-        </div>
-      </section>
 
-      <!-- 4. Отдельная белая секция: текст справа, визуально продолжает блок выше -->
-      <section class="headline">
-        <div class="container headline-grid">
+          <!-- 4. Текст справа, под фото: второй ряд той же сетки -->
           <div class="headline-body">
             <h2 class="section-title">Finally a layout that blows your head off</h2>
             <p class="body-text">
@@ -216,7 +214,8 @@
         </figure>
       </section>
 
-      <!-- 10. Ohh this is nice: оранжевый блок слева, фото справа -->
+      <!-- 10. Ohh this is nice: оранжевый блок слева, фото справа.
+           Ниже, в том же контейнере, — текст подводки к футеру. -->
       <section class="split split-tight">
         <div class="container split-grid">
           <div class="card-orange">
@@ -238,12 +237,9 @@
               decoding="async"
             />
           </figure>
-        </div>
-      </section>
 
-      <!-- 10b. Подводка к футеру на белом фоне, справа -->
-      <section class="headline headline-outro">
-        <div class="container headline-grid">
+          <!-- 10b. Подводка к футеру: второй ряд той же сетки, под фото.
+               Оранжевая карточка тянется вниз до конца этого текста. -->
           <div class="headline-body">
             <h2 class="section-title">The end is nigh, well the footer anyways</h2>
             <p class="body-text">

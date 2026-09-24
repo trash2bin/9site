@@ -8,9 +8,10 @@
 
 .footer-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 30px;
-  padding-block: 70px 60px;
+  grid-template-columns: repeat(5, minmax(0, 168px));
+  justify-content: start;
+  gap: 0;
+  padding-block: 64px 40px;
 }
 
 .footer-title {
@@ -42,6 +43,6 @@
 
 /* Полоса под колонками: в макете пустая, место под копирайт и соцсети */
 .footer-bar {
-  height: 64px;
+  height: 220px;
   background-color: var(--footer-deep);
 }
