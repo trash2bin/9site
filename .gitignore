@@ -11,7 +11,7 @@ node_modules/
 /visits.dat
 /visits.dat.tmp
 
-# отладочные скриншоты в корне (на /assets не влияет)
+# отладочные скриншоты (корень и вложенные папки, но не public/assets)
 /*.png
 /*.jpg
 /*.jpeg
