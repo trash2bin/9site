@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Демо-лендинг по макету: тёмные и светлые секции, оранжевые overlap-блоки, крупные фото."
+    />
+    <title>Sleek — demo layout</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/design.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#content">К содержанию</a>
+
+    <!-- 1. Header поверх hero: меню слева, вертикальный логотип справа -->
+    <header class="hero">
+      <nav class="hero-nav" aria-label="Основная навигация">
+        <a class="hero-nav-link is-active" href="#about">About</a>
+        <a class="hero-nav-link" href="#products">Products</a>
+        <a class="hero-nav-link" href="#projects">Projects</a>
+        <a class="hero-nav-link" href="#contact">Contact</a>
+      </nav>
+      <a class="hero-logo" href="/" title="На главную — Ivan's Little Web">Trans</a>
+
+      <!-- 2. Hero: фон — ч/б фактура панелей, контент внизу слева -->
+      <div class="hero-body">
+        <span class="dash" aria-hidden="true"></span>
+        <h1 class="hero-title">Sleek as fkuc</h1>
+        <p class="hero-text">
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
+          magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
+        </p>
+        <p class="hero-scroll">
+          <span class="dash" aria-hidden="true"></span>
+          <span class="icon-round icon-round-accent" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 12h15M13 6l6 6-6 6" />
+            </svg>
+          </span>
+        </p>
+        <p class="hero-actions">
+          <a class="icon-round icon-round-lg" href="#about" aria-label="Прокрутить вниз">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M12 4v15M6 13l6 6 6-6" />
+            </svg>
+          </a>
+          <a class="icon-round icon-round-lg icon-round-accent" href="#products" aria-label="Дальше">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M4 12h15M13 6l6 6-6 6" />
+            </svg>
+          </a>
+        </p>
+      </div>
+    </header>
+
+    <main id="content">
+      <!-- 3. Оранжевая карточка + фото. Оверлап: секция наезжает на hero сверху -->
+      <section class="split" id="about">
+        <div class="container split-grid">
+          <div class="card-orange">
+            <h2 class="card-title">Bright ass orange</h2>
+            <p class="card-text">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+              dolore magna aliqua.
+            </p>
+            <p class="card-text">
+              Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+              consequat.
+            </p>
+          </div>
+          <figure class="photo photo-dunes">
+            <img src="/assets/img/auto-engine.jpg" alt="Плейсхолдер: дюны на закате" loading="lazy" decoding="async" />
+          </figure>
+        </div>
+      </section>
+
+      <!-- 4. Отдельная белая секция: текст справа, визуально продолжает блок выше -->
+      <section class="headline">
+        <div class="container headline-grid">
+          <div class="headline-body">
+            <h2 class="section-title">Finally a layout that blows your head off</h2>
+            <p class="body-text">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+              dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip.
+            </p>
+            <a class="tweet" href="https://twitter.com/intent/tweet?text=Sleek%20as%20fkuc">
+              <span class="tweet-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path
+                    d="M22 5.9c-.7.3-1.5.6-2.3.7.8-.5 1.5-1.3 1.8-2.3-.8.5-1.7.8-2.6 1a4.1 4.1 0 0 0-7 3.7A11.7 11.7 0 0 1 3.4 4.7a4.1 4.1 0 0 0 1.3 5.5c-.7 0-1.3-.2-1.9-.5a4.1 4.1 0 0 0 3.3 4 4.2 4.2 0 0 1-1.9.1 4.1 4.1 0 0 0 3.8 2.9A8.3 8.3 0 0 1 2 18.4a11.6 11.6 0 0 0 6.3 1.8c7.5 0 11.7-6.3 11.7-11.7v-.5c.8-.6 1.5-1.3 2-2.1z"
+                  />
+                </svg>
+              </span>
+              Tweet this shit
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Melbourne, Australia: заголовок слева, два столбца текста справа -->
+      <section class="place" id="projects">
+        <div class="container place-grid">
+          <h2 class="section-title">Melbourne, Australia</h2>
+          <div class="place-cols">
+            <div>
+              <p class="body-text">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+                dolore magna aliqua.
+              </p>
+              <p class="body-text">
+                Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.
+              </p>
+            </div>
+            <div>
+              <p class="body-text">
+                Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+              </p>
+              <p class="body-text">
+                Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Полноширинное фото + мелкая декоративная иконка-лоадер в правом верхнем углу -->
+      <section class="band">
+        <figure class="photo photo-interior">
+          <img
+            src="/assets/img/auto-store-web.jpg"
+            alt="Плейсхолдер: интерьер с деревянными потолочными балками"
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="loader" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </span>
+        </figure>
+      </section>
+
+      <!-- 7. Words & Such: оранжевый блок наезжает на фото выше -->
+      <section class="words" id="products">
+        <div class="container">
+          <div class="card-orange card-orange-wide">
+            <div class="words-head">
+              <h2 class="card-title card-title-lead">Words &amp; such</h2>
+              <figure class="photo photo-portrait">
+                <img
+                  src="/assets/img/9mice-in-face.png"
+                  alt="Плейсхолдер: портрет девушки в профиль"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </figure>
+            </div>
+            <div class="words-cols">
+              <div>
+                <p class="card-text">
+                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+                  dolore magna aliqua.
+                </p>
+                <p class="card-text">
+                  Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.
+                </p>
+              </div>
+              <div>
+                <p class="card-text">
+                  Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+                </p>
+                <p class="card-text">
+                  Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. Take action: тёмный фон, форма в одну строку -->
+      <!-- TODO: у формы нет обработчика — в Go-сервере нет эндпоинта,
+           сейчас action="#" ничего не отправляет. Нужен POST-роут. -->
+      <section class="action" id="contact">
+        <div class="container action-grid">
+          <h3 class="action-title">Take action</h3>
+          <form class="signup" action="#" method="post">
+            <p class="field">
+              <label class="sr-only" for="signup-name">Name</label>
+              <input id="signup-name" name="name" type="text" placeholder="Name" autocomplete="name" />
+            </p>
+            <p class="field">
+              <label class="sr-only" for="signup-phone">Contact Phone</label>
+              <input id="signup-phone" name="phone" type="tel" placeholder="Contact Phone" autocomplete="tel" />
+            </p>
+            <p class="field">
+              <label class="sr-only" for="signup-email">Email</label>
+              <input id="signup-email" name="email" type="email" placeholder="Email" autocomplete="email" />
+            </p>
+            <button class="signup-button" type="submit">Sign Up</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 9. Полноширинный ч/б баннер, без текста -->
+      <section class="band">
+        <figure class="photo photo-pattern">
+          <img
+            src="/assets/img/texture-hyper.gif"
+            alt="Плейсхолдер: абстрактный складчатый паттерн"
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+      </section>
+
+      <!-- 10. Ohh this is nice: оранжевый блок слева, фото справа -->
+      <section class="split split-tight">
+        <div class="container split-grid">
+          <div class="card-orange">
+            <h2 class="card-title">Ohh this is nice</h2>
+            <p class="card-text">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+              dolore magna aliqua.
+            </p>
+            <p class="card-text">
+              Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.
+            </p>
+          </div>
+          <!-- TODO: под «горы на закате» в проекте нет подходящего фото, стоит первый попавшийся кадр -->
+          <figure class="photo photo-peaks">
+            <img
+              src="/assets/img/9mice-album-soloist.jpg"
+              alt="Плейсхолдер: горный пейзаж на закате"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <!-- 10b. Подводка к футеру на белом фоне, справа -->
+      <section class="headline headline-outro">
+        <div class="container headline-grid">
+          <div class="headline-body">
+            <h2 class="section-title">The end is nigh, well the footer anyways</h2>
+            <p class="body-text">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+              dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 11. Footer: пять колонок ссылок + тёмная полоса под ними -->
+    <footer class="footer">
+      <div class="container footer-grid">
+        <nav class="footer-col" aria-label="Quicklinks">
+          <h4 class="footer-title">Quicklinks</h4>
+          <ul class="footer-list">
+            <li><a href="#about">A Footer Link</a></li>
+            <li><a href="#about">A Footer Link</a></li>
+            <li><a href="#about">A Footer Link</a></li>
+            <li><a href="#about">A Footer Link</a></li>
+            <li><a href="#about">A Footer Link</a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-label="Our Profile">
+          <h4 class="footer-title">Our Profile</h4>
+          <ul class="footer-list">
+            <li><a href="#projects">A Footer Link</a></li>
+            <li><a href="#projects">A Footer Link</a></li>
+            <li><a href="#projects">A Footer Link</a></li>
+            <li><a href="#projects">A Footer Link</a></li>
+            <li><a href="#projects">A Footer Link</a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-label="Information">
+          <h4 class="footer-title">Information</h4>
+          <ul class="footer-list">
+            <li><a href="#products">A Footer Link</a></li>
+            <li><a href="#products">A Footer Link</a></li>
+            <li><a href="#products">A Footer Link</a></li>
+            <li><a href="#products">A Footer Link</a></li>
+            <li><a href="#products">A Footer Link</a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-label="Courses">
+          <h4 class="footer-title">Courses</h4>
+          <ul class="footer-list">
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-label="Publication">
+          <h4 class="footer-title">Publication</h4>
+          <ul class="footer-list">
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+            <li><a href="#contact">A Footer Link</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="footer-bar"></div>
+    </footer>
+  </body>
+</html>

@@ -30,7 +30,15 @@ func envOr(name, fallback string) string {
 // браузер. Всё остальное (main.go, go.mod, README.md, package.json, логи,
 // бинарник сервера, .git, файл счётчика) лежит выше и наружу не отдаётся.
 var allowedStatic = map[string]bool{
-	"/style.css": true,
+	"/style.css":  true,
+	"/design.css": true,
+}
+
+// pageRoutes — адреса без .html: браузер просит короткий путь, а сервер
+// отдаёт страницу из staticRoot. Ключ — то, что видно в строке адреса,
+// значение — файл на диске.
+var pageRoutes = map[string]string{
+	"/maket": "design.html",
 }
 
 // assetsPrefix — единственная директория внутри staticRoot, открытая наружу.
@@ -153,6 +161,28 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// pageHandler отдаёт страницу из pageRoutes как HTML. Файл читается на
+// каждый запрос: правки вёрстки видны сразу, без перезапуска сервера.
+func pageHandler(file string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := filepath.Join(staticRoot, file)
+
+		page, err := os.ReadFile(name)
+		if err != nil {
+			log.Printf("%s: %v", name, err)
+			http.Error(w, file+" не читается", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// Без no-store браузер покажет вчерашний макет после правки вёрстки.
+		w.Header().Set("Cache-Control", "no-store")
+		if _, err := w.Write(page); err != nil {
+			log.Printf("ответ: %v", err)
+		}
+	}
+}
+
 // staticOnly пропускает только статику сайта и отдаёт 404 на всё прочее.
 func staticOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -182,9 +212,24 @@ func checkIndex() error {
 	return nil
 }
 
+// checkPages проверяет на старте, что все страницы из pageRoutes на месте.
+// Иначе адрес из меню отдавал бы 500 вместо вёрстки.
+func checkPages() error {
+	for route, file := range pageRoutes {
+		name := filepath.Join(staticRoot, file)
+		if _, err := os.Stat(name); err != nil {
+			return fmt.Errorf("%s (%s): %w", name, route, err)
+		}
+	}
+	return nil
+}
+
 func main() {
 	loadCounter()
 	if err := checkIndex(); err != nil {
+		log.Fatal(err)
+	}
+	if err := checkPages(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -196,6 +241,13 @@ func main() {
 	http.Handle("/", staticOnly(fileServer))
 	http.HandleFunc("/{$}", indexHandler)
 	http.HandleFunc("/index.html", indexHandler)
+
+	// Красивые адреса: /maket и /maket/ отдают ту же вёрстку.
+	// Вариант с косой чертой нужен, чтобы ссылка вида /maket/ не падала в 404.
+	for route, file := range pageRoutes {
+		http.HandleFunc(route, pageHandler(file))
+		http.HandleFunc(route+"/{$}", pageHandler(file))
+	}
 
 	log.Println("Ivan's Little Web: http://localhost:8080")
 	log.Println("Press Ctrl+C to stop")

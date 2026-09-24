@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="88" height="31" viewBox="0 0 88 31">
+  <rect x="0.5" y="0.5" width="87" height="30" fill="#ffffff" stroke="#0033ff" />
+  <rect x="3.5" y="3.5" width="81" height="24" fill="none" stroke="#0033ff" stroke-dasharray="2 3" opacity="0.45" />
+  <text
+    x="40"
+    y="20"
+    fill="#0033ff"
+    font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+    font-size="12"
+    font-weight="700"
+    letter-spacing="1.2"
+    text-anchor="middle"
+  >
+    МАКЕТ
+  </text>
+  <path d="M68 15.5h7M72 12.5l3 3-3 3" fill="none" stroke="#0033ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
