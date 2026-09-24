@@ -16,6 +16,9 @@ ExecStart=/var/www/9site/site-server
 # единственным местом, доступным на запись.
 StateDirectory=9site
 Environment=VISITS_FILE=/var/lib/9site/visits.dat
+# Статика лежит в /var/www/9site/public (туда её кладёт деплой), а бинарник —
+# в корне DEPLOY_PATH, поэтому каталог задаётся явно, а не относительно cwd.
+Environment=STATIC_ROOT=/var/www/9site/public
 
 Restart=on-failure
 RestartSec=3

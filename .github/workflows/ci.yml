@@ -108,10 +108,15 @@ jobs:
       - name: Upload static files
         run: |
           set -euo pipefail
+          # Статика живёт в $DEPLOY_PATH/public, бинарник — в корне
+          # $DEPLOY_PATH: сервис читает её по STATIC_ROOT из юнита.
+          # rsync сам создаёт отсутствующий public/, но mkdir не даёт
+          # первому деплою упасть по неочевидной причине, если не создаст.
+          $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/public' && chmod 755 '$DEPLOY_PATH/public'"
           rsync -avz -e "$SSH_OPTS" \
-            index.html style.css "$TARGET:$DEPLOY_PATH/"
+            public/index.html public/style.css "$TARGET:$DEPLOY_PATH/public/"
           rsync -avz --delete-after -e "$SSH_OPTS" \
-            assets/ "$TARGET:$DEPLOY_PATH/assets/"
+            public/assets/ "$TARGET:$DEPLOY_PATH/public/assets/"
 
       - name: Upload server binary
         run: |

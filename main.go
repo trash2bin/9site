@@ -7,20 +7,39 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-// allowedStatic — единственные файлы в корне, которые видит браузер.
-// Всё остальное (main.go, go.mod, README.md, package.json, логи, бинарник
-// сервера, .git, файл счётчика) наружу не отдаётся.
+// staticRoot — каталог, внутри которого лежит вся статика сайта:
+// index.html, style.css и assets/. Локально это public/ рядом с main.go,
+// в проде systemd подставляет абсолютный путь через STATIC_ROOT.
+var staticRoot = envOr("STATIC_ROOT", "public")
+
+// envOr читает переменную окружения, подставляя значение по умолчанию.
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// allowedStatic — единственные файлы в корне staticRoot, которые видит
+// браузер. Всё остальное (main.go, go.mod, README.md, package.json, логи,
+// бинарник сервера, .git, файл счётчика) лежит выше и наружу не отдаётся.
 var allowedStatic = map[string]bool{
 	"/style.css": true,
 }
 
-// assetsPrefix — единственная директория, открытая наружу.
+// assetsPrefix — единственная директория внутри staticRoot, открытая наружу.
 const assetsPrefix = "/assets/"
+
+// indexFile — путь к вёрстке внутри каталога статики.
+func indexFile() string {
+	return filepath.Join(staticRoot, "index.html")
+}
 
 // visitMark — место в index.html, куда подставляется счётчик визитов.
 const visitMark = "<!--visits-->"
@@ -117,9 +136,9 @@ func counterHTML(n int) string {
 // Страница собирается в памяти, поэтому файл на диске не меняется и
 // остаётся статикой, которую можно открыть и без сервера.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	page, err := os.ReadFile("index.html")
+	page, err := os.ReadFile(indexFile())
 	if err != nil {
-		log.Printf("index.html: %v", err)
+		log.Printf("%s: %v", indexFile(), err)
 		http.Error(w, "index.html не читается", http.StatusInternalServerError)
 		return
 	}
@@ -153,12 +172,12 @@ func staticOnly(next http.Handler) http.Handler {
 // checkIndex проверяет на старте, что метка счётчика вообще есть в вёрстке.
 // Иначе сайт молча отдавал бы страницу без числа визитов.
 func checkIndex() error {
-	page, err := os.ReadFile("index.html")
+	page, err := os.ReadFile(indexFile())
 	if err != nil {
-		return fmt.Errorf("index.html: %w", err)
+		return fmt.Errorf("%s: %w", indexFile(), err)
 	}
 	if !strings.Contains(string(page), visitMark) {
-		return fmt.Errorf("index.html: нет метки %s — счётчику некуда подставляться", visitMark)
+		return fmt.Errorf("%s: нет метки %s — счётчику некуда подставляться", indexFile(), visitMark)
 	}
 	return nil
 }
@@ -169,7 +188,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fileServer := http.FileServer(http.Dir("."))
+	fileServer := http.FileServer(http.Dir(staticRoot))
 
 	// "/" и "/index.html" обслуживает счётчик, всё остальное — статика.
 	// В ServeMux точный шаблон побеждает шаблон-префикс "/", поэтому

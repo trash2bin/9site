@@ -5,7 +5,7 @@ set -euo pipefail
 LIMIT="${SIZE_LIMIT:-61440}"
 
 total=0
-for f in index.html style.css; do
+for f in public/index.html public/style.css; do
   if [ ! -f "$f" ]; then
     echo "нет файла: $f" >&2
     exit 1
