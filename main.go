@@ -31,8 +31,10 @@ func envOr(name, fallback string) string {
 // браузер. Всё остальное (main.go, go.mod, README.md, package.json, логи,
 // бинарник сервера, .git, файл счётчика) лежит выше и наружу не отдаётся.
 var allowedStatic = map[string]bool{
-	"/style.css":  true,
-	"/design.css": true,
+	"/style.css":   true,
+	"/design.css":  true,
+	"/catalog.css": true,
+	"/print.css":   true,
 }
 
 // cssPrefix — каталог с разобранными на слои стилями, единственный, кроме
@@ -40,11 +42,18 @@ var allowedStatic = map[string]bool{
 // генерируются руками, ничего исполняемого туда не попадает.
 const cssPrefix = "/css/"
 
+// jsPrefix — собранный из src/*.ts скрипт страницы каталога. Отдаётся наружу
+// целиком, потому что tsc кладёт рядом не только main.js: остальные модули
+// подтягиваются из него импортами. Каталог наполняется только компилятором,
+// вручную туда ничего не кладут.
+const jsPrefix = "/js/"
+
 // pageRoutes — адреса без .html: браузер просит короткий путь, а сервер
 // отдаёт страницу из staticRoot. Ключ — то, что видно в строке адреса,
 // значение — файл на диске.
 var pageRoutes = map[string]string{
-	"/maket": "design.html",
+	"/maket":   "design.html",
+	"/catalog": "catalog.html",
 }
 
 // assetsPrefix — единственная директория внутри staticRoot, открытая наружу.
@@ -197,7 +206,7 @@ func staticOnly(next http.Handler) http.Handler {
 		cleaned := path.Clean(r.URL.Path)
 
 		if !allowedStatic[cleaned] && !strings.HasPrefix(cleaned, assetsPrefix) &&
-			!strings.HasPrefix(cleaned, cssPrefix) {
+			!strings.HasPrefix(cleaned, cssPrefix) && !strings.HasPrefix(cleaned, jsPrefix) {
 			http.NotFound(w, r)
 			return
 		}
@@ -232,7 +241,25 @@ func checkPages() error {
 }
 
 // styleEntries — точки входа стилей, которые грузит браузер.
-var styleEntries = []string{"style.css", "design.css"}
+var styleEntries = []string{"style.css", "design.css", "catalog.css"}
+
+// extraStatic — файлы, которые не видны из @import, но нужны страницам:
+// печатная тема каталога и собранный скрипт. Печатная тема подключается
+// вторым <link>, а не через @import, поэтому checkStyles до неё не доходит;
+// js собирает tsc, и если его забыли пересобрать, страница каталога
+// откроется пустой — без карточек и без фильтра.
+var extraStatic = []string{"print.css", filepath.Join("js", "main.js")}
+
+// checkExtraStatic проверяет, что печатная тема и собранный скрипт на месте.
+func checkExtraStatic() error {
+	for _, rel := range extraStatic {
+		name := filepath.Join(staticRoot, rel)
+		if _, err := os.Stat(name); err != nil {
+			return fmt.Errorf("%s: %w (не забыл npx tsc?)", name, err)
+		}
+	}
+	return nil
+}
 
 // checkStyles проверяет, что все файлы, подключённые через @import в точках
 // входа, лежат на месте. Пропавший файл слоя иначе дал бы только 404 на
@@ -301,6 +328,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if err := checkStyles(); err != nil {
+		log.Fatal(err)
+	}
+	if err := checkExtraStatic(); err != nil {
 		log.Fatal(err)
 	}
 

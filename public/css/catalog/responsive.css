@@ -1,0 +1,45 @@
+/* Переопределения каталога под узкий экран.
+
+   Идут последними в цепочке @import, поэтому перебивают правила из
+   css/responsive.css. На мобильном две колонки не помещаются: фильтр
+   встаёт сверху, карточки идут по две в ряд, как на главной. */
+
+@media (max-width: 700px) {
+  .catalog-layout {
+    display: block;
+  }
+
+  /* Три группы фильтра в ряд на телефоне: панель иначе занимает весь
+     экран до первой карточки. */
+  .filters-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+
+  .filter-group {
+    flex: 1 1 140px;
+    margin: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .catalog-tools {
+    gap: 6px;
+  }
+
+  .tool-btn {
+    flex: 1 1 auto;
+  }
+
+  .filter-count {
+    flex: 1 1 100%;
+    margin-left: 0;
+    text-align: right;
+  }
+
+  .catalog-layout .part-card {
+    width: calc(50% - 10px);
+  }
+}

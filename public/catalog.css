@@ -1,0 +1,23 @@
+/* Точка входа стилей каталога: в catalog.html один <link>, разбивка — здесь.
+   Порядок импортов задаёт каскад.
+
+   Общие слои (шрифты, основа, каркас, панели, подвал) берутся из css/ — они
+   те же, что на главной. Свои файлы каталога лежат в css/catalog/: во-первых,
+   так они не попадают в бюджет HTML+CSS главной, во-вторых, повторяют
+   разбивку макета (css/design/).
+
+   Отдельная точка входа нужна ради печатной версии: кнопка выключает этот
+   файл целиком и включает print.css. Будь стили общими с главной, печатный
+   режим пришлось бы городить на классах body. */
+
+@import url("css/fonts.css");
+@import url("css/base.css");
+@import url("css/layout.css");
+@import url("css/panels.css");
+@import url("css/catalog.css");
+@import url("css/footer.css");
+@import url("css/responsive.css");
+@import url("css/catalog/filter.css");
+@import url("css/catalog/tools.css");
+@import url("css/catalog/album.css");
+@import url("css/catalog/responsive.css");

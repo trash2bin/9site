@@ -38,6 +38,19 @@ jobs:
       - name: Stylelint — CSS
         run: npm run lint:css
 
+      - name: TypeScript — typecheck
+        run: npm run lint:ts
+
+      - name: TypeScript — rebuild check
+        run: |
+          npm run build:ts
+          if [ -n "$(git status --porcelain public/js/)" ]; then
+            echo "Скомпилированный public/js/ не совпадает с src/: запусти npm run build:ts"
+            git status --porcelain public/js/
+            exit 1
+          fi
+          echo "OK"
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -115,6 +128,7 @@ jobs:
           $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/public' && chmod 755 '$DEPLOY_PATH/public'"
           rsync -avz -e "$SSH_OPTS" \
             public/index.html public/style.css public/design.html public/design.css \
+            public/catalog.html public/catalog.css public/print.css \
             "$TARGET:$DEPLOY_PATH/public/"
           # Слои стилей копируются отдельно: --delete-after убирает файлы,
           # оставшиеся на сервере от прежней разбивки, иначе public/css
@@ -123,6 +137,10 @@ jobs:
             public/css/ "$TARGET:$DEPLOY_PATH/public/css/"
           rsync -avz --delete-after -e "$SSH_OPTS" \
             public/assets/ "$TARGET:$DEPLOY_PATH/public/assets/"
+          # Собранный из src/*.ts скрипт — так же, с чисткой: старые модули
+          # не должны оставаться на сервере.
+          rsync -avz --delete-after -e "$SSH_OPTS" \
+            public/js/ "$TARGET:$DEPLOY_PATH/public/js/"
 
       - name: Upload server binary
         run: |
@@ -161,6 +179,10 @@ jobs:
           check http://127.0.0.1:8080/css/base.css 200
           check http://127.0.0.1:8080/design.css 200
           check http://127.0.0.1:8080/maket      200
+          check http://127.0.0.1:8080/catalog    200
+          check http://127.0.0.1:8080/catalog.css 200
+          check http://127.0.0.1:8080/print.css  200
+          check http://127.0.0.1:8080/js/main.js 200
           check http://127.0.0.1:8080/main.go    404
           check http://127.0.0.1:8080/visits.dat 404
           check http://127.0.0.1/                200

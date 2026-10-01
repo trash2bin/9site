@@ -1,0 +1,59 @@
+/* Панель инструментов каталога: кнопка печатной версии, сброс фильтра и
+   счётчик найденного.
+
+   Кнопки нарочно сделаны в стиле beveled/outset, как кнопки 88×31 в подвале
+   главной: это Web 1.0, а не плоская админка. */
+
+.catalog-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 2px;
+  padding: 7px 8px;
+  background: #050505;
+  border: 3px inset var(--bevel);
+}
+
+.tool-btn {
+  padding: 5px 11px;
+  color: var(--bone);
+  background: var(--slab);
+  border: 3px outset var(--bevel);
+  font:
+    bold 12px "Courier New",
+    monospace;
+  text-transform: lowercase;
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  color: #000;
+  background: var(--yellow);
+}
+
+.tool-btn:active {
+  border-style: inset;
+}
+
+.tool-btn:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+/* Кнопка печати в активном режиме выглядит нажатой: aria-pressed ставит
+   скрипт, стиль читает атрибут, чтобы состояние не разъезжалось. */
+.tool-btn[aria-pressed="true"] {
+  color: #fff;
+  background: #c00000;
+  border-style: inset;
+}
+
+.filter-count {
+  margin-left: auto;
+  color: var(--matrix);
+  font:
+    bold 12px "Courier New",
+    monospace;
+  white-space: nowrap;
+}

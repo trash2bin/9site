@@ -1,0 +1,124 @@
+/* Панель фильтра: три группы чекбоксов в левой колонке каталога.
+
+   Колонка и сетка карточек заданы здесь же: раньше .parts-grid занимал всю
+   ширину панели, теперь рядом с ним стоит фильтр, и сетку надо ужать.
+
+   Состояние чекбокса:
+   - обычный — доступен, можно кликнуть;
+   - .is-off и атрибут disabled — значений не осталось, вариант гаснет.
+     Приглушение задано и для подписи, и для самого квадратика: браузер
+     рисует disabled по-своему, но в тёмной теме это почти незаметно. */
+
+.catalog-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 10px 0 4px;
+}
+
+.filters-panel {
+  flex: 0 0 190px;
+  padding: 8px 9px 10px;
+  background: var(--slab) url("/assets/img/texture-hyper.gif") repeat;
+  background-size: 321px 61px;
+  background-blend-mode: multiply;
+  border: 3px outset var(--bevel);
+  box-shadow: 3px 3px 0 #000;
+}
+
+/* Сетка карточек в правой колонке. Своё правило нужно, потому что
+   .parts-grid из css/catalog.css рассчитан на всю ширину панели: там
+   карточка занимает треть. Здесь ширина меньше, поэтому треть считается
+   от колонки, а не от панели. */
+.catalog-layout .parts-grid {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.filter-group {
+  margin: 0 0 11px;
+  padding: 6px 8px 8px;
+  border: 2px groove var(--bevel);
+  background: #17141d;
+}
+
+.filter-group:last-child {
+  margin-bottom: 0;
+}
+
+.filter-group legend {
+  padding: 1px 6px;
+  color: var(--yellow);
+  background: #000;
+  border: 1px solid var(--bevel);
+  font:
+    bold 12px "Courier New",
+    monospace;
+  letter-spacing: 0.04em;
+}
+
+.filter-item {
+  display: block;
+  margin: 3px 0;
+  padding: 2px 3px;
+  color: var(--bone);
+  font:
+    13px "Courier New",
+    monospace;
+  cursor: pointer;
+}
+
+.filter-item input {
+  margin: 0 5px 0 0;
+  vertical-align: -1px;
+  accent-color: #c00000;
+  cursor: pointer;
+}
+
+.filter-item:hover {
+  background: #241d16;
+}
+
+/* Недоступный вариант: серый текст, перечёркнутый квадратик и никакого
+   курсора-руки. .is-off вешается скриптом на <label>, disabled — на input. */
+.filter-item.is-off {
+  color: #55505e;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.filter-item.is-off input {
+  cursor: not-allowed;
+  filter: grayscale(1) brightness(0.6);
+}
+
+.filter-item.is-off:hover {
+  background: transparent;
+}
+
+/* Выбранное значение подсвечиваем, чтобы отбор читался даже когда все
+   остальные варианты погасли. */
+.filter-item:has(input:checked) {
+  color: #fff;
+  background: #3a0d12;
+  outline: 1px dotted #c00000;
+}
+
+.filter-item:has(input:focus-visible) {
+  outline: 2px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+/* Заглушка, когда под критерии ничего не подошло. */
+.catalog-empty {
+  margin: 18px 0;
+  padding: 14px;
+  color: #ff3b3b;
+  background: #050505;
+  border: 3px inset var(--bevel);
+  font:
+    bold 14px "Courier New",
+    monospace;
+  text-align: center;
+}

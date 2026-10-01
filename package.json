@@ -9,14 +9,17 @@
     "lint:css": "stylelint --config config/stylelintrc.json \"public/**/*.css\"",
     "lint:css:fix": "stylelint --config config/stylelintrc.json \"public/**/*.css\" --fix",
     "lint:go": "gofmt -l . && go vet ./...",
+    "lint:ts": "tsc --noEmit",
+    "build:ts": "tsc",
     "size": "bash scripts/check-size.sh",
-    "lint": "npm run format:check && npm run lint:css && npm run lint:go && npm run size",
+    "lint": "npm run format:check && npm run lint:css && npm run lint:ts && npm run lint:go && npm run size",
     "fix": "npm run format && npm run lint:css:fix"
   },
   "devDependencies": {
     "prettier": "^3.9.7",
     "stylelint": "^16.26.1",
-    "stylelint-config-standard": "^38.0.0"
+    "stylelint-config-standard": "^38.0.0",
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=20"

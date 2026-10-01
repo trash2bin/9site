@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Фотоальбом с умным фильтром: раздел, тип файла, ориентация." />
+    <title>Ivan's Little Web — фотоальбом</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+
+    <!-- Два стиля. Обычный включён, печатный выключен атрибутом disabled:
+         кнопка «версия для печати» меняет эти флаги, и браузер перечитывает
+         каскад без перезагрузки страницы. -->
+    <link id="style-print-off" rel="stylesheet" href="/catalog.css" />
+    <link id="style-print-on" rel="stylesheet" href="/print.css" disabled />
+  </head>
+  <body>
+    <div class="side-sticker sticker-angel" aria-hidden="true"></div>
+    <div class="side-sticker sticker-tux" aria-hidden="true"></div>
+    <a class="skip-link" href="#content">К содержанию</a>
+
+    <div class="site-shell">
+      <header class="site-header">
+        <img
+          class="header-tux"
+          src="/assets/img/tux-rainbow.gif"
+          width="104"
+          height="104"
+          alt="Tux в радужном сиянии"
+        />
+        <p class="eyebrow">~ фотоальбом-сервис // лабораторная N3 ~</p>
+        <h1>MY PHOTO ALBUM</h1>
+        <p class="tagline">все картинки, что лежат на сайте // фильтруй как хочешь</p>
+        <div class="ticker" aria-label="Приветствие">
+          <span>★ 37 СНИМКОВ ★ 5 РАЗДЕЛОВ ★ 3 ТИПА ★ 3 ОРИЕНТАЦИИ ★</span>
+        </div>
+      </header>
+
+      <nav class="site-nav" aria-label="Основная навигация">
+        <strong>MENU:</strong>
+        <a href="/">главная</a><span class="sep">|</span> <a href="#album">альбом</a><span class="sep">|</span>
+        <a href="#filters">фильтр</a><span class="sep">|</span>
+        <a href="/maket">maket</a>
+      </nav>
+
+      <main id="content">
+        <section class="panel parts-panel" id="album">
+          <h2>✿ photo album / весь замес</h2>
+
+          <p class="catalog-intro">
+            Вся картинка со свалки. Слева три фильтра: раздел, тип файла и ориентация кадра. После каждого клика
+            недоступные варианты гаснут — выбрать их всё равно нельзя, под них ничего не осталось.
+          </p>
+
+          <!-- Панель инструментов: кнопка печати, сброс фильтра и счётчик
+               найденного. Стоит над колонками, чтобы не перерисовываться
+               вместе с сеткой карточек. -->
+          <div class="catalog-tools">
+            <button type="button" class="tool-btn" data-print-toggle aria-pressed="false">версия для печати</button>
+            <button type="button" class="tool-btn" data-print-now>распечатать</button>
+            <button type="button" class="tool-btn" data-filter-reset>сбросить фильтр</button>
+            <span class="filter-count" id="filter-count" aria-live="polite"></span>
+          </div>
+
+          <!-- Две колонки: фильтр и сетка снимков. Разметка обеих пустая:
+               её целиком собирает JS из src/render.ts. -->
+          <div class="catalog-layout">
+            <aside class="filters-panel" id="filters" aria-label="Фильтр фотоальбома"></aside>
+            <div class="parts-grid album-grid" id="elements"></div>
+          </div>
+
+          <div class="garage-signs">
+            <span>SHOOT 24/7</span><span>NO EXIF</span><span>RAW &amp; GIF</span><span>FILM FOREVER</span>
+          </div>
+
+          <p class="garage-links">
+            <a href="#album">[ all ]</a> <a href="#album">[ film ]</a> <a href="#album">[ digital ]</a>
+            <a href="mailto:hello@example.com">[ ask photographer ]</a>
+          </p>
+          <p class="catalog-note">[ альбом работает в демо-режиме // данные лежат в JS-массиве ]</p>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="footer-tools">
+          <div class="button-row" aria-label="Web 1.0 кнопки">
+            <a href="/"
+              ><img
+                src="/assets/ico/best_viewed_with_eyes.gif"
+                width="88"
+                height="31"
+                alt="Лучше всего смотреть глазами"
+            /></a>
+            <a href="#content"
+              ><img
+                src="/assets/ico/best_viewed_with_monitor.gif"
+                width="97"
+                height="31"
+                alt="Лучше всего смотреть на мониторе"
+            /></a>
+            <a href="#album"
+              ><img src="/assets/ico/car-part-88x31-2.gif" width="88" height="31" alt="Автозапчасти"
+            /></a>
+            <a href="mailto:hello@example.com"
+              ><img src="/assets/ico/blink.gif" width="88" height="31" alt="Написать автору"
+            /></a>
+          </div>
+        </div>
+        <p>© 2077 Ivan223 · plain HTML &amp; CSS &amp; TypeScript · <a href="#content">back to top ↑</a></p>
+        <p class="footer-note">
+          This site is proudly static. No cookies. No drama.<br />
+          <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener">Wikimedia Commons</a> ·
+          <a href="https://cyber.dabamos.de/88x31/" target="_blank" rel="noopener">88x31 GIF collection</a>
+        </p>
+      </footer>
+    </div>
+
+    <!-- Собранный из src/*.ts скрипт. Модуль, потому что в исходниках
+         используются import/export; сборки в проекте нет, tsc кладёт
+         готовый ES-модуль прямо в public/js/. -->
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>

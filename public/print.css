@@ -1,0 +1,228 @@
+/* Версия для печати. Подключается вместо catalog.css: кнопка на странице
+   выключает обычный файл и включает этот, поэтому здесь нет ни одного
+   @import и весь нужный стиль задан с нуля.
+
+   Задача — кардинально сменить вид: убрать навигацию, шапку с гифками,
+   подвал, наклейки по краям и панель фильтра, оставив только данные.
+   Карточки разворачиваются в список, а не в сетку: на бумаге важнее
+   читаемость строк, чем плотность.
+
+   Цвета только чёрный по белому. Оформление — тонкие линии вместо ridge и
+   outset: фактуры и объёмные рамки на печати превращаются в серую кашу. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px 28px;
+  color: #000;
+  background: #fff;
+  font:
+    12pt/1.45 Georgia,
+    "Times New Roman",
+    serif;
+}
+
+/* Всё вспомогательное скрыто: меню, шапка с бегущей строкой, наклейки по
+   краям окна, подвал с кнопками и панель фильтра. */
+.side-sticker,
+.skip-link,
+.site-header,
+.site-nav,
+.site-footer,
+.filters-panel,
+.garage-signs,
+.garage-links,
+.catalog-note,
+.header-tux {
+  display: none !important;
+}
+
+/* Панель инструментов сводится к одной кнопке «обычная версия»: без неё из
+   печатного режима не вернуться, текст и счётчик на бумаге не нужны. */
+.catalog-tools {
+  display: block;
+  margin: 0 0 14px;
+  padding: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+}
+
+.tool-btn {
+  display: inline-block;
+  padding: 3px 10px;
+  color: #000;
+  background: none;
+  border: 1px solid #000;
+  font:
+    bold 10pt Georgia,
+    serif;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.tool-btn[aria-pressed="true"] {
+  color: #fff;
+  background: #000;
+  border-style: solid;
+}
+
+/* Сброс и кнопка запуска печати в печатном виде лишни: вернуться к полному
+   списку можно и кнопкой «обычная версия», а повторно запускать печать
+   прямо из печатного режима незачем. */
+.tool-btn[data-filter-reset],
+.tool-btn[data-print-now] {
+  display: none;
+}
+
+/* Рамки и тени снимаем со всех обёрток: на печати они дают лишние линии
+   по краю листа. */
+.site-shell,
+.panel,
+.parts-panel,
+.parts-grid {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  transform: none;
+}
+
+.catalog-layout {
+  display: block;
+  margin: 0;
+}
+
+/* Заголовок: единственный акцент, крупный и чёрный. Рамку панели заменяет
+   линия под заголовком. */
+.panel h2 {
+  margin: 0 0 4px;
+  padding: 0 0 6px;
+  color: #000;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid #000;
+  font:
+    bold 18pt/1.2 Georgia,
+    serif;
+  text-shadow: none;
+}
+
+.catalog-intro {
+  margin: 0 0 4px;
+  color: #000;
+  font:
+    italic 11pt/1.4 Georgia,
+    serif;
+}
+
+/* Счётчик найденного оставляем: в распечатке нужно понимать, сколько строк
+   перед тобой и по какому отбору. */
+.filter-count {
+  display: block;
+  margin: 0 0 14px;
+  color: #000;
+  font:
+    bold 11pt Georgia,
+    serif;
+}
+
+.filter-count::after {
+  content: "";
+}
+
+/* Карточки разворачиваются в одну колонку: сетка из трёх карточек на
+   бумаге читается хуже, чем список. */
+.parts-grid {
+  display: block;
+  font-size: 0;
+}
+
+.part-card {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 7px 0;
+  color: #000;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #999;
+  box-shadow: none;
+  transform: none;
+  font:
+    11pt/1.35 Georgia,
+    serif;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* На бумаге снимки теряют смысл: это превью, а не оригиналы, поэтому вместо
+   них печатаем имя файла — по нему снимок можно найти на диске. */
+.part-card img {
+  display: none;
+}
+
+.part-card figcaption {
+  display: block;
+  color: #000;
+  font:
+    bold 12pt Georgia,
+    serif;
+}
+
+.part-card figcaption::after {
+  content: " — " attr(data-file);
+  font-weight: normal;
+  color: #333;
+}
+
+/* Заглушка при пустом результате тоже должна печататься. */
+.catalog-empty {
+  margin: 16px 0;
+  padding: 10px;
+  color: #000;
+  background: none;
+  border: 1px dashed #000;
+  font:
+    bold 12pt Georgia,
+    serif;
+  text-align: left;
+}
+
+/* Адрес страницы внизу листа: распечатка без него теряет контекст. */
+body::after {
+  content: "Ivan's Little Web — фотоальбом // умный фильтр по разделу, типу файла и ориентации";
+  display: block;
+  margin-top: 20px;
+  padding-top: 6px;
+  border-top: 1px solid #000;
+  color: #333;
+  font:
+    9pt Georgia,
+    serif;
+}
+
+/* При печати поля листа задаёт браузер, но отступы страницы всё равно
+   уменьшаем: 24px экранных на бумаге выглядят как огромные поля. */
+@media print {
+  body {
+    padding: 0;
+  }
+
+  /* На бумаге кнопка возврата бесполезна: печать уже идёт. */
+  .catalog-tools {
+    display: none;
+  }
+
+  .part-card {
+    border-bottom: 1px solid #ccc;
+  }
+}
