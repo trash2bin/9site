@@ -1,4 +1,4 @@
-/* Секции макета по site-layout-spec.md: оранжевая карточка, фото, оверлапы
+/* Секции макета по docs/maket/site-layout-spec.md: оранжевая карточка, фото, оверлапы
    и текстовые блоки.
 
    Порядок повторяет страницу: сплит с карточкой, headline, место,
@@ -44,25 +44,37 @@
   object-fit: cover;
 }
 
+/* Фото обоих сплитов в макете заметно ниже оранжевой карточки: сама карточка
+   тянется до конца текста под фото, а фото занимает верхнюю часть правой
+   колонки (≈352px на 1440). */
 .photo-dunes,
 .photo-peaks {
-  min-height: clamp(420px, 50vw, 720px);
+  min-height: clamp(240px, 24.5vw, 352px);
 }
 
 .photo-interior {
   height: clamp(220px, 23vw, 330px);
 }
 
+/* Текстура в макете начинается по левой грани оранжевой карточки и уходит
+   вправо до края экрана (в отличие от верхнего фото-баннера во всю ширину).
+   Левый край выровнен по колонке контента, а не по её внутреннему отступу.
+   Сам gif на 76% прозрачный, поэтому под ним свой фон: иначе сквозь него
+   просвечивает серая заглушка .photo. */
 .photo-pattern {
+  margin-left: var(--content-inset);
   height: clamp(300px, 33vw, 480px);
+  background-color: var(--muted);
 }
 
 .photo-pattern img {
   filter: grayscale(1) contrast(1.05);
 }
 
+/* Портрет в «Words & such» — квадрат, по центру верхнего ряда: слева нога
+   под заголовок, справа такой же отступ до края карточки. */
 .photo-portrait {
-  aspect-ratio: 2 / 1;
+  aspect-ratio: 1 / 1;
   width: 100%;
 }
 
@@ -125,8 +137,19 @@
   padding-top: 48px;
 }
 
+/* Первый сплит держит белый зазор до следующей секции, нижний — нет */
+.split-tight .split-grid .headline-body {
+  padding-top: 40px;
+}
+
 .split-tight .container {
   margin-top: -120px;
+}
+
+/* Низ нижней карточки в макете лежит прямо на футере: белого зазора между
+   оранжевым и тёмным нет (в отличие от верхнего сплита). */
+.split-tight {
+  padding-bottom: 0;
 }
 
 .section-title {
@@ -196,8 +219,10 @@
   margin-bottom: 0;
 }
 
+/* В макете низ оранжевой карточки вплотную примыкает к тёмной полосе
+   «Take action», поэтому белого зазора под секцией нет. */
 .words {
-  padding-bottom: 90px;
+  padding-bottom: 0;
   background-color: var(--paper);
 }
 
@@ -207,22 +232,31 @@
   margin-top: -130px;
 }
 
-/* Блок «Words & Such» нарисован перевёрнутой «Г» (L): вертикальная нога
-   слева и полная ширина внизу, а верхний правый угол вырезан под фото.
-   Поэтому фото прижато к верхнему правому углу (67% ширины, 2:1),
-   а заголовок занимает ногу и выравнивается по центру фото. */
+/* Блок «Words & Such» — буква «Г»: слева вертикальная оранжевая нога под
+   заголовок, снизу оранжевая полоса во всю ширину. Сам контейнер прозрачный,
+   поэтому верхний правый угол (правее фото) остаётся белым фоном страницы.
+   Фото сидит по центру верхнего ряда между ногой и белым полем. */
 .card-orange-wide {
   padding: 0;
+  background-color: transparent;
 }
 
 .words-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 67%;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 38%) minmax(0, 1fr);
+  align-items: stretch;
 }
 
+.words-head .photo {
+  grid-column: 2;
+}
+
+/* Нога «Г»: тянется на всю высоту ряда с фото и сама себе заливка */
 .words-head .card-title-lead {
+  display: flex;
+  align-items: center;
   padding-inline: 40px;
+  background-color: var(--accent);
 }
 
 .card-title-lead {
@@ -235,5 +269,6 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 40px;
   margin-top: 0;
-  padding: 36px 40px 46px;
+  padding: 72px 40px 80px;
+  background-color: var(--accent);
 }

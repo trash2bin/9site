@@ -78,8 +78,8 @@
     padding: 32px 24px;
   }
 
-  .photo-portrait {
-    aspect-ratio: 2 / 1;
+  .words-head .photo {
+    grid-column: 1;
   }
 
   .words-cols {

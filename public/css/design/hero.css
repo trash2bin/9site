@@ -7,7 +7,7 @@
   grid-template-rows: auto 1fr auto;
   min-height: clamp(560px, 88vh, 820px);
   padding-block: 34px 56px;
-  padding-inline: var(--pad-content);
+  padding-inline: var(--content-inset) var(--gutter);
   overflow: hidden;
   color: var(--paper);
 }
@@ -66,7 +66,7 @@
 .hero-logo {
   position: absolute;
   top: 34px;
-  right: var(--pad-content);
+  right: var(--gutter);
   z-index: 1;
   color: var(--paper);
   font-size: 13px;

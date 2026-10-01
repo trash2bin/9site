@@ -1,7 +1,7 @@
 /* Пункт «Take action»: тёмная полоса с подпиской поля ввода и кнопка. */
 
 .action {
-  padding-block: 60px;
+  padding-block: 100px;
   background-color: var(--ink);
   color: var(--paper);
 }

@@ -43,7 +43,16 @@
   --hairline: rgba(255, 255, 255, 0.35);
   --container: 1280px;
   --gutter: 40px;
-  --pad-content: max(var(--gutter), calc((100% - var(--container)) / 2 + var(--gutter)));
+
+  /* Контент всех секций макета стоит правее центра. --page-shift задаёт этот
+     сдвиг, но сам сжимается до нуля, когда в контейнере нет запаса по ширине,
+     поэтому на узких экранах ничего не ломается и не появляется скролл.
+     --content-left — левый край колонки контента, --content-inset — тот же
+     край с учётом внутреннего отступа (по нему выравниваются фулл-вайд
+     картинки, которые режутся по левому краю контента). */
+  --page-shift: 80px;
+  --content-left: clamp(0px, calc((100% - var(--container)) / 2 + var(--page-shift)), calc(100% - var(--container)));
+  --content-inset: calc(var(--content-left) + var(--gutter));
   --font-stack: "Montserrat", "Helvetica Neue", sans-serif;
 }
 
@@ -78,10 +87,13 @@ img {
   max-width: 100%;
 }
 
+/* Контейнер сдвинут вправо на общий --content-left: все секции едут одним
+   монолитом, а не каждая своим отступом. */
 .container {
-  width: 100%;
+  width: auto;
   max-width: var(--container);
-  margin-inline: auto;
+  margin-left: var(--content-left);
+  margin-right: auto;
   padding-inline: var(--gutter);
 }
 
