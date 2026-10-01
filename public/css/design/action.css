@@ -1,15 +1,25 @@
-/* Пункт «Take action»: тёмная полоса с подпиской поля ввода и кнопка. */
+/* Пункт «Take action»: тёмная полоса с подпиской поля ввода и кнопка.
+   Полоса начинается там же, где контент соседних секций, и тянется до
+   правого края окна. Левый край задаёт --content-inset — та же переменная,
+   по которой выровнены оранжевые блоки выше и ниже, поэтому вместо
+   фиксированной ширины здесь ничего не пересчитывается вручную. */
 
 .action {
+  margin-left: var(--content-inset);
   padding-block: 100px;
+  padding-right: var(--gutter);
   background-color: var(--ink);
   color: var(--paper);
 }
 
+/* Внутренний контейнер уже спозиционирован самой полосой: его сдвиг и
+   левый отступ дали бы двойной зазор, поэтому здесь они сняты. */
+.action .container {
+  margin-left: 0;
+}
+
 .action-grid {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
   gap: 40px;
 }
 
