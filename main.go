@@ -42,10 +42,7 @@ var allowedStatic = map[string]bool{
 // генерируются руками, ничего исполняемого туда не попадает.
 const cssPrefix = "/css/"
 
-// jsPrefix — собранный из src/*.ts скрипт страницы каталога. Отдаётся наружу
-// целиком, потому что tsc кладёт рядом не только main.js: остальные модули
-// подтягиваются из него импортами. Каталог наполняется только компилятором,
-// вручную туда ничего не кладут.
+// jsPrefix — каталог с production-бандлом страницы фотоальбома.
 const jsPrefix = "/js/"
 
 // pageRoutes — адреса без .html: браузер просит короткий путь, а сервер
@@ -243,11 +240,8 @@ func checkPages() error {
 // styleEntries — точки входа стилей, которые грузит браузер.
 var styleEntries = []string{"style.css", "design.css", "catalog.css"}
 
-// extraStatic — файлы, которые не видны из @import, но нужны страницам:
-// печатная тема каталога и собранный скрипт. Печатная тема подключается
-// вторым <link>, а не через @import, поэтому checkStyles до неё не доходит;
-// js собирает tsc, и если его забыли пересобрать, страница каталога
-// откроется пустой — без карточек и без фильтра.
+// extraStatic — файлы, которые подключены напрямую из HTML, а не через @import.
+// Печатная тема и JS-бандл нужны фотоальбому; без них страница работает некорректно.
 var extraStatic = []string{"print.css", filepath.Join("js", "main.js")}
 
 // checkExtraStatic проверяет, что печатная тема и собранный скрипт на месте.
@@ -255,7 +249,7 @@ func checkExtraStatic() error {
 	for _, rel := range extraStatic {
 		name := filepath.Join(staticRoot, rel)
 		if _, err := os.Stat(name); err != nil {
-			return fmt.Errorf("%s: %w (не забыл npx tsc?)", name, err)
+			return fmt.Errorf("%s: %w (не забыл npm run build:ts?)", name, err)
 		}
 	}
 	return nil

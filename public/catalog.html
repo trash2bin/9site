@@ -114,9 +114,7 @@
       </footer>
     </div>
 
-    <!-- Собранный из src/*.ts скрипт. Модуль, потому что в исходниках
-         используются import/export; сборки в проекте нет, tsc кладёт
-         готовый ES-модуль прямо в public/js/. -->
-    <script type="module" src="/js/main.js"></script>
+    <!-- Один production-бандл фотоальбома, собранный esbuild из TypeScript. -->
+    <script src="/js/main.js" defer></script>
   </body>
 </html>

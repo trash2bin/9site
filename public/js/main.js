@@ -1,34 +1,13 @@
-/** Связывает данные, фильтр, интерфейс и режим печати страницы альбома. */
-import { getAvailability, applyFilters } from "./filter.js";
-import { PHOTOS } from "./photos.js";
-import { initPrintMode } from "./print.js";
-import { readState, renderCount, renderFilters, renderPhotos, updateFilters } from "./render.js";
-const FILTERS = "#filters";
-const PHOTOS_GRID = "#elements";
-const RESULT_COUNT = "#filter-count";
-/** Применяет состояние и обновляет карточки, счётчик и доступность чекбоксов. */
-function refresh() {
-    const state = readState(FILTERS);
-    const matchingPhotos = applyFilters(PHOTOS, state);
-    renderPhotos(matchingPhotos, PHOTOS_GRID);
-    renderCount(matchingPhotos.length, PHOTOS.length, RESULT_COUNT);
-    updateFilters(state, getAvailability(PHOTOS, state), FILTERS);
-}
-function init() {
-    initPrintMode();
-    renderFilters(FILTERS);
-    refresh();
-    document.querySelector(FILTERS)?.addEventListener("change", refresh);
-    document.querySelector("[data-filter-reset]")?.addEventListener("click", () => {
-        for (const checkbox of document.querySelectorAll(`${FILTERS} input[type=checkbox]`)) {
-            checkbox.checked = false;
-        }
-        refresh();
-    });
-}
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-}
-else {
-    init();
-}
+"use strict";(()=>{function d(e){let t=e.src.split(".").pop()?.toLowerCase();return t==="gif"?"gif":t==="svg"?"vector":"photo"}function p(e){let t=e.width/e.height;return t>=1.2?"wide":t<=1/1.2?"tall":"square"}var f=[{value:"gadgets",label:"техника"},{value:"garage",label:"гараж"},{value:"mascots",label:"tux"},{value:"music",label:"музыка"},{value:"misc",label:"прочее"}],b=[{value:"photo",label:"фото"},{value:"gif",label:"анимация"},{value:"vector",label:"вектор"}],y=[{value:"wide",label:"широкое"},{value:"square",label:"квадратное"},{value:"tall",label:"высокое"}];var l=[{key:"album",title:"Раздел",options:f,valueOf:e=>e.album},{key:"type",title:"Тип файла",options:b,valueOf:d},{key:"orientation",title:"Ориентация",options:y,valueOf:p}];function u(e){return l.some(({key:t})=>t===e)}function w(e,t){return l.every(({key:i,valueOf:r})=>{let n=t[i]??[];return n.length===0||n.includes(r(e))})}function v(e,t){return e.filter(i=>w(i,t))}function T(e,t){let i={};for(let r of l)i[r.key]=new Set(r.options.filter(({value:n})=>{let a={...t,[r.key]:[n]};return e.some(s=>w(s,a))}).map(({value:n})=>n));return i}var m=[{name:"Nintendo 3DS",src:"console-3ds.jpg",album:"gadgets",width:1600,height:1200},{name:"NES и контроллер",src:"console-nes-web.jpg",album:"gadgets",width:900,height:489},{name:"Game Boy",src:"console-gameboy-web.jpg",album:"gadgets",width:577,height:700},{name:"Двигатель",src:"auto-engine.jpg",album:"garage",width:800,height:600},{name:"Авторазбор",src:"auto-store-web.jpg",album:"garage",width:900,height:600},{name:"Свалка моторов",src:"junkyard-engines.jpg",album:"garage",width:1600,height:1200},{name:"Тормозной диск",src:"part-brake-web.jpg",album:"garage",width:834,height:700},{name:"Свечи зажигания",src:"part-spark-plugs-web.jpg",album:"garage",width:900,height:600},{name:"Запчасти россыпью",src:"car-parts.png",album:"garage",width:1032,height:602},{name:"Схема карбюратора",src:"part-carburetor.svg",album:"garage",width:1967,height:1846},{name:"Tux без сна 16 часов",src:"tux-16hours.gif",album:"mascots",width:115,height:86},{name:"Tux машет рукой",src:"tux-big.gif",album:"mascots",width:127,height:150},{name:"Колония Linux",src:"tux-colony.gif",album:"mascots",width:115,height:108},{name:"обнимашки бесплатны",src:"tux-cuddle.gif",album:"mascots",width:150,height:63},{name:"kernel boot",src:"tux-kernelboot.gif",album:"mascots",width:100,height:150},{name:"Tux майнкрафтит",src:"tux-minecraft.gif",album:"mascots",width:120,height:117},{name:"Радужный Tux",src:"tux-rainbow.gif",album:"mascots",width:120,height:120},{name:"Tux у серверов",src:"tux-servers.gif",album:"mascots",width:140,height:140},{name:"Tux сидит",src:"tux-sit.gif",album:"mascots",width:82,height:110},{name:"sudo rm -rf yourself",src:"tux-sudorm.gif",album:"mascots",width:150,height:135},{name:"Tux и Windows",src:"tux-windows.gif",album:"mascots",width:120,height:120},{name:"Tux с флагом",src:"tux-winflag.gif",album:"mascots",width:130,height:122},{name:"9mice — Soloist",src:"9mice-album-soloist.jpg",album:"music",width:1e3,height:1e3},{name:"9mice ч/б портрет",src:"9mice-in-face.png",album:"music",width:1e3,height:1e3},{name:"Kai Angel — shh! (синий)",src:"kaiangel-album-shh1.jpg",album:"music",width:1200,height:1200},{name:"Kai Angel — shh! (потёки)",src:"kaiangel-shh!-album.jpg",album:"music",width:1e3,height:1e3},{name:"Kai Angel — DAMAGE",src:"kaiangel-album-damage.png",album:"music",width:300,height:300},{name:"Аниме-аватар",src:"avatar-anime.gif",album:"misc",width:2048,height:2048},{name:"under construction",src:"under-construction-real.gif",album:"misc",width:200,height:200},{name:"construction",src:"construction-real-2.gif",album:"misc",width:177,height:175},{name:"Искра",src:"spark.gif",album:"misc",width:24,height:24},{name:"Кнопка-фактура",src:"texture-badge.gif",album:"misc",width:88,height:31},{name:"Полосатая фактура",src:"texture-hyper.gif",album:"misc",width:642,height:122},{name:"Бейдж макета",src:"badge-maket.svg",album:"misc",width:88,height:31},{name:"Паутина",src:"cobweb.svg",album:"misc",width:80,height:80},{name:"Паутина угол",src:"cobweb-br.svg",album:"misc",width:80,height:80},{name:"Леопардовая фактура",src:"leopard-red.svg",album:"misc",width:72,height:72}];var k="style-print-off",F="style-print-on",x={off:"версия для печати",on:"обычная версия"};function g(e){let t=document.getElementById(k),i=document.getElementById(F);t&&(t.disabled=e),i&&(i.disabled=!e),document.body.classList.toggle("print-mode",e),document.querySelectorAll("[data-print-toggle]").forEach(r=>{r.textContent=e?x.on:x.off,r.setAttribute("aria-pressed",String(e))})}function S(){document.querySelectorAll("[data-print-toggle]").forEach(e=>{e.addEventListener("click",()=>{g(!document.body.classList.contains("print-mode"))})}),document.querySelectorAll("[data-print-now]").forEach(e=>{e.addEventListener("click",()=>{document.body.classList.contains("print-mode")||g(!0),window.print()})}),g(!1)}function o(e){return e.replace(/[&<>"']/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[t])}function N(e){return`<figure class="part-card photo-card">
+      <img src="/assets/img/${o(e.src)}" alt="${o(e.name)}" loading="lazy" decoding="async" />
+      <figcaption data-file="${o(e.src)}">${o(e.name)}</figcaption>
+    </figure>`}function O(e,t){let i=document.querySelector(t);i&&(i.innerHTML=e.length?e.map(N).join(`
+`):'<p class="catalog-empty">[ под такие критерии ничего не нашлось // сбрось фильтр ]</p>')}function P(e){let t=document.querySelector(e);t&&(t.innerHTML=l.map(({key:i,title:r,options:n})=>`<fieldset class="filter-group">
+        <legend>${o(r)}</legend>
+        ${n.map(({value:a,label:s})=>`<label class="filter-item">
+              <input type="checkbox" name="${i}" value="${o(a)}" />
+              <span>${o(s)}</span>
+            </label>`).join(`
+`)}
+      </fieldset>`).join(`
+`))}function E(e,t,i){let r=document.querySelector(i);r&&r.querySelectorAll("input[type=checkbox]").forEach(n=>{if(!u(n.name))return;let a=e[n.name]?.includes(n.value)??!1,s=a||(t[n.name]?.has(n.value)??!1);n.checked=a,n.disabled=!s,n.closest(".filter-item")?.classList.toggle("is-off",!s)})}function I(e){let t={};return document.querySelectorAll(`${e} input[type=checkbox]:checked`).forEach(i=>{u(i.name)&&(t[i.name]=[...t[i.name]??[],i.value])}),t}function A(e,t,i){let r=document.querySelector(i);r&&(r.textContent=`// найдено ${e} из ${t}`)}var c="#filters",j="#elements",C="#filter-count";function h(){let e=I(c),t=v(m,e);O(t,j),A(t.length,m.length,C),E(e,T(m,e),c)}function L(){S(),P(c),h(),document.querySelector(c)?.addEventListener("change",h),document.querySelector("[data-filter-reset]")?.addEventListener("click",()=>{for(let e of document.querySelectorAll(`${c} input[type=checkbox]`))e.checked=!1;h()})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",L):L();})();
