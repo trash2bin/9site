@@ -1,0 +1,57 @@
+/* Короткая ссылка на фотоальбом: билетная бирка среди Web 1.0 панелей. */
+.album-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  margin: 10px 12px 0 auto;
+  padding: 7px 11px;
+  color: #101010;
+  background: #d7ff00;
+  border: 1px solid #101010;
+  box-shadow: 3px 3px 0 #101010;
+  font:
+    700 11px/1 "Courier New",
+    monospace;
+  text-decoration: none;
+  transform: rotate(-1deg);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.album-link:hover,
+.album-link:focus-visible {
+  color: #101010;
+  box-shadow: 1px 1px 0 #101010;
+  transform: translate(2px, 2px) rotate(0);
+}
+
+.album-link:focus-visible {
+  outline: 2px solid #d7ff00;
+  outline-offset: 3px;
+}
+
+.album-link-count {
+  padding: 4px 5px;
+  color: #d7ff00;
+  background: #101010;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.album-link-title {
+  font-size: 13px;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.album-link-arrow {
+  font-size: 16px;
+}
+
+@media (max-width: 560px) {
+  .album-link {
+    margin-right: 8px;
+  }
+}
