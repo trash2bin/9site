@@ -1,0 +1,72 @@
+/* Кнопка закрытого раздела на главной: парная «бирка» к album-link.
+
+   album-link жёлто-зелёная и смотрит вправо, эта — тёмная с циановой
+   подсветкой и наклоном в другую сторону: две бирки стоят подряд и не
+   сливаются в одну полосу. Файл в верхнем уровне css/, поэтому честно
+   входит в бюджет главной (scripts/check-size.sh). */
+.studio-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  margin: 10px auto 0 12px;
+  padding: 7px 11px;
+  color: var(--cyan);
+  background: #101010;
+  border: 1px solid var(--cyan);
+  box-shadow: 3px 3px 0 var(--cyan);
+  font:
+    700 11px/1 "Courier New",
+    monospace;
+  text-decoration: none;
+  transform: rotate(1deg);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.studio-link:hover,
+.studio-link:focus-visible {
+  box-shadow: 1px 1px 0 var(--cyan);
+  transform: translate(2px, 2px) rotate(0);
+}
+
+.studio-link:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.studio-link-chip {
+  padding: 4px 5px;
+  color: #101010;
+  background: var(--cyan);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.studio-link-title {
+  font-size: 13px;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.studio-link-note {
+  color: var(--bone);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.studio-link-arrow {
+  font-size: 16px;
+}
+
+@media (max-width: 560px) {
+  .studio-link {
+    margin-left: 8px;
+  }
+
+  .studio-link-note {
+    display: none;
+  }
+}

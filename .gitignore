@@ -11,6 +11,10 @@ node_modules/
 /visits.dat
 /visits.dat.tmp
 
+# данные авторизации: база SQLite, аватары, исходящие письма
+# (в проде лежат в /var/lib/9site)
+/var/
+
 # отладочные скриншоты (корень и вложенные папки, но не public/assets)
 /*.png
 /*.jpg

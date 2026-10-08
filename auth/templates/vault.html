@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Vault — закрытый раздел</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <img class="header-tux" src="/assets/img/tux-winflag.gif" width="88" height="83" alt="Tux держит стражу" />
+        <p class="eyebrow">~ закрытый раздел // только для вошедших ~</p>
+        <h1>VAULT</h1>
+        <p class="tagline">привет, {{.User.Login}} // добро пожаловать внутрь</p>
+      </header>
+
+      <nav class="site-nav" aria-label="Основная навигация">
+        <strong>MENU:</strong>
+        <a href="/studio">studio</a><span class="sep">|</span> <a href="/">главная</a><span class="sep">|</span>
+        <a href="/catalog">фотоальбом</a>
+      </nav>
+
+      <main id="content">
+        <section class="panel">
+          <h2>★ секретный раздел</h2>
+          <p class="catalog-intro">
+            Сюда не попасть по прямой ссылке без входа: сервер уводит на окно авторизации. Попробуйте открыть /vault в
+            приватном окне — и убедитесь сами.
+          </p>
+          <ul class="secret-list">
+            <li>черновики альбома: отбор кадров идёт, свет и виньетки в работе</li>
+            <li>пресеты обработки для следующего релиза</li>
+            <li>закрытая галерея «рабочие кадры»</li>
+            <li>скоро тут будет основной движ для авторизованных</li>
+          </ul>
+          <div class="garage-signs"><span>MEMBERS ONLY</span><span>NO CRAWLERS</span><span>PHOTO VAULT</span></div>
+        </section>
+
+        <p class="auth-actions">
+          <a class="tool-btn" href="/studio">← в студию</a>
+        </p>
+      </main>
+
+      <footer class="site-footer">
+        <p>© 2077 Ivan223 · <a href="/">на главную</a></p>
+      </footer>
+    </div>
+  </body>
+</html>

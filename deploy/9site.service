@@ -16,9 +16,21 @@ ExecStart=/var/www/9site/site-server
 # единственным местом, доступным на запись.
 StateDirectory=9site
 Environment=VISITS_FILE=/var/lib/9site/visits.dat
+# Данные авторизации (база SQLite, аватары, исходящие письма) тоже живут в
+# StateDirectory — единственном месте, доступном на запись.
+Environment=DATA_DIR=/var/lib/9site
 # Статика лежит в /var/www/9site/public (туда её кладёт деплой), а бинарник —
 # в корне DEPLOY_PATH, поэтому каталог задаётся явно, а не относительно cwd.
 Environment=STATIC_ROOT=/var/www/9site/public
+# Внешний адрес сайта: в письмах восстановления пароля ссылки абсолютные.
+Environment=BASE_URL=https://9swag.myftp.biz
+# SMTP для писем восстановления пароля. Пока не заполнено — письма
+# сохраняются в /var/lib/9site/outbox и показываются на экране.
+#Environment=SMTP_HOST=smtp.example.com
+#Environment=SMTP_PORT=587
+#Environment=SMTP_USER=no-reply@example.com
+#Environment=SMTP_PASS=секрет
+#Environment=SMTP_FROM=no-reply@example.com
 
 Restart=on-failure
 RestartSec=3

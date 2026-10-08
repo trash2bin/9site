@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Смена пароля — Studio</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <img class="header-tux" src="/assets/img/tux-cuddle.gif" width="104" height="44" alt="Tux обнимашки" />
+        <p class="eyebrow">~ восстановление доступа ~</p>
+        <h1>НОВЫЙ ПАРОЛЬ</h1>
+        <p class="tagline">ссылка из письма действует час и только один раз</p>
+      </header>
+
+      <main id="content">
+        {{if .Error}}
+        <p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>
+        {{end}} {{if .Token}}
+        <section class="panel">
+          <h2>✿ задайте новый пароль</h2>
+          <form class="auth-form auth-form-narrow" method="post" action="/reset">
+            <input type="hidden" name="csrf" value="{{.CSRF}}" />
+            <input type="hidden" name="token" value="{{.Token}}" />
+            <label>новый пароль<input type="password" name="password" required /></label>
+            <button type="submit" class="tool-btn">сохранить пароль</button>
+          </form>
+        </section>
+        {{else}}
+        <section class="panel">
+          <h2>✿ ссылка не сработала</h2>
+          <p class="catalog-intro">
+            Запросите восстановление пароля заново:
+            <a href="/studio?auth=forgot">открыть форму</a>.
+          </p>
+        </section>
+        {{end}}
+      </main>
+
+      <footer class="site-footer">
+        <p>© 2077 Ivan223 · <a href="/">на главную</a></p>
+      </footer>
+    </div>
+  </body>
+</html>

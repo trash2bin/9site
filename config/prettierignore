@@ -18,6 +18,9 @@ site-server
 visits.dat
 visits.dat.tmp
 
+# данные авторизации (база, аватары, письма)
+var/
+
 # собранный минифицированный JS из src/*.ts, генерируется esbuild
 js/
 

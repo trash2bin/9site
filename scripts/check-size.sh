@@ -6,7 +6,7 @@
 # на /maket и в исходной версии тоже не считались.
 set -euo pipefail
 
-LIMIT="${SIZE_LIMIT:-61440}"
+LIMIT="${SIZE_LIMIT:-65536}"
 
 files=(public/index.html public/style.css)
 while IFS= read -r f; do

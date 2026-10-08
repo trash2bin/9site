@@ -14,8 +14,9 @@ permissions:
   contents: read
 
 env:
-  # HTML+CSS budget in bytes (60 KiB).
-  SIZE_LIMIT: "61440"
+  # HTML+CSS budget in bytes (64 KiB). Raised from 60 KiB for the studio
+  # button on the main page (css/studio-link.css).
+  SIZE_LIMIT: "65536"
 
 jobs:
   checks:
@@ -68,6 +69,9 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+      - name: go test
+        run: go test ./...
 
       - name: Build server
         run: go build -o /tmp/site-server .
@@ -183,6 +187,14 @@ jobs:
           check http://127.0.0.1:8080/catalog.css 200
           check http://127.0.0.1:8080/print.css  200
           check http://127.0.0.1:8080/js/main.js 200
+          # Витрина открыта всем, а закрытый раздел — только после входа.
+          check http://127.0.0.1:8080/studio            200
+          check http://127.0.0.1:8080/studio?auth=login 200
+          check http://127.0.0.1:8080/vault             303
+          check http://127.0.0.1:8080/css/auth/auth.css 200
+          # База авторизации и чужие файлы наружу не отдаются.
+          check http://127.0.0.1:8080/var/auth.db   404
+          check http://127.0.0.1:8080/avatars/u0-0.png 404
           check http://127.0.0.1:8080/main.go    404
           check http://127.0.0.1:8080/visits.dat 404
           check http://127.0.0.1/                200

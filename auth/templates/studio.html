@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Studio — закрытый раздел</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <img class="header-tux" src="/assets/img/tux-sit.gif" width="66" height="88" alt="Tux стоит на страже" />
+        <p class="eyebrow">~ закрытый раздел // лабораторная N4 ~</p>
+        <h1>STUDIO</h1>
+        <p class="tagline">
+          {{if .User}}привет, {{.User.Login}} // движ для своих — в vault{{else}}заходи, тут открыто // с входом будет
+          больше{{end}}
+        </p>
+      </header>
+
+      <nav class="site-nav" aria-label="Основная навигация">
+        <strong>MENU:</strong>
+        <a href="/">главная</a><span class="sep">|</span> <a href="/catalog">фотоальбом</a><span class="sep">|</span>
+        <a href="/maket">maket</a>
+      </nav>
+
+      <main id="content">
+        {{if .Error}}
+        <p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>
+        {{end}} {{if .Message}}
+        <p class="auth-flash auth-flash-ok" role="status">{{.Message}}</p>
+        {{end}} {{if .User}}
+        <section class="panel">
+          <h2>✿ профиль</h2>
+          <div class="profile-grid">
+            <div class="profile-side">
+              {{if .Avatar}}
+              <img class="profile-avatar" src="{{.Avatar}}" width="96" height="96" alt="Аватар пользователя" />
+              {{else}}
+              <img
+                class="profile-avatar"
+                src="/assets/img/tux-winflag.gif"
+                width="88"
+                height="83"
+                alt="Аватар по умолчанию"
+              />
+              {{end}}
+              <p class="profile-login">{{.User.Login}}</p>
+              <form method="post" action="/auth/logout">
+                <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                <button type="submit" class="tool-btn">выйти</button>
+              </form>
+            </div>
+            <!-- Логин показан только для чтения: изменить его нельзя. -->
+            <form class="auth-form" method="post" action="/auth/profile" enctype="multipart/form-data">
+              <input type="hidden" name="csrf" value="{{.CSRF}}" />
+              <label>логин<input name="login" value="{{.User.Login}}" readonly /></label>
+              <label>ФИО<input name="full_name" value="{{.User.FullName}}" /></label>
+              <label>почта<input type="email" name="email" value="{{.User.Email}}" /></label>
+              <label>новый пароль<input type="password" name="new_password" placeholder="пусто — не менять" /></label>
+              <label>текущий пароль<input type="password" name="cur_password" placeholder="для смены пароля" /></label>
+              <label
+                >аватар<input type="file" name="avatar" accept="image/gif,image/png,image/jpeg,image/webp"
+              /></label>
+              <button type="submit" class="tool-btn">сохранить</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>★ vault / движ для авторизованных</h2>
+          <p class="catalog-intro">
+            Закрытый раздел открывается только после входа — и только туда сервер не пускает по прямой ссылке. Скоро там
+            будет основной движ: черновики, рабочие кадры и всякое такое.
+          </p>
+          <p class="auth-actions">
+            <a class="tool-btn" href="/vault">открыть vault →</a>
+          </p>
+        </section>
+
+        {{else}}
+        <section class="panel">
+          <h2>✿ studio — мастерская</h2>
+          <p class="catalog-intro">
+            Страница открыта всем — заходи и смотри. Регистрация не забор, а доп. движ: с входом открывается vault с
+            черновиками и рабочими кадрами, и в будущем тут будет ещё больше для своих.
+          </p>
+          {{if .ResetLink}}
+          <p class="auth-link">
+            SMTP не настроен, поэтому ссылка сброса пароля показана на экране:<br />
+            <a href="{{.ResetLink}}">{{.ResetLink}}</a>
+          </p>
+          {{end}}
+          <ul class="secret-list">
+            <li>сейчас: профиль с аватаром и настройками</li>
+            <li>сейчас: закрытый vault — только для вошедших</li>
+            <li>скоро: основной движ для авторизованных</li>
+          </ul>
+          <p class="auth-actions">
+            <button type="button" class="tool-btn" data-open-dialog="login">войти</button>
+            <button type="button" class="tool-btn" data-open-dialog="register">регистрация</button>
+            <button type="button" class="tool-btn" data-open-dialog="forgot">забыли пароль?</button>
+          </p>
+        </section>
+        {{end}}
+      </main>
+
+      <footer class="site-footer">
+        <p>© 2077 Ivan223 · <a href="/">на главную</a> · <a href="/catalog">в фотоальбом</a></p>
+      </footer>
+    </div>
+
+    <!-- Всплывающее окно входа/регистрации. Работает без перезагрузки:
+         <dialog> + немного JS переключают вкладки. data-open — какую вкладку
+         открыть сразу (?auth=... или возврат после ошибки формы). -->
+    <dialog id="auth-dialog" class="auth-dialog" aria-label="Вход и регистрация" data-open="{{.Open}}">
+      <div class="auth-tabs">
+        <button type="button" data-tab-btn="login">вход</button>
+        <button type="button" data-tab-btn="register">регистрация</button>
+        <button type="button" data-tab-btn="forgot">сброс пароля</button>
+        <button type="button" class="auth-close" data-dialog-close aria-label="Закрыть">✕</button>
+      </div>
+
+      <form class="auth-form" data-tab-form="login" method="post" action="/auth/login">
+        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+        <label>логин<input name="login" required /></label>
+        <label>пароль<input type="password" name="password" required /></label>
+        <button type="submit" class="tool-btn">войти</button>
+      </form>
+
+      <form
+        class="auth-form"
+        data-tab-form="register"
+        method="post"
+        action="/auth/register"
+        enctype="multipart/form-data"
+      >
+        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+        <label>логин<input name="login" required /></label>
+        <label>пароль<input type="password" name="password" required /></label>
+        <label>ФИО<input name="full_name" /></label>
+        <label>почта<input type="email" name="email" required /></label>
+        <label>аватар<input type="file" name="avatar" accept="image/gif,image/png,image/jpeg,image/webp" /></label>
+        <button type="submit" class="tool-btn">зарегистрироваться</button>
+      </form>
+
+      <form class="auth-form" data-tab-form="forgot" method="post" action="/auth/forgot">
+        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+        <label>почта<input type="email" name="email" required /></label>
+        <button type="submit" class="tool-btn">отправить ссылку</button>
+      </form>
+    </dialog>
+
+    <script>
+      (function () {
+        var dialog = document.getElementById("auth-dialog");
+        if (!dialog) return;
+
+        function showTab(name) {
+          dialog.querySelectorAll("[data-tab-form]").forEach(function (form) {
+            form.hidden = form.getAttribute("data-tab-form") !== name;
+          });
+          dialog.querySelectorAll("[data-tab-btn]").forEach(function (btn) {
+            btn.classList.toggle("is-active", btn.getAttribute("data-tab-btn") === name);
+          });
+        }
+
+        function openDialog(name) {
+          showTab(name || "login");
+          if (!dialog.open) dialog.showModal();
+        }
+
+        // Кнопки «войти»/«регистрация» лежат в <main>, а не внутри <dialog>,
+        // поэтому слушатель вешаем на весь документ, не на dialog.
+        document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            openDialog(btn.getAttribute("data-open-dialog"));
+          });
+        });
+        dialog.querySelectorAll("[data-tab-btn]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            showTab(btn.getAttribute("data-tab-btn"));
+          });
+        });
+        dialog.querySelectorAll("[data-dialog-close]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            dialog.close();
+          });
+        });
+        dialog.addEventListener("click", function (event) {
+          if (event.target === dialog) dialog.close();
+        });
+
+        // Автооткрытие: ?auth=register из ссылки, иначе — какая вкладка
+        // была открыта на сервере (возврат после ошибки формы).
+        var wanted = new URLSearchParams(location.search).get("auth") || dialog.getAttribute("data-open");
+        if (wanted) openDialog(wanted);
+      })();
+    </script>
+  </body>
+</html>

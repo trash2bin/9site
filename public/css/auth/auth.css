@@ -1,0 +1,180 @@
+/* Закрытый раздел: окно входа, профиль и сброс пароля (лабораторная N4).
+
+   Файл лежит в подкаталоге css/auth/ и потому не входит в бюджет размера
+   главной страницы (scripts/check-size.sh смотрит только на верхний уровень
+   css/) — стили грузит только /studio. Палитра берётся из css/base.css. */
+
+.auth-flash {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 3px ridge var(--bevel);
+  background: var(--slab);
+  color: var(--yellow);
+}
+
+.auth-flash-error {
+  border-color: var(--blood);
+  color: #ff7a7a;
+}
+
+.auth-flash-ok {
+  border-color: var(--teal);
+  color: var(--matrix);
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+/* tool-btn на ссылке выглядит так же, как на кнопке формы. */
+a.tool-btn {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.auth-link {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 2px dashed var(--bevel);
+  background: var(--coal);
+  word-break: break-all;
+}
+
+/* Профиль: аватар сбоку, форма справа. */
+.profile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.profile-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.profile-avatar {
+  border: 3px outset var(--bevel);
+  background: var(--teal);
+  image-rendering: pixelated;
+}
+
+.profile-login {
+  margin: 0;
+  color: var(--cyan);
+  font-family: monospace;
+}
+
+/* Формы окна входа и профиля. Подписи сверху, поля во всю ширину. */
+.auth-form {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+.auth-form-narrow {
+  max-width: 320px;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--bone);
+}
+
+.auth-form input {
+  padding: 6px 8px;
+  border: 2px inset var(--bevel);
+  background: var(--deep);
+  color: var(--ink);
+  font: inherit;
+}
+
+.auth-form input[readonly] {
+  color: var(--ash);
+  background: var(--coal);
+}
+
+.auth-form .tool-btn {
+  align-self: flex-start;
+}
+
+.secret-list {
+  margin: 10px 0;
+  padding-left: 22px;
+}
+
+.secret-list li {
+  margin: 6px 0;
+}
+
+/* Всплывающее окно входа/регистрации. <dialog> сам затемняет фон
+   (::backdrop) и закрывается по Esc — писать свой оверлей не пришлось. */
+.auth-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 4px ridge var(--bevel);
+  background: var(--coal);
+  color: var(--ink);
+}
+
+.auth-dialog::backdrop {
+  background: rgb(0 0 0 / 70%);
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  background: #c00000 url("/assets/img/texture-hyper.gif") repeat;
+  background-blend-mode: overlay;
+  background-size: 321px 61px;
+  border-bottom: 2px outset var(--bevel);
+}
+
+.auth-tabs button {
+  padding: 4px 10px;
+  border: 2px outset var(--bevel);
+  background: var(--slab);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-tabs button.is-active {
+  border-style: inset;
+  background: var(--teal);
+  color: var(--yellow);
+}
+
+.auth-tabs .auth-close {
+  margin-left: auto;
+  color: var(--yellow);
+}
+
+.auth-dialog .auth-form {
+  padding: 14px;
+  max-width: none;
+}
+
+/* Мобильная раскладка: форма профиля не должна прижиматься к аватару. */
+@media (width <= 640px) {
+  .profile-grid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auth-form {
+    min-width: 0;
+  }
+}
