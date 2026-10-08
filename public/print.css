@@ -1,12 +1,6 @@
 /* Версия для печати. Подключается вместо catalog.css: кнопка на странице
    выключает обычный файл и включает этот, поэтому здесь нет ни одного
    @import и весь нужный стиль задан с нуля.
-
-   Задача — кардинально сменить вид: убрать навигацию, шапку с гифками,
-   подвал, наклейки по краям и панель фильтра, оставив только данные.
-   Карточки разворачиваются в список, а не в сетку: на бумаге важнее
-   читаемость строк, чем плотность.
-
    Цвета только чёрный по белому. Оформление — тонкие линии вместо ridge и
    outset: фактуры и объёмные рамки на печати превращаются в серую кашу. */
 
@@ -137,51 +131,62 @@ body {
   content: "";
 }
 
-/* Карточки разворачиваются в одну колонку: сетка из трёх карточек на
-   бумаге читается хуже, чем список. */
+/* Карточки печатаются компактной сеткой: на листе остаются и снимок,
+   и подпись. Две колонки экономят бумагу и сохраняют читаемый размер. */
 .parts-grid {
-  display: block;
-  font-size: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+  font-size: 11pt;
 }
 
 .part-card {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
   width: 100%;
   min-width: 0;
   min-height: 0;
   margin: 0;
-  padding: 7px 0;
+  padding: 8px;
   color: #000;
   background: none;
-  border: 0;
-  border-bottom: 1px solid #999;
+  border: 1px solid #999;
   box-shadow: none;
   transform: none;
   font:
     11pt/1.35 Georgia,
     serif;
+  text-align: center;
   page-break-inside: avoid;
   break-inside: avoid;
 }
 
-/* На бумаге снимки теряют смысл: это превью, а не оригиналы, поэтому вместо
-   них печатаем имя файла — по нему снимок можно найти на диске. */
+/* Сами изображения остаются в печати. Высота ограничена, пропорции
+   сохраняются; мелкие GIF-иконки не растягиваются. Для анимированных GIF
+   браузер печатает текущий (обычно первый) кадр. */
 .part-card img {
-  display: none;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 42mm;
+  margin: 0 0 6px;
+  border: 0;
+  background: none;
+  filter: none;
+  object-fit: contain;
 }
 
+/* Подпись остаётся под снимком; имя файла не дублируем. */
 .part-card figcaption {
   display: block;
   color: #000;
   font:
-    bold 12pt Georgia,
+    bold 11pt Georgia,
     serif;
-}
-
-.part-card figcaption::after {
-  content: " — " attr(data-file);
-  font-weight: normal;
-  color: #333;
 }
 
 /* Заглушка при пустом результате тоже должна печататься. */

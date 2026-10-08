@@ -9,9 +9,11 @@
 
     <!-- Два стиля. Обычный включён, печатный выключен атрибутом disabled:
          кнопка «версия для печати» меняет эти флаги, и браузер перечитывает
-         каскад без перезагрузки страницы. -->
-    <link id="style-print-off" rel="stylesheet" href="/catalog.css" />
-    <link id="style-print-on" rel="stylesheet" href="/print.css" disabled />
+         каскад без перезагрузки страницы.
+         ?v= — версия файла: она меняется вместе с правками CSS, иначе
+         браузер подставляет из кэша старую копию и изменения не видны. -->
+    <link id="style-print-off" rel="stylesheet" href="/catalog.css?v=1" />
+    <link id="style-print-on" rel="stylesheet" href="/print.css?v=2" disabled />
   </head>
   <body>
     <div class="side-sticker sticker-angel" aria-hidden="true"></div>
@@ -38,8 +40,8 @@
       <nav class="site-nav" aria-label="Основная навигация">
         <strong>MENU:</strong>
         <a href="/">главная</a><span class="sep">|</span> <a href="#album">альбом</a><span class="sep">|</span>
-        <a href="#filters">фильтр</a><span class="sep">|</span>
-        <a href="/maket">maket</a>
+        <a href="#filters">фильтр</a><span class="sep">|</span> <a href="/maket">maket</a><span class="sep">|</span>
+        <a href="/studio">studio</a>
       </nav>
 
       <main id="content">
