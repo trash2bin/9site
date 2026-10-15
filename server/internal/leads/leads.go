@@ -1,11 +1,6 @@
-// Package leads — публичная форма заявок со страницы /maket (POST /signup):
-// валидация полей, защита от спама (honeypot + проверка Origin) и запись
-// заявки в таблицу leads.
-//
-// Это не вход и не регистрация аккаунта — за них отвечает срез auth;
-// здесь только заявки. Хранилище приходит извне готовым (интерфейс Store
-// объявлен тут, у потребителя), лимитер — из общего реестра webutil.Limits,
-// собранного в main.
+// Package leads публичная форма заявок со страницы /maket (POST /signup):
+// валидация, защита от спама (honeypot + Origin) и запись в таблицу leads.
+// Хранилище и лимитер приходят извне, сборка в main.
 package leads
 
 import (
@@ -13,51 +8,40 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
 
-// BudgetSignup — имя бюджета лимитера для POST /signup. Порог и окно
-// объявлены в таблице бюджетов в main (переопределяются LIMIT_FORM_SIGNUP).
-// Имя — контракт с main: опечатка тут означала бы проверку, которой нет.
+// BudgetSignup имя бюджета лимитера для POST /signup; порог и окно в
+// таблице бюджетов main (LIMIT_FORM_SIGNUP).
 const BudgetSignup = "form.signup"
 
-// Store — минимум, что срезу нужно от хранилища заявок.
+// Store минимум, что срезу нужно от хранилища заявок.
 type Store interface {
 	SaveLead(ctx context.Context, l store.Lead) error
 }
 
-// Logger — то, что срезу нужно от логгера сервера.
-type Logger interface {
-	Info(msg string, args ...any)
-	Warn(msg string, args ...any)
-	Error(msg string, args ...any)
-	Action(login, action, ip string)
-}
-
-// Throttle — централизованный ограничитель частоты. Граница объявлена у
-// потребителя: срезу важно лишь уметь завернуть свой маршрут, а где живёт
-// таблица бюджетов и как считается ключ — не его дело.
+// Throttle ограничитель частоты; реализация webutil.Limits, собирается в main.
 type Throttle interface {
 	Middleware(name string, over, next http.Handler) http.Handler
 }
 
-// Config — настройки среза.
+// Config настройки среза.
 type Config struct {
 	Store    Store
 	BaseURL  string // внешний адрес сайта: по нему проверяется Origin формы
-	Log      Logger
+	Log      *logging.Logger
 	Throttle Throttle
 }
 
-// Server — состояние среза заявок.
+// Server состояние среза заявок.
 type Server struct {
 	store    Store
-	log      Logger
+	log      *logging.Logger
 	baseURL  string
 	throttle Throttle
 }
 
-// New собирает срез и проверяет обязательные зависимости.
 func New(cfg Config) (*Server, error) {
 	if cfg.Store == nil {
 		return nil, errors.New("leads: нужно хранилище (Store)")
@@ -76,8 +60,8 @@ func New(cfg Config) (*Server, error) {
 	}, nil
 }
 
-// Register вешает форму на общий роутер. Лимит заворачивается здесь, при
-// регистрации маршрута: он виден рядом с адресом и не может быть забыт.
+// Register вешает форму на общий роутер; лимит заворачивается здесь же,
+// при регистрации маршрута, а не внутри обработчика.
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.Handle("POST /signup", s.throttle.Middleware(BudgetSignup,
 		http.HandlerFunc(s.tooMany), http.HandlerFunc(s.handleSignup)))

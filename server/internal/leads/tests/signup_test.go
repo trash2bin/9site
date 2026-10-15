@@ -1,5 +1,5 @@
 // Тесты публичной формы заявок (POST /signup) через настоящий leads.Register:
-// Origin, honeypot, лимитер, валидация и PRG. Проводка маршрутов — боевая,
+// Origin, honeypot, лимитер, валидация и PRG. Проводка маршрутов боевая,
 // поэтому тест ловит и ошибку сборки, а не только в обработчике.
 package leads_test
 
@@ -41,7 +41,7 @@ func testServer(t *testing.T) (*httptest.Server, *store.Store) {
 
 	limits, err := webutil.NewLimits(map[string]webutil.Budget{
 		leads.BudgetSignup: {Limit: testLimit, Window: 10 * time.Minute},
-	}, nil)
+	}, log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,8 +77,7 @@ func postSignup(t *testing.T, ts *httptest.Server, form url.Values, header http.
 		req.Header[k] = v
 	}
 
-	// За редиректами не следуем: проверяем сами — как браузерный клиент
-	// в auth-тестах.
+	// За редиректами не следуем: статусы проверяем сами.
 	c := &http.Client{
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -177,7 +176,7 @@ func TestSignupInvalid(t *testing.T) {
 func TestSignupRateLimit(t *testing.T) {
 	ts, _ := testServer(t)
 
-	// Жжём лимит невалидными заявками (лимит — testLimit за окно).
+	// Жжём лимит невалидными заявками (лимит testLimit за окно).
 	var last *http.Response
 	for i := 0; i <= testLimit; i++ {
 		last = postSignup(t, ts, url.Values{"name": {"X"}}, nil)

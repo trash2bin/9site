@@ -15,24 +15,19 @@ import (
 	"time"
 )
 
-// Mailer — доставка писем. Интерфейс объявлен здесь, в модуле, который
-// шлёт письма: SMTP, файл-«почтовый ящик» и заглушка в тестах
-// подменяются без ведома остального кода.
+// Mailer доставка писем; интерфейс объявлен здесь, у модуля, который их шлёт.
 type Mailer interface {
-	// Send отправляет готовое RFC822-сообщение от имени from. to и
-	// subject — данные для журнала и имени файла в outbox.
+	// Send отправляет готовое RFC822-сообщение; to и subject нужны для
+	// журнала и имени файла в outbox.
 	Send(ctx context.Context, from, to, subject string, raw []byte) error
 }
 
-// message собирает письмо в формате RFC 822: оно и по SMTP уходит, и в
-// файл-«почтовый ящик» сохраняется в одинаковом виде.
 func message(from, to, subject, body string) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", to)
-	// Тема — не-ASCII, поэтому кодируем по RFC 2047; иначе письмо
-	// отобразится кракозябрами.
+	// Тема не-ASCII: кодируем по RFC 2047, иначе кракозябры.
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 	b.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n")
@@ -41,13 +36,11 @@ func message(from, to, subject, body string) []byte {
 	return []byte(b.String())
 }
 
-// smtpPresets — предустановки SMTP популярных почтовых провайдеров: хост
-// и порт подставляются по имени, логин/пароль — свои. У всех трёх нужен
-// именно пароль приложения: обычный пароль аккаунта SMTP не пускает.
+// smtpPresets предустановки SMTP: хост и порт по имени, логин/пароль свои.
 var smtpPresets = map[string]struct {
 	host string
 	port int
-	// hint — где взять пароль приложения; показывается в логе при старте.
+	// hint где взять пароль приложения, показывается в логе при старте.
 	hint string
 }{
 	"gmail": {
@@ -64,19 +57,16 @@ var smtpPresets = map[string]struct {
 	},
 }
 
-// resolve подставляет настройки выбранного провайдера и проверяет, что
-// конфиг осмысленный. Стоит здесь, а не в main: нерабочий SMTP письма
-// не роняет — они молча копируются в outbox, поэтому опечатку в конфиге
-// надо ловить на старте, а не через месяц, когда кто-то забудет пароль.
-// Возвращает подсказку для лога (пустую, если её нет).
+// resolve подставляет настройки провайдера и проверяет конфиг на старте;
+// нерабочий SMTP письма не роняет, они уходят в outbox.
 func (c *SMTPConfig) resolve() (hint string, err error) {
 	if c.Provider != "" {
 		if c.Host != "" {
-			return "", fmt.Errorf("SMTP: заданы и SMTP_PROVIDER=%q, и SMTP_HOST — оставь что-то одно", c.Provider)
+			return "", fmt.Errorf("SMTP: заданы и SMTP_PROVIDER=%q, и SMTP_HOST: оставь что-то одно", c.Provider)
 		}
 		preset, ok := smtpPresets[strings.ToLower(c.Provider)]
 		if !ok {
-			return "", fmt.Errorf("SMTP: неизвестный провайдер %q (есть: gmail, yandex, mailru) — или задай SMTP_HOST сам", c.Provider)
+			return "", fmt.Errorf("SMTP: неизвестный провайдер %q (есть: gmail, yandex, mailru), или задай SMTP_HOST сам", c.Provider)
 		}
 		c.Host = preset.host
 		c.Port = preset.port
@@ -91,14 +81,13 @@ func (c *SMTPConfig) resolve() (hint string, err error) {
 		return "", errors.New("SMTP: логин и пароль задаются вместе")
 	}
 	if (c.Username != "") && !c.Configured() {
-		return "", errors.New("SMTP: заданы логин/пароль, но не настроен сервер — укажи SMTP_PROVIDER или SMTP_HOST")
+		return "", errors.New("SMTP: заданы логин/пароль, но не настроен сервер: укажи SMTP_PROVIDER или SMTP_HOST")
 	}
 	return hint, nil
 }
 
-// buildMailer собирает почтовый тракт по конфигу. outboxMailer —
-// декоратор: копия письма кладётся в outbox независимо от того, ушло ли
-// письмо по SMTP. Без SMTP наружу идёт только файл-«почтовый ящик».
+// buildMailer собирает тракт: outboxMailer декоратор кладёт копию письма
+// в outbox независимо от того, ушло ли оно по SMTP.
 func (s *Server) buildMailer() Mailer {
 	out := fileMailer{dir: s.outboxDir}
 	if !s.cfg.SMTP.Configured() {
@@ -107,7 +96,6 @@ func (s *Server) buildMailer() Mailer {
 	return outboxMailer{inner: smtpMailer{cfg: s.cfg.SMTP}, outbox: out}
 }
 
-// sendMail доставляет письмо и пишет в лог, куда оно делось.
 func (s *Server) sendMail(ctx context.Context, to, subject, body string) error {
 	from := s.cfg.SMTP.From
 	if from == "" {
@@ -125,14 +113,13 @@ func (s *Server) sendMail(ctx context.Context, to, subject, body string) error {
 	if s.cfg.SMTP.Configured() {
 		s.log.Info("письмо отправлено", "to", to, "smtp", s.cfg.SMTP.Host, "port", s.cfg.SMTP.Port)
 	} else {
-		s.log.Info("SMTP не настроен — письмо сохранено только в outbox", "to", to)
+		s.log.Info("SMTP не настроен: письмо сохранено только в outbox", "to", to)
 	}
 	return nil
 }
 
 // --- реализации Mailer ---
 
-// fileMailer кладёт письма в outboxDir — «почтовый ящик» из методички.
 type fileMailer struct {
 	dir string
 }
@@ -146,8 +133,7 @@ func (m fileMailer) Send(_ context.Context, _, to, subject string, raw []byte) e
 	return nil
 }
 
-// outboxMailer — декоратор: каждое письмо сначала копируется в outbox
-// (журнал отправок), потом уходит через внутренний Mailer.
+// outboxMailer декоратор: письмо сначала копируется в outbox, потом уходит через внутренний Mailer.
 type outboxMailer struct {
 	inner  Mailer
 	outbox fileMailer
@@ -160,7 +146,6 @@ func (m outboxMailer) Send(ctx context.Context, from, to, subject string, raw []
 	return m.inner.Send(ctx, from, to, subject, raw)
 }
 
-// smtpMailer шлёт письмо по SMTP.
 type smtpMailer struct {
 	cfg SMTPConfig
 }
@@ -172,16 +157,12 @@ func (m smtpMailer) Send(ctx context.Context, from, to string, _ string, raw []b
 	return nil
 }
 
-// Configured — настроен ли почтовый сервер.
 func (c SMTPConfig) Configured() bool {
 	return c.Host != "" && c.Port > 0
 }
 
-// sendSMTP отправляет собранное письмо. Порт 465 — сразу TLS (SMTPS),
-// остальные — обычный SMTP, который сам поднимет STARTTLS, если сервер
-// его предлагает. Дедлайн на всё соединение: висящий SMTP (принял TCP и
-// молчит в DATA-фазе) не должен держать запрос на смену пароля
-// бесконечно.
+// sendSMTP отправляет собранное письмо: 465 сразу TLS (SMTPS), остальные
+// обычный SMTP с STARTTLS. Дедлайн на соединение, чтобы висящий сервер не держал запрос.
 func sendSMTP(ctx context.Context, cfg SMTPConfig, from, to string, msg []byte) error {
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 
@@ -194,7 +175,7 @@ func sendSMTP(ctx context.Context, cfg SMTPConfig, from, to string, msg []byte) 
 
 	var conn net.Conn
 	var err error
-	implicitTLS := cfg.Port == 465 // 465 — сразу TLS (SMTPS)
+	implicitTLS := cfg.Port == 465
 	if implicitTLS {
 		tlsDialer := &tls.Dialer{
 			NetDialer: dialer,
@@ -208,7 +189,6 @@ func sendSMTP(ctx context.Context, cfg SMTPConfig, from, to string, msg []byte) 
 		return err
 	}
 	defer func() { _ = conn.Close() }()
-	// Общий дедлайн на весь диалог: и на запись, и на чтение ответов.
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	client, err := smtp.NewClient(conn, cfg.Host)
@@ -217,9 +197,8 @@ func sendSMTP(ctx context.Context, cfg SMTPConfig, from, to string, msg []byte) 
 	}
 	defer func() { _ = client.Close() }()
 
-	// net/smtp сам не поднимает STARTTLS (это делает только его SendMail):
-	// без этого шага submission-серверы на обычном порту (Gmail — 587)
-	// отвергнут Auth как незашифрованное соединение.
+	// net/smtp сам не поднимает STARTTLS: без него submission-серверы
+	// (Gmail, 587) отвергнут Auth как незашифрованное соединение.
 	if !implicitTLS {
 		if ok, _ := client.Extension("STARTTLS"); ok {
 			if err := client.StartTLS(&tls.Config{ServerName: cfg.Host}); err != nil {
@@ -233,8 +212,8 @@ func sendSMTP(ctx context.Context, cfg SMTPConfig, from, to string, msg []byte) 
 			return err
 		}
 	}
-	// Envelope-отправитель — тот же, что в заголовке From (sendMail
-	// подставляет туда фолбэк): разные источники может отвергнуть сервер.
+	// Envelope-отправитель тот же, что в заголовке From: разные источники
+	// может отвергнуть сервер.
 	if err := client.Mail(from); err != nil {
 		return err
 	}
@@ -254,8 +233,7 @@ func sendSMTP(ctx context.Context, cfg SMTPConfig, from, to string, msg []byte) 
 	return client.Quit()
 }
 
-// safeFileName оставляет в адресе только безопасные символы — адрес
-// попадает в имя файла письма.
+// safeFileName оставляет в адресе только символы, безопасные для имени файла.
 func safeFileName(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {

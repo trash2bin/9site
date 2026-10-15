@@ -1,13 +1,5 @@
-// Package logging — централизованное логирование сайта: одна точка входа
-// вместо разбросанных log.Printf по всему коду.
-//
-// Logger создаётся один раз в main() и передаётся компонентам. Обычные
-// события идут структурированными записями log/slog (текстом локально,
-// JSON в проде — их понимают journalctl и агрегаторы). Действия
-// пользователей — вход, регистрация, смена пароля — дополнительно
-// дублируются в журнал действий для админ-панели через интерфейс
-// ActionSink: реализация (таблица actions в пакете store) подключается
-// в main. Сам пакет ничего не знает про базы — только slog и интерфейс.
+// Package logging - централизованное логирование сайта: события идут slog (текст локально,
+// JSON в проде), действия дублируются в журнал ActionSink; о базах пакет не знает, сборка в main.
 package logging
 
 import (
@@ -18,35 +10,31 @@ import (
 	"strings"
 )
 
-// ActionSink — куда дублируются действия пользователей. Сегодня это
-// пакет store (таблица actions); подменяется или отключается в main.
+// ActionSink куда дублируются действия пользователей; реализация в main.
 type ActionSink interface {
-	// Action сохраняет одно действие. Ошибка не должна ронять запрос —
-	// логгер её просто запишет.
+	// Action сохраняет одно действие; ошибка не должна ронять запрос.
 	Action(login, action, ip string) error
 }
 
-// Config — настройки логгера.
+// Config настройки логгера.
 type Config struct {
-	// Level — уровень записей: debug|info|warn|error. По умолчанию info.
+	// Level уровень записей: debug|info|warn|error, по умолчанию info.
 	Level string
-	// Format — формат консоли: text (по умолчанию) или json.
+	// Format формат консоли: text (по умолчанию) или json.
 	Format string
-	// Output — куда писать консоль; по умолчанию os.Stderr.
+	// Output куда писать консоль, по умолчанию os.Stderr.
 	Output io.Writer
-	// Actions — журнал действий пользователей. Пусто — действия пишутся
-	// только в консоль (удобно для тестов).
+	// Actions журнал действий; пусто значит только консоль.
 	Actions ActionSink
 }
 
-// Logger — центральная точка логирования сервера.
+// Logger центральная точка логирования сервера.
 type Logger struct {
 	base    *slog.Logger
 	actions ActionSink
 }
 
-// New собирает логгер по настройкам. Ошибка — только при неправильном
-// уровне или формате: плохая конфигурация падает на старте, а не в проде.
+// New собирает логгер; ошибка только при неправильном уровне или формате.
 func New(cfg Config) (*Logger, error) {
 	out := cfg.Output
 	if out == nil {
@@ -71,21 +59,16 @@ func New(cfg Config) (*Logger, error) {
 	return &Logger{base: slog.New(handler), actions: cfg.Actions}, nil
 }
 
-// Debug пишет отладочную запись.
 func (l *Logger) Debug(msg string, args ...any) { l.base.Debug(msg, args...) }
 
-// Info пишет обычную запись.
 func (l *Logger) Info(msg string, args ...any) { l.base.Info(msg, args...) }
 
-// Warn пишет предупреждение.
 func (l *Logger) Warn(msg string, args ...any) { l.base.Warn(msg, args...) }
 
-// Error пишет ошибку.
 func (l *Logger) Error(msg string, args ...any) { l.base.Error(msg, args...) }
 
-// Action записывает действие пользователя: структурированная строка в
-// общий лог плюс дубль в журнал действий для будущей админ-панели.
-// Ошибка журнала не роняет запрос — она сама уходит в лог.
+// Action записывает действие в общий лог и дубль в журнал; ошибка журнала
+// не роняет запрос, она сама уходит в лог.
 func (l *Logger) Action(login, action, ip string) {
 	l.base.Info("действие", "login", login, "action", action, "ip", ip)
 

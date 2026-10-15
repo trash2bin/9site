@@ -17,17 +17,8 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// migrate прогоняет версионированные миграции из migrations/*.sql. Файл
-// именуется как NNNN_описание.sql, версия — число в начале имени. Каждая
-// миграция применяется в своей транзакции и запоминается в таблице
-// schema_migrations вместе с sha256 файла: применённый файл нельзя
-// отредактировать молча — при старте сверятся контрольные суммы. Если в
-// базе версия новее, чем знает бинарник (откат деплоя на старый бинарник),
-// старт падает явно, а не продолжает с незнакомой схемой.
-//
-// Миграции только вперёд (down-скриптов нет): откат — это старый бинарник
-// плюс бэкап базы, а не обратный SQL. Новое изменение схемы — это новый
-// файл NNNN_описание.sql, существующие не правятся.
+// migrate прогоняет migrations/*.sql, каждую в своей транзакции, и пишет sha256 файла в
+// schema_migrations: применённый файл править нельзя, база новее бинарника гасит старт.
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(`
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -70,13 +61,12 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		).Scan(&appliedSum)
 		switch {
 		case err == nil:
-			// Уже применена: сверяем, что файл с тех пор не менялся.
 			if appliedSum != hex.EncodeToString(sum[:]) {
-				return fmt.Errorf("миграция %s изменена после применения — правьте только новым файлом", name)
+				return fmt.Errorf("миграция %s изменена после применения, правьте только новым файлом", name)
 			}
 			continue
 		case errors.Is(err, sql.ErrNoRows):
-			// Ещё не применена — накатываем ниже.
+			// Ещё не применена, накатываем ниже.
 		default:
 			return fmt.Errorf("версия миграций: %w", err)
 		}
@@ -101,8 +91,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		}
 	}
 
-	// База из будущего: бинарник старее схемы. Продолжать — значит молча
-	// ломать данные, поэтому старт падает явно.
+	// База из будущего: продолжать - молча ломать данные, старт падает явно.
 	var maxApplied, maxKnown int
 	if err := s.db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&maxApplied); err != nil {
 		return fmt.Errorf("версия миграций: %w", err)
@@ -113,26 +102,24 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		}
 	}
 	if maxApplied > maxKnown {
-		return fmt.Errorf("база знает миграции до %d, бинарник — только до %d: откат невозможен, нужен бэкап и ручной разбор", maxApplied, maxKnown)
+		return fmt.Errorf("база знает миграции до %d, бинарник только до %d: откат невозможен, нужен бэкап и ручной разбор", maxApplied, maxKnown)
 	}
 	return nil
 }
 
-// migrationVersion достаёт номер версии из имени файла: "0002_leads.sql" → 2.
-// Четыре цифры с ведущими нулями обязательны: без zero-padding
-// лексикографическая сортировка файлов нарушила бы порядок (10_x.sql
-// отсортировался бы раньше 2_y.sql).
+// migrationVersion достаёт номер из имени файла: "0002_leads.sql" → 2.
+// Четыре цифры обязательны: без ведущих нулей 10_x.sql идёт раньше 2_y.sql.
 func migrationVersion(name string) (int, error) {
 	num, rest, ok := strings.Cut(name, "_")
 	if !ok || rest == "" || !strings.HasSuffix(name, ".sql") {
 		return 0, fmt.Errorf("имя миграции %q: ожидается NNNN_описание.sql", name)
 	}
 	if len(num) != 4 {
-		return 0, fmt.Errorf("имя миграции %q: версия — ровно четыре цифры с ведущими нулями", name)
+		return 0, fmt.Errorf("имя миграции %q: ожидается версия из четырёх цифр с ведущими нулями", name)
 	}
 	version, err := strconv.Atoi(num)
 	if err != nil || version <= 0 {
-		return 0, fmt.Errorf("имя миграции %q: версия — положительное число", name)
+		return 0, fmt.Errorf("имя миграции %q: версия должна быть положительным числом", name)
 	}
 	return version, nil
 }

@@ -33,3 +33,7 @@ js/
 .DS_Store
 .pi/
 .playwright-mcp/
+
+# шаблоны Go: {{if}} внутри тега (условный open у <dialog>) Prettier не разбирает;
+# каталог один (auth/templates), поэтому паттерн без пути
+templates/

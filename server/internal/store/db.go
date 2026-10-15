@@ -1,13 +1,5 @@
-// Package store - единое хранилище сайта: одна SQLite-база site.db,
-// схема в schema.sql и весь SQL сервера.
-//
-// Раньше данные были размазаны по трём местам: файл visits.dat со счётчиком,
-// auth.db у пакета auth и actions.db у логгера. Теперь всё живёт здесь:
-// счётчик, пользователи, сессии, журнал действий и заявки с формы. Один
-// файл - один бэкап, и между таблицами можно делать JOIN.
-//
-// Драйвер - modernc.org/sqlite, чистый Go без CGO: сборка и деплой
-// остаются одним бинарником (CGO_ENABLED=0 в CI).
+// Package store - единое хранилище сайта: одна SQLite-база site.db, схема в
+// migrations/ и весь SQL сервера: счётчик, пользователи, сессии, журнал, заявки.
 package store
 
 import (
@@ -16,20 +8,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	// Драйвер SQLite регистрирует себя в init(); именованный импорт нужен
-	// ещё и для разбора кодов ошибок (isUniqueViolation).
+	// Драйвер регистрирует себя в init(), lib даёт коды ошибок SQLite для isUniqueViolation.
 	sqlite "modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
-// Store - соединение с базой. Все методы безопасны для параллельных
-// запросов: за них отвечает database/sql, а база - WAL.
-//
-// В пакете нет ни одного net/http-типа: store знает про SQL и доменные
-// данные, но не про запросы и ответы.
+// Store - соединение с базой; методы безопасны для параллельных запросов
+// (database/sql, база в WAL).
 type Store struct {
 	db *sql.DB
 }
@@ -45,7 +32,7 @@ type User struct {
 }
 
 // Session - активная сессия: кто вошёл, чем подписаны формы и до какого
-// момента cookie действует.
+// срока cookie действует.
 type Session struct {
 	TokenHash string
 	UserID    int64
@@ -53,19 +40,17 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
-// ErrLoginTaken - логин уже занят (сработал UNIQUE по полю login).
+// ErrLoginTaken - логин уже занят (UNIQUE по login).
 var ErrLoginTaken = errors.New("login taken")
 
-// ErrEmailTaken - почта уже занята другим аккаунтом (сработал частичный
-// UNIQUE-индекс users_email_unique из schema.sql).
+// ErrEmailTaken - почта занята другим аккаунтом (частичный UNIQUE
+// users_email_unique).
 var ErrEmailTaken = errors.New("email taken")
 
-// ErrNotFound — записи нет. Сентинел вместо sql.ErrNoRows: потребителям
-// (auth, будущие Redis-адаптеры) не нужно импортировать database/sql
-// ради ошибки «не найдено».
+// ErrNotFound - записи нет; сентинел вместо sql.ErrNoRows, чтобы не тянуть
+// database/sql ради ошибки «не найдено».
 var ErrNotFound = errors.New("not found")
 
-// noRows превращает sql.ErrNoRows в наш сентинел.
 func noRows(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
@@ -73,22 +58,19 @@ func noRows(err error) error {
 	return err
 }
 
-// isUniqueViolation узнаёт нарушение UNIQUE по коду ошибки драйвера, а не
-// по тексту сообщения: текст может измениться с обновлением SQLite.
+// isUniqueViolation - нарушение UNIQUE по кодам драйвера, а не по тексту:
+// текст ошибок SQLite меняется между версиями, CHECK-нарушение не считаем.
 func isUniqueViolation(err error) bool {
 	var se *sqlite.Error
 	if errors.As(err, &se) {
 		return se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE ||
-			se.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY ||
-			se.Code() == sqlite3.SQLITE_CONSTRAINT
+			se.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
 	}
-	// Запасной путь, если драйвер завернул ошибку иначе.
-	return strings.Contains(err.Error(), "UNIQUE")
+	return false
 }
 
-// Open открывает (при необходимости создавая) базу в каталоге dataDir и
-// прогоняет миграции. WAL — параллельное чтение не блокирует запись;
-// busy_timeout — запрос ждёт чужую блокировку, а не падает.
+// Open открывает (создавая при необходимости) базу в dataDir и прогоняет миграции:
+// WAL не блокирует чтение, busy_timeout даёт ждать чужую блокировку, а не падать.
 func Open(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("%s: %w", dataDir, err)
@@ -105,7 +87,7 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	// Один поток соединений - рекомендованный режим для SQLite: без него
+	// Один поток соединений, рекомендованный режим SQLite: без него
 	// конкурирующие записи получают SQLITE_BUSY несмотря на busy_timeout.
 	db.SetMaxOpenConns(1)
 	if err := db.Ping(); err != nil {
@@ -121,5 +103,4 @@ func Open(dataDir string) (*Store, error) {
 	return s, nil
 }
 
-// Close закрывает соединение с базой.
 func (s *Store) Close() error { return s.db.Close() }

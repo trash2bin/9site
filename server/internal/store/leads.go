@@ -2,7 +2,7 @@ package store
 
 import "context"
 
-// Lead — заявка с публичной формы Sign Up (страница /maket, POST /signup).
+// Lead - заявка с публичной формы Sign Up (страница /maket, POST /signup).
 type Lead struct {
 	Name      string
 	Phone     string
@@ -11,8 +11,7 @@ type Lead struct {
 	UserAgent string
 }
 
-// SaveLead сохраняет заявку. Пока заявки смотрят через sqlite3; когда
-// появится админ-панель — данные будут браться отсюда же.
+// SaveLead сохраняет заявку.
 func (s *Store) SaveLead(ctx context.Context, l Lead) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO leads (name, phone, email, ip, user_agent) VALUES ($1, $2, $3, $4, $5)`,

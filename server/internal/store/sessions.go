@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// Этот файл — только SQL по сессиям и одноразовым токенам сброса пароля.
-// Генерация токенов, bcrypt и решение «когда чистить» — в пакете auth.
-
 // CreateSession сохраняет сессию: в базу идёт только sha256 токена,
 // сам токен живёт в cookie у пользователя.
 func (s *Store) CreateSession(ctx context.Context, userID int64, tokenHash, csrf string, expiresAt time.Time) error {
@@ -18,8 +15,8 @@ func (s *Store) CreateSession(ctx context.Context, userID int64, tokenHash, csrf
 	return err
 }
 
-// SessionByTokenHash возвращает сессию по хэшу токена. ErrNotFound —
-// «нет такой». Проверка срока — на стороне auth: здесь лежит то, что в базе.
+// SessionByTokenHash возвращает сессию по хэшу токена: ErrNotFound, если
+// её нет. Проверка срока на стороне auth.
 func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash string) (*Session, error) {
 	var (
 		sess    Session
@@ -32,9 +29,6 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash string) (*Sess
 	if err != nil {
 		return nil, noRows(err)
 	}
-
-	// Формат — RFC3339 (так писалось при создании); парсим, чтобы auth
-	// сравнивал time.Time, а не строки.
 	exp, err := time.Parse(time.RFC3339, expires)
 	if err != nil {
 		return nil, err
@@ -51,9 +45,8 @@ func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 	return err
 }
 
-// DeleteUserSessions гасит ВСЕ сессии пользователя — нужно при смене
-// пароля: чужая украденная cookie после смены пароля перестаёт работать.
-// Для Redis-реализации это второй индекс user → tokens.
+// DeleteUserSessions гасит все сессии пользователя: при смене пароля чужая
+// cookie после неё перестаёт работать.
 func (s *Store) DeleteUserSessions(ctx context.Context, userID int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM sessions WHERE user_id = $1`, userID,
@@ -61,8 +54,7 @@ func (s *Store) DeleteUserSessions(ctx context.Context, userID int64) error {
 	return err
 }
 
-// PurgeExpiredSessions убирает протухшие сессии — таблица не растёт
-// бесконечно даже без внешней чистки. Для Redis бессмысленно: там TTL.
+// PurgeExpiredSessions убирает протухшие сессии.
 func (s *Store) PurgeExpiredSessions(ctx context.Context, before time.Time) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
 		`DELETE FROM sessions WHERE expires_at < $1`, before.UTC().Format(time.RFC3339),
@@ -73,7 +65,7 @@ func (s *Store) PurgeExpiredSessions(ctx context.Context, before time.Time) (int
 	return res.RowsAffected()
 }
 
-// CreateResetToken сохраняет одноразовый токен сброса пароля: в базу —
+// CreateResetToken сохраняет одноразовый токен сброса пароля: в базу
 // только хэш, сам токен уходит в письмо.
 func (s *Store) CreateResetToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
 	_, err := s.db.ExecContext(ctx,
@@ -83,10 +75,8 @@ func (s *Store) CreateResetToken(ctx context.Context, userID int64, tokenHash st
 	return err
 }
 
-// ConsumeResetToken проверяет токен из ссылки и помечает его
-// использованным одной транзакцией: два параллельных перехода по одной
-// ссылке не смогут использовать токен дважды (раньше были SELECT + UPDATE
-// без транзакции — гонка). Невалидный или просроченный токен → ErrNotFound.
+// ConsumeResetToken проверяет токен и помечает использованным в одной транзакции:
+// параллельные переходы не используют его дважды, невалидный или просроченный - ErrNotFound.
 func (s *Store) ConsumeResetToken(ctx context.Context, tokenHash string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -106,16 +96,13 @@ func (s *Store) ConsumeResetToken(ctx context.Context, tokenHash string) (int64,
 	if err != nil {
 		return 0, noRows(err)
 	}
-
 	exp, err := time.Parse(time.RFC3339, expires)
 	if err != nil || used != 0 || exp.Before(time.Now()) {
 		return 0, ErrNotFound
 	}
 
-	// Токен гасим в той же транзакции: одноразовость важнее успеха —
-	// если запись не пройдёт, весь сброс не пройдёт. AND used = 0 —
-	// страховка атомарности: даже при нескольких соединениях второй
-	// параллельный переход не сможет погасить уже погашенный токен.
+	// AND used = 0 в той же транзакции - страховка атомарности: параллельный
+	// переход не спишет токен дважды.
 	res, err := tx.ExecContext(ctx,
 		`UPDATE reset_tokens SET used = 1 WHERE token_hash = $1 AND used = 0`, tokenHash,
 	)

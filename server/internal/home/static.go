@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-// allowedStatic — единственные файлы в корне staticRoot, которые видит
-// браузер. Всё остальное (main.go, go.mod, README.md, package.json, логи,
-// бинарник сервера, .git, файл счётчика) лежит выше и наружу не отдаётся.
+// allowedStatic единственные файлы в корне staticRoot, которые отдаёт
+// браузер: всё остальное лежит выше и наружу не выходит.
 var allowedStatic = map[string]bool{
 	"/style.css":   true,
 	"/design.css":  true,
@@ -19,16 +18,14 @@ var allowedStatic = map[string]bool{
 	"/print.css":   true,
 }
 
-// Каталоги внутри staticRoot, открытые наружу целиком, и каталог с
-// production-бандлом страницы фотоальбома. Внутри только css/js/картинки:
-// ничего исполняемого туда не попадает.
+// Каталоги внутри staticRoot, открытые наружу целиком: внутри только
+// css/js/картинки, ничего исполняемого туда не попадает.
 const (
 	assetsPrefix = "/assets/"
 	cssPrefix    = "/css/"
 	jsPrefix     = "/js/"
 )
 
-// indexFile — путь к вёрстке главной внутри каталога статики.
 func (s *Server) indexFile() string {
 	return filepath.Join(s.staticRoot, "index.html")
 }
@@ -46,10 +43,8 @@ func staticOnly(next http.Handler) http.Handler {
 			return
 		}
 
-		// Каталоги наружу не отдаются: http.FileServer показал бы оглавление —
-		// список файлов с именами, размерами и датами. Проверяем исходный
-		// путь, а не cleaned: Clean срезает концевую косую черту и
-		// "/css/auth" проходило бы как обычный файл.
+		// Оглавление наружу не отдаём, проверяем исходный путь, а не cleaned:
+		// Clean срезает слэш, и "/css/auth" проходил бы как файл.
 		if !allowedStatic[cleaned] && strings.HasSuffix(r.URL.Path, "/") {
 			http.NotFound(w, r)
 			return
@@ -59,9 +54,8 @@ func staticOnly(next http.Handler) http.Handler {
 	})
 }
 
-// alwaysRevalidate говорит браузеру: не используй копию из кэша без
-// проверки у сервера. Без этого header'а Chrome по эвристике (10% от
-// возраста Last-Modified) держит старый print.css «свежим» часами.
+// alwaysRevalidate говорит браузеру не брать копию из кэша без проверки.
+// Без этого Chrome по эвристике держит старый print.css «свежим» часами.
 func alwaysRevalidate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
@@ -69,21 +63,21 @@ func alwaysRevalidate(next http.Handler) http.Handler {
 	})
 }
 
-// checkIndex проверяет на старте, что метка счётчика есть в вёрстке.
-// Иначе сайт молча отдавал бы страницу без числа визитов.
+// checkIndex проверяет на старте, что метка счётчика в вёрстке: иначе
+// сайт молча отдавал бы страницу без числа визитов.
 func (s *Server) checkIndex() error {
 	page, err := os.ReadFile(s.indexFile())
 	if err != nil {
 		return fmt.Errorf("%s: %w", s.indexFile(), err)
 	}
 	if !strings.Contains(string(page), visitMark) {
-		return fmt.Errorf("%s: нет метки %s — счётчику некуда подставляться", s.indexFile(), visitMark)
+		return fmt.Errorf("%s: нет метки %s: счётчику некуда подставляться", s.indexFile(), visitMark)
 	}
 	return nil
 }
 
-// checkPages проверяет на старте, что все страницы из pageRoutes на месте
-// и содержат свои метки (пока — «спасибо» после заявки на /maket).
+// checkPages проверяет на старте, что страницы из pageRoutes на месте
+// и содержат свои метки.
 func (s *Server) checkPages() error {
 	for route, file := range pageRoutes {
 		name := filepath.Join(s.staticRoot, file)
@@ -100,11 +94,11 @@ func (s *Server) checkPages() error {
 	return nil
 }
 
-// styleEntries — точки входа стилей, которые грузит браузер.
+// styleEntries точки входа стилей, которые грузит браузер.
 var styleEntries = []string{"style.css", "design.css", "catalog.css"}
 
-// extraStatic — файлы, подключённые напрямую из HTML, а не через @import.
-// Печатная тема и JS-бандл нужны фотоальбому.
+// extraStatic файлы, подключённые напрямую из HTML, а не через @import:
+// печатная тема и JS-бандл фотоальбома.
 var extraStatic = []string{"print.css", filepath.Join("js", "main.js")}
 
 // checkExtraStatic проверяет, что печатная тема и собранный скрипт на месте.
@@ -118,12 +112,9 @@ func (s *Server) checkExtraStatic() error {
 	return nil
 }
 
-// checkStyles проверяет, что все файлы, подключённые через @import в точках
-// входа, лежат на месте. Пропавший файл слоя иначе дал бы только 404 на
-// стиль: страница открылась бы без вёрстки и без внятной ошибки в логе.
-//
-// Разбор нарочно простой: в проекте ровно одна форма записи —
-// @import url("путь"); — и отдельный CSS-парсер здесь ни к чему.
+// checkStyles проверяет, что файлы из @import в точках входа лежат на месте:
+// пропавший слой дал бы только 404 на стиль, страница открылась бы без вёрстки
+// и без внятной ошибки.
 func (s *Server) checkStyles() error {
 	var imports int
 
@@ -145,8 +136,7 @@ func (s *Server) checkStyles() error {
 				return fmt.Errorf("%s: не разобран импорт %q", name, line)
 			}
 
-			// Путь в @import записан от корня статики — тот же адрес, по
-			// которому файл просит браузер.
+			// Путь в @import от корня статики, тот же адрес, что запрашивает браузер.
 			file := filepath.Join(s.staticRoot, filepath.FromSlash(rel))
 			if _, err := os.Stat(file); err != nil {
 				return fmt.Errorf("%s (%s): %w", file, rel, err)

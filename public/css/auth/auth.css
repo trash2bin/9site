@@ -1,4 +1,4 @@
-/* Закрытый раздел: окно входа, профиль и сброс пароля (лабораторная N4).
+/* Закрытый раздел: окно входа, профиль и сброс пароля.
 
    Файл лежит в подкаталоге css/auth/ и потому не входит в бюджет размера
    главной страницы (scripts/check-size.sh смотрит только на верхний уровень
@@ -108,6 +108,10 @@ a.tool-btn {
   align-self: flex-start;
 }
 
+.auth-dialog .auth-flash {
+  margin: 0;
+}
+
 .secret-list {
   margin: 10px 0;
   padding-left: 22px;
@@ -117,54 +121,85 @@ a.tool-btn {
   margin: 6px 0;
 }
 
-/* Всплывающее окно входа/регистрации. <dialog> сам затемняет фон
-   (::backdrop) и закрывается по Esc — писать свой оверлей не пришлось. */
+/* Всплывающее окно входа/регистрации/сброса. <dialog> сам затемняет фон
+   (::backdrop) и закрывается по Esc — писать свой оверлей не пришлось.
+   На каждую кнопку — своё окно, поэтому открыта всегда одна форма. */
 .auth-dialog {
-  width: min(440px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 32px));
   padding: 0;
   border: 4px ridge var(--bevel);
   background: var(--coal);
   color: var(--ink);
 }
 
+.auth-dialog-wide {
+  width: min(440px, calc(100vw - 32px));
+}
+
 .auth-dialog::backdrop {
   background: rgb(0 0 0 / 70%);
 }
 
-.auth-tabs {
+.auth-dialog-head {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   align-items: center;
-  padding: 8px;
+  justify-content: space-between;
+  padding: 8px 10px;
   background: #c00000 url("/assets/img/texture-hyper.gif") repeat;
   background-blend-mode: overlay;
   background-size: 321px 61px;
   border-bottom: 2px outset var(--bevel);
 }
 
-.auth-tabs button {
-  padding: 4px 10px;
+.auth-dialog-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--yellow);
+}
+
+.auth-dialog .auth-close {
+  padding: 2px 8px;
   border: 2px outset var(--bevel);
   background: var(--slab);
-  color: var(--ink);
+  color: var(--yellow);
   font: inherit;
   cursor: pointer;
 }
 
-.auth-tabs button.is-active {
+.auth-dialog .auth-close:active {
   border-style: inset;
-  background: var(--teal);
-  color: var(--yellow);
-}
-
-.auth-tabs .auth-close {
-  margin-left: auto;
-  color: var(--yellow);
 }
 
 .auth-dialog .auth-form {
+  gap: 12px;
   padding: 14px;
   max-width: none;
+}
+
+.auth-hint {
+  margin: 0;
+  color: var(--ash);
+}
+
+/* Ссылки-переключатели между формами внутри окна. */
+.auth-switch {
+  margin: 2px 0 0;
+  color: var(--ash);
+}
+
+.auth-linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-linkbtn:hover {
+  color: var(--yellow);
 }
 
 /* Мобильная раскладка: форма профиля не должна прижиматься к аватару. */

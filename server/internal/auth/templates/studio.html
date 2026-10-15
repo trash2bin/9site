@@ -28,9 +28,7 @@
       </nav>
 
       <main id="content">
-        {{if .Error}}
-        <p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>
-        {{end}} {{if .Message}}
+        {{if .Message}}
         <p class="auth-flash auth-flash-ok" role="status">{{.Message}}</p>
         {{end}} {{if .User}}
         <section class="panel">
@@ -113,91 +111,130 @@
       </footer>
     </div>
 
-    <!-- Всплывающее окно входа/регистрации. Работает без перезагрузки:
-         <dialog> + немного JS переключают вкладки. data-open — какую вкладку
-         открыть сразу (?auth=... или возврат после ошибки формы). -->
-    <dialog id="auth-dialog" class="auth-dialog" aria-label="Вход и регистрация" data-open="{{.Open}}">
-      <div class="auth-tabs">
-        <button type="button" data-tab-btn="login">вход</button>
-        <button type="button" data-tab-btn="register">регистрация</button>
-        <button type="button" data-tab-btn="forgot">сброс пароля</button>
-        <button type="button" class="auth-close" data-dialog-close aria-label="Закрыть">✕</button>
-      </div>
-
-      <form class="auth-form" data-tab-form="login" method="post" action="/auth/login">
+    <!-- Три отдельные формы — по одной на кнопку. Каждая живёт в своём
+         <dialog>, поэтому открыта всегда ровно одна: общих вкладок и
+         переключения между формами больше нет. -->
+    <dialog id="auth-login" class="auth-dialog" aria-labelledby="auth-login-title" {{if eq .Open "login"}}open{{end}}>
+      <form class="auth-form" method="post" action="/auth/login">
+        <div class="auth-dialog-head">
+          <h2 id="auth-login-title">✿ вход</h2>
+          <button type="button" class="auth-close" data-dialog-close aria-label="Закрыть">✕</button>
+        </div>
+        {{if and .Error (eq .Open "login")}}
+        <p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>
+        {{end}}
         <input type="hidden" name="csrf" value="{{.CSRF}}" />
-        <label>логин<input name="login" required /></label>
-        <label>пароль<input type="password" name="password" required /></label>
+        <label>логин<input name="login" autocomplete="username" required /></label>
+        <label>пароль<input type="password" name="password" autocomplete="current-password" required /></label>
         <button type="submit" class="tool-btn">войти</button>
+        <p class="auth-switch">
+          нет аккаунта? <button type="button" class="auth-linkbtn" data-open-dialog="register">регистрация</button> ·
+          <button type="button" class="auth-linkbtn" data-open-dialog="forgot">забыли пароль?</button>
+        </p>
       </form>
+    </dialog>
 
-      <form
-        class="auth-form"
-        data-tab-form="register"
-        method="post"
-        action="/auth/register"
-        enctype="multipart/form-data"
-      >
+    <dialog
+      id="auth-register"
+      class="auth-dialog auth-dialog-wide"
+      aria-labelledby="auth-register-title"
+      {{if eq .Open "register"}}open{{end}}
+    >
+      <form class="auth-form" method="post" action="/auth/register" enctype="multipart/form-data">
+        <div class="auth-dialog-head">
+          <h2 id="auth-register-title">✿ регистрация</h2>
+          <button type="button" class="auth-close" data-dialog-close aria-label="Закрыть">✕</button>
+        </div>
+        {{if and .Error (eq .Open "register")}}
+        <p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>
+        {{end}}
         <input type="hidden" name="csrf" value="{{.CSRF}}" />
-        <label>логин<input name="login" required /></label>
-        <label>пароль<input type="password" name="password" required /></label>
-        <label>ФИО<input name="full_name" /></label>
-        <label>почта<input type="email" name="email" required /></label>
+        <label>логин<input name="login" autocomplete="username" required /></label>
+        <label>пароль<input type="password" name="password" autocomplete="new-password" required /></label>
+        <label>ФИО<input name="full_name" autocomplete="name" /></label>
+        <label>почта<input type="email" name="email" autocomplete="email" required /></label>
         <label>аватар<input type="file" name="avatar" accept="image/gif,image/png,image/jpeg,image/webp" /></label>
         <button type="submit" class="tool-btn">зарегистрироваться</button>
+        <p class="auth-switch">
+          уже есть аккаунт? <button type="button" class="auth-linkbtn" data-open-dialog="login">войти</button>
+        </p>
       </form>
+    </dialog>
 
-      <form class="auth-form" data-tab-form="forgot" method="post" action="/auth/forgot">
+    <dialog id="auth-forgot" class="auth-dialog" aria-labelledby="auth-forgot-title" {{if eq .Open "forgot"}}open{{end}}>
+      <form class="auth-form" method="post" action="/auth/forgot">
+        <div class="auth-dialog-head">
+          <h2 id="auth-forgot-title">✿ сброс пароля</h2>
+          <button type="button" class="auth-close" data-dialog-close aria-label="Закрыть">✕</button>
+        </div>
+        {{if and .Error (eq .Open "forgot")}}
+        <p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>
+        {{end}}
         <input type="hidden" name="csrf" value="{{.CSRF}}" />
-        <label>почта<input type="email" name="email" required /></label>
+        <p class="auth-hint">Укажите почту аккаунта — пришлём ссылку для нового пароля.</p>
+        <label>почта<input type="email" name="email" autocomplete="email" required /></label>
         <button type="submit" class="tool-btn">отправить ссылку</button>
+        <p class="auth-switch">
+          вспомнили пароль? <button type="button" class="auth-linkbtn" data-open-dialog="login">войти</button>
+        </p>
       </form>
     </dialog>
 
     <script>
       (function () {
-        var dialog = document.getElementById("auth-dialog");
-        if (!dialog) return;
-
-        function showTab(name) {
-          dialog.querySelectorAll("[data-tab-form]").forEach(function (form) {
-            form.hidden = form.getAttribute("data-tab-form") !== name;
-          });
-          dialog.querySelectorAll("[data-tab-btn]").forEach(function (btn) {
-            btn.classList.toggle("is-active", btn.getAttribute("data-tab-btn") === name);
-          });
-        }
+        // Каждая кнопка открывает своё окно. Открытых окон не бывает двух
+        // сразу: перед показом закрываем остальные.
+        var dialogs = {
+          login: document.getElementById("auth-login"),
+          register: document.getElementById("auth-register"),
+          forgot: document.getElementById("auth-forgot"),
+        };
 
         function openDialog(name) {
-          showTab(name || "login");
-          if (!dialog.open) dialog.showModal();
+          var wanted = dialogs[name];
+          if (!wanted) return;
+          Object.keys(dialogs).forEach(function (key) {
+            var dialog = dialogs[key];
+            if (dialog && dialog.open && dialog !== wanted) dialog.close();
+          });
+          // Сервер может отдать окно уже открытым (атрибут open — фолбэк
+          // без JS). Закрываем и открываем заново, чтобы окно стало модальным.
+          if (wanted.open) wanted.close();
+          wanted.showModal();
         }
 
-        // Кнопки «войти»/«регистрация» лежат в <main>, а не внутри <dialog>,
-        // поэтому слушатель вешаем на весь документ, не на dialog.
-        document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            openDialog(btn.getAttribute("data-open-dialog"));
-          });
-        });
-        dialog.querySelectorAll("[data-tab-btn]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            showTab(btn.getAttribute("data-tab-btn"));
-          });
-        });
-        dialog.querySelectorAll("[data-dialog-close]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            dialog.close();
-          });
-        });
-        dialog.addEventListener("click", function (event) {
-          if (event.target === dialog) dialog.close();
+        // Кнопки лежат и в <main>, и внутри окон (ссылки-переключатели),
+        // поэтому слушатель — на документе.
+        document.addEventListener("click", function (event) {
+          var opener = event.target.closest("[data-open-dialog]");
+          if (opener) {
+            openDialog(opener.getAttribute("data-open-dialog"));
+            return;
+          }
+          var closer = event.target.closest("[data-dialog-close]");
+          if (closer) {
+            var owner = closer.closest("dialog");
+            if (owner) owner.close();
+          }
         });
 
-        // Автооткрытие: ?auth=register из ссылки, иначе — какая вкладка
-        // была открыта на сервере (возврат после ошибки формы).
-        var wanted = new URLSearchParams(location.search).get("auth") || dialog.getAttribute("data-open");
+        // Клик по затемнению вокруг формы закрывает окно.
+        Object.keys(dialogs).forEach(function (key) {
+          var dialog = dialogs[key];
+          if (!dialog) return;
+          dialog.addEventListener("click", function (event) {
+            if (event.target === dialog) dialog.close();
+          });
+        });
+
+        // Автооткрытие: ?auth=... из ссылки, иначе — окно, которое сервер
+        // пометил открытым (возврат после ошибки формы).
+        var wanted = new URLSearchParams(location.search).get("auth");
         if (wanted) openDialog(wanted);
+        else
+          Object.keys(dialogs).forEach(function (key) {
+            if (dialogs[key] && dialogs[key].open) openDialog(key);
+          });
       })();
     </script>
   </body>

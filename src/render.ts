@@ -3,7 +3,6 @@
 import { CRITERIA, isCriterionKey, type Availability, type FilterState } from "./criteria.js";
 import type { Photo } from "./model.js";
 
-/** Экранирует данные перед вставкой в HTML. */
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     const entities: Record<string, string> = {
@@ -17,7 +16,7 @@ function escapeHtml(value: string): string {
   });
 }
 
-/** Строит карточку снимка. Фильтруемые значения читаются из Photo, не из DOM. */
+/** Карточка снимка: фильтруемые значения читаются из Photo, не из DOM. */
 function photoCard(photo: Photo): string {
   return `<figure class="part-card photo-card">
       <img src="/assets/img/${escapeHtml(photo.src)}" alt="${escapeHtml(photo.name)}" loading="lazy" decoding="async" />
@@ -25,7 +24,6 @@ function photoCard(photo: Photo): string {
     </figure>`;
 }
 
-/** Отрисовывает только подходящие карточки. */
 export function renderPhotos(photos: Photo[], selector: string): void {
   const host = document.querySelector(selector);
   if (!host) return;
@@ -35,7 +33,6 @@ export function renderPhotos(photos: Photo[], selector: string): void {
     : `<p class="catalog-empty">[ под такие критерии ничего не нашлось // сбрось фильтр ]</p>`;
 }
 
-/** Создаёт группы фильтра из того же описания, что использует логика. */
 export function renderFilters(selector: string): void {
   const host = document.querySelector(selector);
   if (!host) return;
@@ -55,7 +52,6 @@ export function renderFilters(selector: string): void {
   ).join("\n");
 }
 
-/** Обновляет выбор и доступность, не заменяя DOM-узлы. */
 export function updateFilters(state: FilterState, available: Availability, selector: string): void {
   const host = document.querySelector(selector);
   if (!host) return;
@@ -71,7 +67,6 @@ export function updateFilters(state: FilterState, available: Availability, selec
   });
 }
 
-/** Собирает состояние из отмеченных чекбоксов. */
 export function readState(selector: string): FilterState {
   const result: FilterState = {};
   document.querySelectorAll<HTMLInputElement>(`${selector} input[type=checkbox]:checked`).forEach((box) => {
@@ -80,7 +75,6 @@ export function readState(selector: string): FilterState {
   return result;
 }
 
-/** Обновляет счётчик результатов. */
 export function renderCount(found: number, total: number, selector: string): void {
   const host = document.querySelector(selector);
   if (host) host.textContent = `// найдено ${found} из ${total}`;

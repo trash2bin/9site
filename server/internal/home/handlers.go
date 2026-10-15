@@ -9,24 +9,20 @@ import (
 	"strings"
 )
 
-// visitMark — место в index.html, куда подставляется счётчик визитов.
+// visitMark место в index.html, куда подставляется счётчик визитов.
 const visitMark = "<!--visits-->"
 
-// thanksMark — место в design.html, куда подставляется блок «спасибо»
+// thanksMark место в design.html, куда подставляется блок «спасибо»
 // после заявки с формы Sign Up.
 const thanksMark = "<!--sent-->"
 
-// digitCount — сколько знаков показывать. Меньшие числа добиваются нулями,
-// чтобы разрядность в футере не прыгала.
+// digitCount знаков в счётчике: меньше добивается нулями, чтобы разрядность не прыгала.
 const digitCount = 5
 
-// thanksHTML — блок «спасибо». Приходит из POST /signup (PRG-схема):
-// страница перерисовывается с ?sent=1, и маркер заменяется.
+// thanksHTML блок «спасибо», подставляется вместо маркера по ?sent=1.
 const thanksHTML = `<p class="thanks">Спасибо! Мы свяжемся с вами.</p>`
 
-// indexHandler отдаёт index.html с подставленным счётчиком визитов.
-// Страница собирается в памяти, поэтому файл на диске остаётся статикой,
-// которую можно открыть и без сервера.
+// indexHandler отдаёт index.html с подставленным счётчиком.
 func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 	page, err := os.ReadFile(s.indexFile())
 	if err != nil {
@@ -45,9 +41,8 @@ func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// hit увеличивает счётчик визитов и возвращает новое число. Ошибка записи
-// наверх не отдаётся: страницу надо показать в любом случае, а сбой базы —
-// повод для warn в логе, а не для 500 на главной.
+// hit увеличивает счётчик и возвращает новое число. Ошибка записи наверх
+// не идёт: сбой базы повод для warn, а не 500 на главной.
 func (s *Server) hit(ctx context.Context) int {
 	// Контекст без отмены: визит уже случился, обрыв соединения его не отменяет.
 	n, err := s.store.Hit(context.WithoutCancel(ctx))
@@ -59,7 +54,6 @@ func (s *Server) hit(ctx context.Context) int {
 	return n
 }
 
-// counterHTML раскладывает число на отдельные <span>, как было в вёрстке.
 func counterHTML(n int) string {
 	digits := strconv.Itoa(n)
 	if len(digits) < digitCount {
@@ -75,9 +69,8 @@ func counterHTML(n int) string {
 	return b.String()
 }
 
-// pageHandler отдаёт страницу из pageRoutes как HTML. Файл читается на
-// каждый запрос: правки вёрстки видны сразу, без перезапуска сервера.
-// Маркер «спасибо» подставляется после заявки с формы Sign Up (?sent=1).
+// pageHandler отдаёт страницу из pageRoutes; файл читается на каждый запрос,
+// правки вёрстки видны без перезапуска.
 func (s *Server) pageHandler(file string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := filepath.Join(s.staticRoot, file)

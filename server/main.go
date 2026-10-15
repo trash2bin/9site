@@ -1,9 +1,5 @@
-// Команда site-server — единственная точка сборки сайта: здесь читаются
-// переменные окружения, собираются хранилище, логгер, лимиты и срезы
-// (auth, leads, home), после чего поднимается HTTP-сервер.
-//
-// Срезы не знают друг о друге: зависимости приходят сюда явным DI через
-// конфиг-структуры. store — общий слой SQL, о срезах он не знает.
+// Команда site-server: окружение, хранилище, логгер, лимиты и HTTP-сервер.
+// Единственный composition root: срезы связаны здесь явным DI через конфиг-структуры, store о срезах не знает.
 package main
 
 import (
@@ -27,8 +23,8 @@ import (
 )
 
 func main() {
-	// Отдельный run, а не os.Exit внутри main: defer (закрытие базы)
-	// обязан отработать даже на фатальной ошибке.
+	// Отдельный run, а не os.Exit внутри main: defer обязан отработать
+	// даже на фатальной ошибке.
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "стоп:", err)
 		os.Exit(1)
@@ -38,23 +34,16 @@ func main() {
 func run() error {
 	dataDir := envOr("DATA_DIR", "var")
 
-	// Отдельная команда «снять копию базы»: ею пользуется деплой перед
-	// рестартом. Копия снимается на живой базе (VACUUM INTO) — сервис
-	// останавливать не нужно.
+	// Команда «снять копию базы» для деплоя: VACUUM INTO работает на живой
+	// базе, сервис останавливать не нужно.
 	if len(os.Args) == 3 && os.Args[1] == "backup" {
 		return store.Snapshot(filepath.Join(dataDir, "site.db"), os.Args[2])
 	}
 
-	// «site-server check» — прогон всех startup-проверок без слушателя.
-	// Деплой зовёт новый бинарник этим аргументом, пока старый сервис ещё
-	// работает: битая миграция, неполный SMTP-конфиг или пропавшая статика
-	// встают тут, деплой падает, а сайт продолжает жить на старом
-	// процессе. Побочный эффект тот же, что при рестарте: миграции
-	// накатываются на живую базу — поэтому деплой снимает бэкап раньше.
+	// «site-server check»: все startup-проверки без слушателя, деплой зовёт им
+	// новый бинарник. Миграции идут на живую базу, поэтому деплой бэкапит раньше.
 	checkOnly := len(os.Args) == 2 && os.Args[1] == "check"
 
-	// База открывается первой: логгер пишет её ошибки и дублирует действия
-	// пользователей в её журнал, поэтому создаётся уже с открытым store.
 	st, err := store.Open(dataDir)
 	if err != nil {
 		return fmt.Errorf("база: %w", err)
@@ -70,27 +59,22 @@ func run() error {
 		return fmt.Errorf("логгер: %w", err)
 	}
 
-	// Перенос счётчика из старого visits.dat — единственное, что осталось
-	// от прежних хранилищ. Без файла вызов безвреден и ничего не делает.
+	// Импорт legacy-счётчика: без файла вызов безвреден и ничего не делает.
 	if imported, err := st.ImportVisits(context.Background(), counterPath()); err != nil {
-		// Сайт работать может и без импорта — разберёмся руками.
 		logger.Warn("импорт счётчика не завершён", "err", err)
 	} else if imported {
 		logger.Info("счётчик перенесён из visits.dat в site.db")
 	}
 
-	// BASE_URL обязан быть абсолютным: на нём держится проверка Origin
-	// у формы Sign Up — при BASE_URL без схемы все заявки ушли бы в 403.
+	// BASE_URL обязателен абсолютный: без схемы проверка Origin у формы
+	// Sign Up отвергла бы все заявки (403).
 	baseURL := strings.TrimRight(envOr("BASE_URL", "http://localhost:8080"), "/")
 	if u, err := url.Parse(baseURL); err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("BASE_URL должен быть абсолютным адресом вида https://example.com, получено %q", baseURL)
 	}
 
-	// Ограничители частоты: вся таблица бюджетов здесь, в одном месте —
-	// срезы присылают только имена (auth.BudgetLogin и т.п.). Порог любого
-	// бюджета поднимается переменной LIMIT_<БЮДЖЕТ> (LIMIT_AUTH_LOGIN=50),
-	// окно остаётся константой. Опечатка в имени или нулевой порог валит
-	// запуск, а не включает молча «лимита нет».
+	// Вся таблица бюджетов здесь: порог любого бюджета поднимается переменной
+	// LIMIT_<БЮДЖЕТ> (LIMIT_AUTH_LOGIN=50), окно остаётся константой.
 	budgets := map[string]webutil.Budget{
 		auth.BudgetLogin:    {Limit: 20, Window: 10 * time.Minute},
 		auth.BudgetRegister: {Limit: 20, Window: 10 * time.Minute},
@@ -104,8 +88,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("лимиты: %w", err)
 	}
-	// Список бюджетов в лог при старте: что ограничено и насколько —
-	// видно сразу, а не из кода.
 	names := make([]string, 0, len(budgets))
 	for name := range budgets {
 		names = append(names, name)
@@ -116,8 +98,6 @@ func run() error {
 		logger.Info("лимит частоты", "бюджет", name, "лимит", b.Limit, "окно", b.Window)
 	}
 
-	// Закрытый раздел: регистрация, авторизация и восстановление пароля
-	// (лабораторная N4). Данные — в общей базе (store), почта — в SMTP_*.
 	authServer, err := auth.New(auth.Config{
 		Users:      st,
 		Sessions:   st,
@@ -127,8 +107,6 @@ func run() error {
 		Log:        logger,
 		Throttle:   limits,
 		SMTP: auth.SMTPConfig{
-			// Провайдер (gmail|yandex|mailru) подставляет хост и порт
-			// сам; свой сервер задаётся через SMTP_HOST + SMTP_PORT.
 			Provider: os.Getenv("SMTP_PROVIDER"),
 			Host:     os.Getenv("SMTP_HOST"),
 			Port:     envInt("SMTP_PORT", 587, logger),
@@ -141,7 +119,6 @@ func run() error {
 		return err
 	}
 
-	// Публичная форма заявок со страницы /maket.
 	leadsServer, err := leads.New(leads.Config{
 		Store:    st,
 		BaseURL:  baseURL,
@@ -152,9 +129,7 @@ func run() error {
 		return err
 	}
 
-	// Витрина: главная со счётчиком и «красивые» адреса. Проверки вёрстки
-	// прогоняются в home.New — битый staticRoot валит запуск, а не отдаёт
-	// посетителю пустую страницу.
+	// Проверки статики гоняются в home.New: битый staticRoot валит запуск.
 	homeServer, err := home.New(home.Config{
 		StaticRoot: envOr("STATIC_ROOT", publicRoot()),
 		Log:        logger,
@@ -164,58 +139,48 @@ func run() error {
 		return err
 	}
 
-	// Свой роутер, а не http.DefaultServeMux: маршруты видны в одном месте,
-	// случайная регистрация «в никуда» невозможна.
 	mux := http.NewServeMux()
 	authServer.Register(mux)
 	leadsServer.Register(mux)
 	homeServer.Register(mux)
 
-	// Режим check: база, миграции, лимиты, статика, авторизация и
-	// роутинг уже проверены, осталось не занимать порт и не вытеснять
-	// работающий сервис.
 	if checkOnly {
-		logger.Info("проверка старта пройдена — бинарник готов к рестарту")
+		logger.Info("проверка старта пройдена: бинарник готов к рестарту")
 		return nil
 	}
 
 	logger.Info("Ivan's Little Web запущен", "addr", "http://localhost:8080")
 
-	// Не хватает http.ListenAndServe только по одному аргументу: у него нет
-	// таймаутов, и висящее соединение держит горутину вечно. ReadTimeout
-	// и WriteTimeout не ставим специально: общий таймер оборвал бы и
-	// загрузку аватара, и отдачу статики на медленном канале.
+	// ReadTimeout/WriteTimeout не ставим специально: общий таймер оборвал бы
+	// и загрузку аватара, и отдачу статики на медленном канале.
 	srv := &http.Server{
 		Addr:              "127.0.0.1:8080",
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	// Слушаем только localhost: наружу сайт открывает nginx. Прямой доступ
-	// к порту включал бы обход лимитеров подделкой X-Real-IP.
+	// Слушаем только localhost (наружу nginx): прямой доступ к порту
+	// включал бы обход лимитеров подделкой X-Real-IP.
 	return srv.ListenAndServe()
 }
 
-// --- окружение и адаптеры: живут только в точке сборки ---
+// --- окружение и адаптеры ---
 
-// journal — адаптер «журнал действий» (logging.ActionSink) поверх store.
-// Живёт здесь, в main, потому что main — единственное место, где
-// собираются конкретные реализации: пакет logging об интерфейсе знает,
-// о базе — нет.
+// journal адаптер журнала действий (logging.ActionSink) поверх store;
+// конкретные реализации собираются в main.
 type journal struct {
 	st *store.Store
 }
 
 func (j journal) Action(login, action, ip string) error {
-	// Действие уже случилось; обрыв соединения браузером не должен его
-	// отменить — поэтому контекст без отмены.
+	// Действие уже случилось: обрыв соединения браузером не должен его
+	// отменить, поэтому контекст без отмены.
 	return j.st.Record(
 		context.WithoutCancel(context.Background()),
 		store.Action{Login: login, Action: action, IP: ip},
 	)
 }
 
-// envOr читает переменную окружения, подставляя значение по умолчанию.
 func envOr(name, fallback string) string {
 	if v := os.Getenv(name); v != "" {
 		return v
@@ -223,10 +188,8 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
-// publicRoot ищет каталог статики, когда STATIC_ROOT не задан: локально
-// сайт запускают и из корня (go run ./server), и из server/ (go run
-// main.go), поэтому один "public" относительно cwd не всегда верный.
-// В проде путь всегда абсолютный из юнита — тут только локальное удобство.
+// publicRoot ищет каталог статики, когда STATIC_ROOT не задан: локально запускают
+// и из корня, и из server/, в проде путь абсолютный из юнита.
 func publicRoot() string {
 	for _, dir := range []string{"public", filepath.Join("..", "public")} {
 		if fi, err := os.Stat(filepath.Join(dir, "index.html")); err == nil && !fi.IsDir() {
@@ -236,8 +199,6 @@ func publicRoot() string {
 	return "public"
 }
 
-// envInt читает числовую переменную окружения. Мусор вместо числа — не
-// повод не запускаться: берём запасное значение и предупреждаем в лог.
 func envInt(name string, fallback int, log *logging.Logger) int {
 	v := os.Getenv(name)
 	if v == "" {
@@ -251,10 +212,8 @@ func envInt(name string, fallback int, log *logging.Logger) int {
 	return n
 }
 
-// limitBudget — порог бюджета ограничителей с переопределением из
-// окружения. Имя переменной — бюджет в верхнем регистре, с точками на
-// подчёркивания: auth.login → LIMIT_AUTH_LOGIN. Мусор не роняет запуск:
-// берём дефолт и пишем warn (как envInt).
+// limitBudget порог бюджета ограничителей с переопределением из окружения:
+// auth.login → LIMIT_AUTH_LOGIN. Мусор не роняет запуск, берём дефолт.
 func limitBudget(log *logging.Logger, name string, def webutil.Budget) webutil.Budget {
 	env := "LIMIT_" + strings.ToUpper(strings.ReplaceAll(name, ".", "_"))
 	v := os.Getenv(env)
@@ -270,9 +229,8 @@ func limitBudget(log *logging.Logger, name string, def webutil.Budget) webutil.B
 	return webutil.Budget{Limit: n, Window: def.Window}
 }
 
-// counterPath — старый файл со счётчиком (visits.dat). Читается только
-// при импорте legacy-данных в site.db; в рабочем процессе участия не
-// принимает. В проде systemd подставляет путь из StateDirectory.
+// counterPath старый файл со счётчиком: читается только при импорте, в проде
+// путь подставляет systemd из StateDirectory.
 func counterPath() string {
 	if p := os.Getenv("VISITS_FILE"); p != "" {
 		return p

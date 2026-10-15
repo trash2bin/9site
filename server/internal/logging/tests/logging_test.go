@@ -10,8 +10,7 @@ import (
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
 )
 
-// fakeSink — журнал в памяти: проверяем, что действия доходят, а ошибка
-// не роняет логгер.
+// fakeSink - журнал в памяти, fail имитирует поломку журнала.
 type fakeSink struct {
 	entries []string
 	fail    bool
@@ -25,7 +24,6 @@ func (f *fakeSink) Action(login, action, ip string) error {
 	return nil
 }
 
-// TestActionToSink — действия пользователей уходят в журнал действий.
 func TestActionToSink(t *testing.T) {
 	sink := &fakeSink{}
 	log, err := logging.New(logging.Config{Output: io.Discard, Actions: sink})
@@ -44,7 +42,6 @@ func TestActionToSink(t *testing.T) {
 	}
 }
 
-// TestActionSinkError — сломанный журнал логируется, но не ломает вызов.
 func TestActionSinkError(t *testing.T) {
 	var buf bytes.Buffer
 	log, err := logging.New(logging.Config{Output: &buf, Actions: &fakeSink{fail: true}})
@@ -52,14 +49,13 @@ func TestActionSinkError(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	log.Action("demo", "вход", "127.0.0.1") // не должно упасть
+	log.Action("demo", "вход", "127.0.0.1")
 
 	if !strings.Contains(buf.String(), "запись не сохранена") {
 		t.Fatalf("ошибка журнала не попала в лог:\n%s", buf.String())
 	}
 }
 
-// TestActionWithoutSink — без журнала Action работает как обычная запись.
 func TestActionWithoutSink(t *testing.T) {
 	log, err := logging.New(logging.Config{Output: io.Discard})
 	if err != nil {
@@ -68,7 +64,6 @@ func TestActionWithoutSink(t *testing.T) {
 	log.Action("demo", "вход", "127.0.0.1")
 }
 
-// TestLevel — уровень info прячет debug-записи из консоли.
 func TestLevel(t *testing.T) {
 	var buf bytes.Buffer
 	log, err := logging.New(logging.Config{Level: "info", Output: &buf})

@@ -16,13 +16,8 @@ import (
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
-// handleStudio — витрина закрытого раздела, доступная всем. Гостям она
-// показывает, что получают авторизованные, и всплывающее окно входа;
-// пользователи управляют профилем и заходят в vault.
-//
-// Страница открыта намеренно: авторизация — не забор, а доп. возможности.
-// Строгая проверка живёт в handleVault — тот раздел по прямой ссылке без
-// входа не открывается (требование лабораторной N4).
+// handleStudio витрина закрытого раздела, открыта намеренно: проверка
+// живёт в handleVault, там по прямой ссылке без входа не попасть.
 func (s *Server) handleStudio(w http.ResponseWriter, r *http.Request) {
 	_, user := s.sessionFrom(r)
 
@@ -36,16 +31,13 @@ func (s *Server) handleStudio(w http.ResponseWriter, r *http.Request) {
 			data.Open = open
 		}
 		if r.URL.Query().Get("reset") == "1" {
-			data.Message = "пароль обновлён — войдите с новым паролем"
+			data.Message = "пароль обновлён: войдите с новым паролем"
 		}
 	}
 
 	s.renderStudio(w, data)
 }
 
-// handleVault — закрытый раздел «vault». Гость по прямой ссылке сюда не
-// попадает: его уводит на окно входа. Это и есть проверяемый «закрытый
-// раздел» лабораторной N4.
 func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 	_, user := s.sessionFrom(r)
 	if user == nil {
@@ -60,26 +52,24 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleLogin — вход по логину и паролю.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	// Лимит попыток (бюджет auth.login) смотрит middleware в Register:
-	// здесь остаётся только адрес для журнала действий.
+	// Лимит висит в Register, здесь ip только для журнала.
 	ip := webutil.ClientIP(r)
 
 	login := strings.TrimSpace(r.PostFormValue("login"))
 	password := r.PostFormValue("password")
 
 	if !s.csrfOK(r) {
-		s.loginWall(w, r, "форма устарела — попробуйте ещё раз")
+		s.loginWall(w, r, "форма устарела: попробуйте ещё раз")
 		return
 	}
 
 	user, err := s.userByLogin(r.Context(), login)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		// Сбой хранилища — не «неверный пароль»: иначе реальная поломка
-		// маскируется под опечатку пользователя и не видна в логах.
+		// Сбой хранилища не «неверный пароль»: иначе поломка маскируется
+		// под опечатку пользователя и не видна в логах.
 		s.log.Error("вход: хранилище недоступно", "err", err)
-		s.loginWall(w, r, "не удалось войти — попробуйте позже")
+		s.loginWall(w, r, "не удалось войти: попробуйте позже")
 		return
 	}
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)) != nil {
@@ -92,7 +82,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.startSession(r.Context(), w, r, user); err != nil {
 		s.log.Error("сессия не создана", "err", err)
-		s.loginWall(w, r, "не удалось войти — попробуйте позже")
+		s.loginWall(w, r, "не удалось войти: попробуйте позже")
 		return
 	}
 
@@ -100,14 +90,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/studio", http.StatusSeeOther)
 }
 
-// handleRegister — самостоятельная регистрация: логин, пароль, ФИО, почта
-// и аватар (минимальный набор полей из задания).
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	// Лимит попыток (бюджет auth.register) — в middleware Register.
 	ip := webutil.ClientIP(r)
 
 	if !s.csrfOK(r) {
-		s.loginWall(w, r, "форма устарела — попробуйте ещё раз")
+		s.loginWall(w, r, "форма устарела: попробуйте ещё раз")
 		return
 	}
 
@@ -136,10 +123,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Файл проверяем ДО создания аккаунта. Иначе невалидный аватар
-	// оставлял бы полузарегистрованный пользователь без сессии: форма
-	// показывала ошибку, а повтор с исправленным файлом отвечал
-	// «логин уже занят».
+	// Аватар проверяем ДО создания аккаунта: иначе повтор с исправленным
+	// файлом отвечал бы «логин уже занят» на полузарегистрированном аккаунте.
 	var (
 		avatarData []byte
 		avatarKind string
@@ -159,7 +144,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	user, err := s.createUser(r.Context(), login, passHash, fullName, email)
 	if errors.Is(err, errLoginTaken) {
 		s.renderStudio(w, studioData{
-			Error: "такой логин уже занят — придумайте другой",
+			Error: "такой логин уже занят: придумайте другой",
 			Open:  "register",
 			CSRF:  s.csrfToken(w, r),
 		})
@@ -167,7 +152,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, errEmailTaken) {
 		s.renderStudio(w, studioData{
-			Error: "этот почтовый адрес уже зарегистрирован — восстановите через него пароль или укажите другой",
+			Error: "этот почтовый адрес уже зарегистрирован: восстановите через него пароль или укажите другой",
 			Open:  "register",
 			CSRF:  s.csrfToken(w, r),
 		})
@@ -178,7 +163,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Аватар не обязателен; файл уже проверен выше, здесь только сохраняем.
 	if avatarData != nil {
 		name, err := s.writeAvatar(user, avatarData, avatarKind)
 		if err != nil {
@@ -199,8 +183,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/studio", http.StatusSeeOther)
 }
 
-// handleLogout — выход из авторизации. Сессия удаляется на сервере, cookie
-// очищается в браузере.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfOK(r) {
 		http.Redirect(w, r, "/studio", http.StatusSeeOther)
@@ -222,8 +204,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// handleProfile — смена регистрационных данных. Логин, как и требуется,
-// изменить нельзя: поле в форме только читается.
+// handleProfile смена регистрационных данных; логин не меняется.
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	_, user := s.sessionFrom(r)
 	if user == nil {
@@ -244,7 +225,6 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Смена пароля подтверждается текущим паролем.
 	if newPassword != "" {
 		if errText := validatePassword(newPassword); errText != "" {
 			s.renderStudio(w, studioData{User: user, Avatar: avatarURL(user), Error: errText, CSRF: s.csrfToken(w, r)})
@@ -264,8 +244,8 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			s.internalError(w, err)
 			return
 		}
-		// updatePassword удалила все сессии — включая текущую. Открываем
-		// новую, иначе после смены пароля пользователь мгновенно вылетит.
+		// updatePassword гасит все сессии, включая текущую: без новой
+		// сессии пользователь вылетит сразу после смены пароля.
 		if err := s.startSession(r.Context(), w, r, user); err != nil {
 			s.internalError(w, err)
 			return
@@ -310,14 +290,13 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleForgot — заявка на восстановление пароля. Ответ всегда одинаковый:
-// иначе форма выдаёт, какие почты зарегистрированы на сайте.
+// handleForgot заявка на восстановление пароля; ответ всегда одинаковый,
+// иначе форма выдала бы, какие почты зарегистрированы на сайте.
 func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
-	// Лимит запросов (бюджет auth.forgot) — в middleware Register.
 	ip := webutil.ClientIP(r)
 
 	if !s.csrfOK(r) {
-		s.loginWall(w, r, "форма устарела — попробуйте ещё раз")
+		s.loginWall(w, r, "форма устарела: попробуйте ещё раз")
 		return
 	}
 
@@ -339,7 +318,7 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 				"Кто-то (надеемся, вы) запросил смену пароля на сайте %s.\n"+
 				"Перейдите по ссылке, чтобы задать новый пароль:\n\n%s\n\n"+
 				"Ссылка действует один час и только один раз.\n"+
-				"Если вы ничего не запрашивали — просто проигнорируйте письмо.\n",
+				"Если вы ничего не запрашивали, просто проигнорируйте письмо.\n",
 			user.Login, s.cfg.BaseURL, link,
 		)
 
@@ -353,43 +332,36 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SMTP не настроен — показываем ссылку прямо на экране (как разрешено
-	// методичкой). Иначе ссылки на экране нет: её знает только владелец почты.
-	// Модальное окно здесь не открываем: ответ и так виден на странице.
+	// Ссылку на экране отдаём только localhost: на публичном сайте любой
+	// мог бы запросить сброс чужого аккаунта и получить рабочую ссылку.
 	data := studioData{
-		Message: "если почта указана верно — письмо со ссылкой отправлено",
+		Message: "если почта указана верно: письмо со ссылкой отправлено",
 		CSRF:    s.csrfToken(w, r),
 	}
-	// Ссылку на экране показываем только localhost-запросам. На публичном
-	// сайте иначе любой мог бы запросить сброс чужого аккаунта и получить
-	// рабочую ссылку: без работающего SMTP показывать её нельзя никому.
 	if link != "" && (!s.cfg.SMTP.Configured() || mailErr != nil) {
 		loopback := isLoopback(ip)
 		switch {
 		case loopback && mailErr != nil:
 			data.ResetLink = link
-			data.Message = "письмо не ушло — ссылка показана здесь и сохранена в файл"
+			data.Message = "письмо не ушло: ссылка показана здесь и сохранена в файл"
 		case loopback:
 			data.ResetLink = link
 			data.Message = "SMTP не настроен, поэтому ссылка показана здесь и сохранена в файл"
 		case mailErr != nil:
-			// Файл в outbox остаётся — администратор достанет его сам.
-			s.log.Warn("сброс пароля: письмо не доставлено, ссылка не показана — запрос не с localhost",
+			s.log.Warn("сброс пароля: письмо не доставлено, ссылка не показана, запрос не с localhost",
 				"login", user.Login, "err", mailErr)
-			data.Message = "письмо не удалось отправить — напишите администратору"
+			data.Message = "письмо не удалось отправить: напишите администратору"
 		default:
-			// Письмо не «не ушло», его некому слать: почта не настроена.
-			// Сообщение об этом должно отличаться от сбоя отправки — иначе
-			// администратор ищет поломку там, где её нет.
-			s.log.Warn("сброс пароля: SMTP не настроен, ссылка не показана — запрос не с localhost",
+			// Почта не настроена, а не «письмо не ушло»: сообщения должны
+			// отличаться, иначе администратор ищет поломку там, где её нет.
+			s.log.Warn("сброс пароля: SMTP не настроен, ссылка не показана, запрос не с localhost",
 				"login", user.Login)
-			data.Message = "восстановление пароля пока не настроено — напишите администратору"
+			data.Message = "восстановление пароля пока не настроено: напишите администратору"
 		}
 	}
 	s.renderStudio(w, data)
 }
 
-// handleResetForm — страница с формой нового пароля по ссылке из письма.
 func (s *Server) handleResetForm(w http.ResponseWriter, r *http.Request) {
 	tokenValue := r.URL.Query().Get("token")
 	if tokenValue == "" {
@@ -399,13 +371,12 @@ func (s *Server) handleResetForm(w http.ResponseWriter, r *http.Request) {
 	s.renderReset(w, resetData{Token: tokenValue, CSRF: s.csrfToken(w, r)})
 }
 
-// handleResetApply — применение нового пароля. Токен одноразовый.
 func (s *Server) handleResetApply(w http.ResponseWriter, r *http.Request) {
 	tokenValue := r.PostFormValue("token")
 	password := r.PostFormValue("password")
 
 	if !s.csrfOK(r) {
-		s.renderReset(w, resetData{Token: tokenValue, Error: "форма устарела — откройте ссылку из письма заново", CSRF: s.csrfToken(w, r)})
+		s.renderReset(w, resetData{Token: tokenValue, Error: "форма устарела: откройте ссылку из письма заново", CSRF: s.csrfToken(w, r)})
 		return
 	}
 	if errText := validatePassword(password); errText != "" {
@@ -419,10 +390,9 @@ func (s *Server) handleResetApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		// Сбой хранилища — не «ссылка сгорела»: показываем правдивое
-		// сообщение и пишем сбой в лог.
+		// Сбой хранилища, а не «ссылка сгорела»: правдивое сообщение и сбой в лог.
 		s.log.Error("сброс: хранилище недоступно", "err", err)
-		s.renderReset(w, resetData{Error: "не удалось проверить ссылку — попробуйте позже", CSRF: s.csrfToken(w, r)})
+		s.renderReset(w, resetData{Error: "не удалось проверить ссылку: попробуйте позже", CSRF: s.csrfToken(w, r)})
 		return
 	}
 
@@ -461,9 +431,6 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 
 // --- внутренние помощники обработчиков ---
 
-// startSession открывает сессию и ставит cookie. Cookie ставим на 30 дней:
-// пользователь, не нажавший «выйти», остаётся авторизованным и в следующем
-// сеансе браузера.
 func (s *Server) startSession(ctx context.Context, w http.ResponseWriter, r *http.Request, user *User) error {
 	tokenValue, _, err := s.createSession(ctx, user.ID)
 	if err != nil {
@@ -473,9 +440,9 @@ func (s *Server) startSession(ctx context.Context, w http.ResponseWriter, r *htt
 	return nil
 }
 
-// sessionFrom достаёт сессию и пользователя по cookie запроса. Ошибку
-// хранилища не путаем с отсутствием сессии: падение базы — это сбой,
-// который надо увидеть в логе, а не молчаливый разлогин всех.
+// sessionFrom достаёт сессию и пользователя по cookie. Ошибку хранилища
+// не путаем с отсутствием сессии: иначе падение базы выглядит как
+// молчаливый разлогин всех.
 func (s *Server) sessionFrom(r *http.Request) (*Session, *User) {
 	ctx := r.Context()
 
@@ -495,7 +462,7 @@ func (s *Server) sessionFrom(r *http.Request) (*Session, *User) {
 
 	user, err := s.userByID(ctx, sess.UserID)
 	if errors.Is(err, store.ErrNotFound) {
-		// Пользователь удалён, а сессия осталась — приберём её.
+		// Пользователь удалён, а сессия осталась: приберём её.
 		s.deleteSession(ctx, cookie.Value)
 		return nil, nil
 	}
@@ -506,9 +473,8 @@ func (s *Server) sessionFrom(r *http.Request) (*Session, *User) {
 	return sess, user
 }
 
-// csrfToken отдаёт CSRF-подпись форм и при необходимости выдаёт анонимному
-// посетителю cookie с ней. У авторизованного подпись привязана к сессии —
-// её подделать нельзя даже при подмене cookie.
+// csrfToken отдаёт подпись форм; у авторизованного она привязана к сессии
+// и не подделывается даже при подмене cookie.
 func (s *Server) csrfToken(w http.ResponseWriter, r *http.Request) string {
 	if sess, _ := s.sessionFrom(r); sess != nil {
 		return sess.CSRF
@@ -526,9 +492,9 @@ func (s *Server) csrfToken(w http.ResponseWriter, r *http.Request) string {
 	return value
 }
 
-// csrfOK сверяет присланную подпись с ожидаемой: у авторизованного — с
-// подписью сессии, у гостя — с cookie (double submit). Сравнение за
-// константное время — чтобы подбор не определялся по времени ответа.
+// csrfOK сверяет подпись: у авторизованного с подписью сессии, у гостя
+// с cookie (double submit). Сравнение в константное время, чтобы подбор
+// не определялся по времени ответа.
 func (s *Server) csrfOK(r *http.Request) bool {
 	got := r.PostFormValue("csrf")
 	if got == "" {
@@ -544,13 +510,11 @@ func (s *Server) csrfOK(r *http.Request) bool {
 	return err == nil && cookie.Value != "" && subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(got)) == 1
 }
 
-// isLoopback — адрес пришёл с самого сервера (localhost).
 func isLoopback(ip string) bool {
 	parsed := net.ParseIP(ip)
 	return parsed != nil && parsed.IsLoopback()
 }
 
-// loginWall — страница закрытого раздела с открытой вкладкой входа.
 func (s *Server) loginWall(w http.ResponseWriter, r *http.Request, errText string) {
 	s.renderStudio(w, studioData{
 		Error: errText,
@@ -559,13 +523,12 @@ func (s *Server) loginWall(w http.ResponseWriter, r *http.Request, errText strin
 	})
 }
 
-// internalError — непредвиденная ошибка: в ответ ничего лишнего не уходит.
+// internalError непредвиденная ошибка: детали в ответ не уходят.
 func (s *Server) internalError(w http.ResponseWriter, err error) {
 	s.log.Error("внутренняя ошибка", "err", err)
 	http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
 }
 
-// firstError возвращает первую непустую ошибку валидации.
 func firstError(errs ...string) string {
 	for _, e := range errs {
 		if e != "" {
@@ -575,7 +538,6 @@ func firstError(errs ...string) string {
 	return ""
 }
 
-// renderStudio и renderReset — отрисовка страниц (шаблоны в templates.go).
 func (s *Server) renderStudio(w http.ResponseWriter, data studioData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -592,7 +554,6 @@ func (s *Server) renderReset(w http.ResponseWriter, data resetData) {
 	}
 }
 
-// renderVault — отрисовка закрытого раздела (шаблон в templates.go).
 func (s *Server) renderVault(w http.ResponseWriter, data studioData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

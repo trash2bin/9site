@@ -10,26 +10,19 @@ import (
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
-// tooMany — ответ при исчерпанном бюджете заявок. Middleware уже выставил
-// Retry-After и записал срабатывание в лог с именем бюджета.
+// tooMany ответ при исчерпанном бюджете; Retry-After уже поставил middleware.
 func (s *Server) tooMany(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "слишком много заявок — попробуйте позже", http.StatusTooManyRequests)
+	http.Error(w, "слишком много заявок: попробуйте позже", http.StatusTooManyRequests)
 }
 
-// handleSignup принимает форму Sign Up и сохраняет заявку в leads.
-// Схема PRG: после сохранения — редирект обратно с ?sent=1, чтобы
-// обновление страницы не повторяло отправку.
-//
-// Защита от спама: honeypot (скрытое поле company — человек его не
-// заполняет), лимитер по адресу и проверка Origin. CSRF не нужен: форма
-// анонимная и публичная, мутирует только таблицу заявок.
+// handleSignup принимает форму Sign Up, сохраняет заявку, далее PRG-редирект
+// с ?sent=1. Защита: honeypot, лимитер и Origin; CSRF не нужен, форма анонимна.
 func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
-	// Лимит заявок висит middleware в Register; здесь остаётся только
-	// адрес — он идёт в заявку и в журнал действий.
+	// Адрес идёт в заявку и журнал, тот же ключ считает лимит в Register.
 	ip := webutil.ClientIP(r)
 
-	// Запрос с чужого сайта (или подделанный Origin) отсекаем: браузер
-	// Origin присылает всегда, curl и старые браузеры — нет.
+	// Запрос с чужого сайта отсекаем, пустой Origin пропускаем: браузер
+	// присылает его всегда, curl и старые браузеры не присылают.
 	if origin := r.Header.Get("Origin"); origin != "" && origin != s.baseOrigin() {
 		s.log.Warn("форма Sign Up: чужой Origin", "ip", ip, "origin", origin)
 		http.Error(w, "запрос с чужого сайта", http.StatusForbidden)
@@ -42,7 +35,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Honeypot: заполненное скрытое поле означает бота. Отвечаем как
-	// успешной — бот не должен понять, что раскрыт.
+	// успешной, бот не должен понять, что раскрыт.
 	if strings.TrimSpace(r.PostFormValue("company")) != "" {
 		s.log.Info("форма Sign Up: отсеян бот по honeypot", "ip", ip)
 		http.Redirect(w, r, "/maket#contact", http.StatusSeeOther)
@@ -62,8 +55,8 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Заявка — побочный эффект: её потеря не должна ломать ответ, но в
-	// лог идёт громкой ошибкой. Контекст без отмены: заявка уже принята.
+	// Потеря заявки не должна ломать ответ: сбой уходит в лог громкой
+	// ошибкой. Контекст без отмены, заявка уже принята.
 	if err := s.store.SaveLead(context.WithoutCancel(r.Context()), lead); err != nil {
 		s.log.Error("заявка не сохранена", "err", err)
 	}
@@ -72,7 +65,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/maket?sent=1#contact", http.StatusSeeOther)
 }
 
-// baseOrigin — разрешённый источник для заголовка Origin: тот же сайт.
+// baseOrigin разрешённый источник для Origin: тот же сайт.
 func (s *Server) baseOrigin() string {
 	u, err := url.Parse(s.baseURL)
 	if err != nil || u.Scheme == "" {

@@ -1,20 +1,7 @@
 package webutil
 
-// Централизованные ограничители частоты.
-//
-// Раньше у каждой фичи был свой экземпляр лимитера со своим const'ом
-// порога, а ключ (адрес клиента) считался руками в каждом обработчике:
-// список лимитов жил в голове и в коде, а забытая строка ClientIP(r)
-// превращала лимит в «один общий на всех» — невидимую на локальной
-// разработке аварию. Теперь счётчиков один — реестр Limits; что ограничено
-// и насколько — таблица бюджетов в main.go, а сюда приходят только имена.
-//
-// Алгоритм — скользящее окно на отметках времени (не фиксированное: в
-// фиксированном окне на границе сброса атакующий проталкивает двойную
-// дозу). Всё живёт в памяти одного процесса: ни одной записи в базу на
-// запрос. Перезапуск сервиса закономерно сбрасывает лимиты — для
-// персонального сайта это свойство, а не недостаток: застрявший адрес
-// не наказывается навечно.
+// Ограничители частоты: один реестр Limits на процесс, таблица бюджетов в main,
+// сюда приходят имена. Окно скользящее, счёт в памяти: перезапуск его сбрасывает.
 
 import (
 	"errors"
@@ -23,46 +10,38 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 )
 
-// Budget — сколько действий разрешено одному ключу (обычно адресу клиента)
+// Budget сколько действий разрешено одному ключу (обычно адресу клиента)
 // за скользящее окно.
 type Budget struct {
 	Limit  int
 	Window time.Duration
 }
 
-// BudgetLogger — что нужно реестру от логгера: одно предупреждение на
-// каждое срабатывание лимита, чтобы «почему у меня ничего не работает»
-// было видно в журнале, а не только на экране. Интерфейс объявлен здесь,
-// у потребителя: реализация (logging.Logger) собирается в main.
-type BudgetLogger interface {
-	Warn(msg string, args ...any)
-}
-
-// nopBudgetLogger — заглушка, когда логгер не передан (тесты).
-type nopBudgetLogger struct{}
-
-func (nopBudgetLogger) Warn(string, ...any) {}
-
-// Limits — единый реестр ограничителей частоты процесса. Один на всю
-// программу, создаётся в main и раздаётся срезам через Middleware.
+// Limits единый реестр ограничителей частоты: создаётся в main и
+// раздаётся срезам через Middleware.
 type Limits struct {
-	// budgets — неизменяемая после старта таблица: имя → порог.
+	// budgets неизменяемая после старта таблица: имя → порог.
 	budgets map[string]Budget
-	log     BudgetLogger
+	log     *logging.Logger
 
 	mu sync.Mutex
-	// hits — имя бюджета → ключ → отметки попыток внутри окна.
+	// hits имя бюджета → ключ → отметки попыток внутри окна.
 	hits map[string]map[string][]time.Time
-	// attempts — сколько попыток записано всего (не ключей): счётчик
+	// attempts сколько попыток записано всего, не ключей: счётчик
 	// дешёвой периодической чистки карты от позабытых адресов.
 	attempts int
 }
 
-// NewLimits собирает реестр по таблице бюджетов. Невалидный порог — ошибка
-// на старте, а не лимит «ноль минус бесконечность» в проде.
-func NewLimits(budgets map[string]Budget, log BudgetLogger) (*Limits, error) {
+// NewLimits собирает реестр по таблице бюджетов; невалидный порог валит
+// запуск, а не оставляет прод без лимита.
+func NewLimits(budgets map[string]Budget, log *logging.Logger) (*Limits, error) {
+	if log == nil {
+		return nil, errors.New("лимиты: нужен логгер")
+	}
 	if len(budgets) == 0 {
 		return nil, errors.New("лимиты: нужен хотя бы один бюджет")
 	}
@@ -71,12 +50,9 @@ func NewLimits(budgets map[string]Budget, log BudgetLogger) (*Limits, error) {
 			return nil, errors.New("лимиты: бюджет без имени")
 		}
 		if b.Limit < 1 || b.Window <= 0 {
-			return nil, fmt.Errorf("лимиты: бюджет %q — limit=%d, window=%s: нужны положительные значения",
+			return nil, fmt.Errorf("лимиты: бюджет %q (limit=%d, window=%s): нужны положительные значения",
 				name, b.Limit, b.Window)
 		}
-	}
-	if log == nil {
-		log = nopBudgetLogger{}
 	}
 	return &Limits{
 		budgets: budgets,
@@ -85,20 +61,18 @@ func NewLimits(budgets map[string]Budget, log BudgetLogger) (*Limits, error) {
 	}, nil
 }
 
-// budget ищет бюджет по имени и падает, если его нет: опечатка в имени
-// означала бы проверку, которая не выполняется вовсе, — дыру, невидимую
-// и в логе, и при чтении кода. Таблица объявлена в main и обязана знать
-// обо всех именах, которые зовут срезы.
+// budget ищет бюджет по имени и падает, если его нет: опечатка означала бы
+// проверку, которая не выполняется, дыру, невидимую и в логе, и в коде.
 func (l *Limits) budget(name string) Budget {
 	b, ok := l.budgets[name]
 	if !ok {
-		panic(fmt.Sprintf("лимиты: бюджет %q не объявлен (таблица бюджетов — в main.go)", name))
+		panic(fmt.Sprintf("лимиты: бюджет %q не объявлен (таблица бюджетов в main.go)", name))
 	}
 	return b
 }
 
-// Allow проверяет бюджет и фиксирует попытку: false — лимит исчерпан,
-// действию лучше отказать. Ключ считает вызывающий (обычно ClientIP).
+// Allow проверяет бюджет и фиксирует попытку: false значит лимит исчерпан.
+// Ключ считает вызывающий, обычно ClientIP.
 func (l *Limits) Allow(name, key string) bool {
 	budget := l.budget(name)
 
@@ -119,10 +93,7 @@ func (l *Limits) Allow(name, key string) bool {
 	return true
 }
 
-// RetryAfter — сколько ждать до следующей разрешённой попытки; ноль —
-// можно прямо сейчас. Нужен для заголовка Retry-After: без него клиент
-// не знает, когда вернуться, и просто повторяет запрос, снова упираясь
-// в лимит.
+// RetryAfter сколько ждать до следующей разрешённой попытки, ноль можно прямо сейчас.
 func (l *Limits) RetryAfter(name, key string) time.Duration {
 	budget := l.budget(name)
 
@@ -134,24 +105,18 @@ func (l *Limits) RetryAfter(name, key string) time.Duration {
 	if len(fresh) < budget.Limit {
 		return 0
 	}
-	// Отметки идут по порядку, первая — самая старая.
+	// Отметки идут по порядку, первая самая старая.
 	return fresh[0].Add(budget.Window).Sub(now)
 }
 
-// Middleware оборачивает обработчик маршрута: ключ — ClientIP запроса
-// (в одном месте, а не в каждом обработчике), при исчерпании бюджета
-// ставит Retry-After, пишет warn в лог и вызывает over вместо next.
-//
-// over рисует свой ответ: срез авторизации возвращает страницу студии
-// со своим текстом и CSRF, публичная форма — обычный 429. nil — дежурный
-// текст для тех, кому достаточно статуса.
+// Middleware оборачивает обработчик маршрута: при исчерпании бюджета ставит
+// Retry-After, пишет warn и вызывает over вместо next, nil даёт дежурный 429.
 func (l *Limits) Middleware(name string, over, next http.Handler) http.Handler {
-	// Проверка здесь, а не при первом запросе: незаданный бюджет должен
-	// упасть на старте, пока сервер ещё не начал обслуживать людей.
+	// Бюджет проверяем сразу, а не при первом запросе: незаданный валит запуск.
 	l.budget(name)
 	if over == nil {
 		over = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "слишком много запросов — попробуйте позже", http.StatusTooManyRequests)
+			http.Error(w, "слишком много запросов: попробуйте позже", http.StatusTooManyRequests)
 		})
 	}
 
@@ -163,8 +128,7 @@ func (l *Limits) Middleware(name string, over, next http.Handler) http.Handler {
 		}
 
 		wait := l.RetryAfter(name, key)
-		// Целые секунды вверх: меньше секунды клиент не ждёт, а частоту
-		// заголовка он понимает только в секундах.
+		// Целые секунды вверх: меньше секунды клиент не ждёт, частота заголовка в секундах.
 		secs := int((wait + time.Second - 1) / time.Second)
 		if secs < 1 {
 			secs = 1
@@ -175,9 +139,8 @@ func (l *Limits) Middleware(name string, over, next http.Handler) http.Handler {
 	})
 }
 
-// freshLocked выкидывает протухшие отметки ключа и возвращает свежие.
-// Вызывается под мьютексом; срезает на месте, чтобы память на ключ не
-// росла выше budget.Limit.
+// freshLocked выкидывает протухшие отметки ключа; срезает на месте под
+// мьютексом, чтобы память не росла выше budget.Limit.
 func (l *Limits) freshLocked(name, key string, budget Budget, now time.Time) []time.Time {
 	if l.hits[name] == nil {
 		l.hits[name] = map[string][]time.Time{}
@@ -193,8 +156,7 @@ func (l *Limits) freshLocked(name, key string, budget Budget, now time.Time) []t
 	return fresh
 }
 
-// sweep выкидывает ключи, у которых не осталось свежих попыток ни в одном
-// бюджете, — карта не растёт бесконечно под разнотравьем ботов.
+// sweep выкидывает ключи без свежих попыток: карта не растёт бесконечно под ботами.
 func (l *Limits) sweep(now time.Time) {
 	l.attempts = 0
 	for name, keys := range l.hits {

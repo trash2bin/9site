@@ -6,10 +6,6 @@ import (
 	"errors"
 )
 
-// Этот файл — только SQL по таблице users. Вся механика над ним (валидация
-// полей, bcrypt-хэши, сессии) живёт в пакете auth: store отвечает за то,
-// ГДЕ лежит, auth — за то, ЧТО это и когда допустимо.
-
 const userColumns = `id, login, pass_hash, full_name, email, avatar`
 
 // CreateUser добавляет пользователя. Логин занят → ErrLoginTaken,
@@ -21,9 +17,8 @@ func (s *Store) CreateUser(ctx context.Context, login, passHash, fullName, email
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
-			// Какой индекс сработал — логин или почта: у каждого своё
-			// сообщение в форме. Текст ошибки SQLite не разбираем
-			// (может меняться между версиями) — спрашиваем базу.
+			// Какой индекс сработал, логин или почта: спрашиваем базу,
+			// текст ошибки SQLite не парсим.
 			if _, e := s.UserByLogin(ctx, login); errors.Is(e, ErrNotFound) {
 				return nil, ErrEmailTaken
 			}
@@ -39,7 +34,7 @@ func (s *Store) CreateUser(ctx context.Context, login, passHash, fullName, email
 	return &User{ID: id, Login: login, PassHash: passHash, FullName: fullName, Email: email}, nil
 }
 
-// UserByLogin ищет пользователя по логину. ErrNotFound — «не найден».
+// UserByLogin ищет пользователя по логину: ErrNotFound, если его нет.
 func (s *Store) UserByLogin(ctx context.Context, login string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
 		`SELECT `+userColumns+` FROM users WHERE login = $1`, login,
@@ -53,7 +48,7 @@ func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
 	))
 }
 
-// UserByEmail ищет пользователя по почте — для сброса пароля.
+// UserByEmail ищет пользователя по почте (для сброса пароля).
 func (s *Store) UserByEmail(ctx context.Context, email string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
 		`SELECT `+userColumns+` FROM users WHERE email = $1 COLLATE NOCASE`, email,
@@ -68,24 +63,21 @@ func (s *Store) scanUser(row *sql.Row) (*User, error) {
 	return &u, nil
 }
 
-// UpdateProfile меняет данные профиля (логин, как и положено, не меняется).
-// Почта уже занята другим аккаунтом → ErrEmailTaken.
+// UpdateProfile меняет данные профиля (логин не меняется): почта уже
+// занята другим аккаунтом → ErrEmailTaken.
 func (s *Store) UpdateProfile(ctx context.Context, id int64, fullName, email string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET full_name = $1, email = $2 WHERE id = $3`,
 		fullName, email, id,
 	)
 	if err != nil && isUniqueViolation(err) {
-		// Логин не меняется — конфликт возможен только по почте.
 		return ErrEmailTaken
 	}
 	return err
 }
 
-// UpdatePassword меняет только хэш пароля. Отзыв всех сессий пользователя —
-// не хранительное дело: правило «смена пароля гасит все cookie» живёт в
-// auth и выполняется там через Sessions.DeleteUserSessions. Так смена
-// пароля продолжит отзывать куки и тогда, когда сессии переедут в Redis.
+// UpdatePassword меняет только хэш пароля: отзыв сессий не здесь, правило
+// «смена пароля гасит все cookie» выполняет вызывающий (auth).
 func (s *Store) UpdatePassword(ctx context.Context, id int64, passHash string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET pass_hash = $1 WHERE id = $2`, passHash, id,

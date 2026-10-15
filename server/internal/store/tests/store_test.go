@@ -1,7 +1,5 @@
-// Package store_test — тесты хранилища, вынесенные в подкаталог tests/:
-// ls store/ показывает только рабочие файлы. Всё нужное берётся по
-// экспортному API; исключение — проверки внутренних таблиц
-// (schema_migrations), они открывают базу напрямую через rawDB.
+// Package store_test - тесты хранилища по экспортному API; исключение -
+// проверки внутренних таблиц (schema_migrations) через rawDB.
 package store_test
 
 import (
@@ -27,9 +25,8 @@ func testStore(t *testing.T) *store.Store {
 	return s
 }
 
-// rawDB открывает базу напрямую, мимо хранилища: внешнему тестовому
-// пакету нужны проверки внутренних таблиц (schema_migrations), а второй
-// соедин в режиме WAL спокойно соседствует с открытым Store.
+// rawDB открывает базу напрямую, мимо хранилища: нужны проверки внутренних
+// таблиц, второй соедин в режиме WAL спокойно соседствует с открытым Store.
 func rawDB(t *testing.T, dir string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(dir, "site.db"))
@@ -45,9 +42,8 @@ func rawDB(t *testing.T, dir string) *sql.DB {
 
 // --- миграции ---
 
-// TestMigrateIdempotent: повторный старт не накатывает те же миграции
-// заново, а проверки схемы (уникальность почты, строка счётчика)
-// переживают перезапуск.
+// TestMigrateIdempotent: повторный старт не накатывает те же миграции заново,
+// проверки схемы (уникальность почты, строка счётчика) переживают перезапуск.
 func TestMigrateIdempotent(t *testing.T) {
 	dir := t.TempDir()
 
@@ -59,28 +55,34 @@ func TestMigrateIdempotent(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
+	db := rawDB(t, dir)
+	var before int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&before); err != nil {
+		t.Fatalf("schema_migrations: %v", err)
+	}
+	if before < 1 {
+		t.Fatalf("после первого старта нет применённых миграций")
+	}
+
 	s2, err := store.Open(dir)
 	if err != nil {
 		t.Fatalf("повторный Open: %v", err)
 	}
 	defer func() { _ = s2.Close() }()
 
-	db := rawDB(t, dir)
 	var count int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("schema_migrations: %v", err)
 	}
-	if count < 2 {
-		t.Fatalf("ожидались 2 применённые миграции, получили %d", count)
+	if count != before {
+		t.Fatalf("повторный Open изменил число миграций: было %d, стало %d", before, count)
 	}
 
-	// Строка счётчика одна — повторная вставка не задублировалась.
 	var visits int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM visits`).Scan(&visits); err != nil || visits != 1 {
 		t.Fatalf("строка счётчика должна быть одна: %v, %d", err, visits)
 	}
 
-	// Уникальность почты пережила перезапуск (индекс на месте).
 	ctx := context.Background()
 	if _, err := s2.CreateUser(ctx, "первый", "хэш", "", "a@b.ru"); err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -130,6 +132,85 @@ func TestMigrateRejectsFutureSchema(t *testing.T) {
 	}
 }
 
+// --- проверки схемы 0001: уникальность почты и каскад ---
+
+func TestPartialUniqueEmail(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+
+	// Частичный UNIQUE с WHERE email != "": пустые адреса дублироваться могут,
+	// иначе второй аккаунт без почты невозможен в принципе.
+	var idxSQL string
+	if err := rawDB(t, dir).QueryRow(
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'users_email_unique'`,
+	).Scan(&idxSQL); err != nil {
+		t.Fatalf("индекс users_email_unique: %v", err)
+	}
+	if !strings.Contains(idxSQL, `WHERE email != ''`) {
+		t.Fatalf("индекс не частичный: %s", idxSQL)
+	}
+
+	if _, err := s.CreateUser(ctx, "noemail1", "h", "", ""); err != nil {
+		t.Fatalf("первый без почты: %v", err)
+	}
+	if _, err := s.CreateUser(ctx, "noemail2", "h", "", ""); err != nil {
+		t.Fatalf("второй без почты: %v", err)
+	}
+
+	// Непустой адрес дублировать нельзя, регистр не важен.
+	if _, err := s.CreateUser(ctx, "withmail", "h", "", "Dup@Example.com"); err != nil {
+		t.Fatalf("первая почта: %v", err)
+	}
+	if _, err := s.CreateUser(ctx, "other", "h", "", "dup@example.com"); !errors.Is(err, store.ErrEmailTaken) {
+		t.Fatalf("дубль почты: ожидали ErrEmailTaken, получили %v", err)
+	}
+}
+
+func TestDeleteUserCascades(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+
+	u, err := s.CreateUser(ctx, "ivan", "hash", "", "")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.CreateSession(ctx, u.ID, "sess", "csrf", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := s.CreateResetToken(ctx, u.ID, "rt", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateResetToken: %v", err)
+	}
+
+	db := rawDB(t, dir)
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		t.Fatalf("foreign_keys: %v", err)
+	}
+	res, err := db.Exec(`DELETE FROM users WHERE id = $1`, u.ID)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		t.Fatalf("удалилось %d строк (err %v), ждали 1", n, err)
+	}
+
+	if _, err := s.SessionByTokenHash(ctx, "sess"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("сессия должна уйти каскадом: %v", err)
+	}
+	if _, err := s.ConsumeResetToken(ctx, "rt"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("токен должен уйти каскадом: %v", err)
+	}
+}
+
 // --- счётчик ---
 
 func TestCounter(t *testing.T) {
@@ -166,7 +247,7 @@ func TestUsers(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	// Повторный логин — store.ErrLoginTaken.
+	// Логин уникален без учёта регистра.
 	if _, err := s.CreateUser(ctx, "IVAN", "hash", "", ""); !errors.Is(err, store.ErrLoginTaken) {
 		t.Fatalf("ожидался ErrLoginTaken, получили: %v", err)
 	}
@@ -235,7 +316,7 @@ func TestSessions(t *testing.T) {
 		t.Fatalf("ожидался ErrNotFound, получили: %v", err)
 	}
 
-	// Протухшие чистятся, свежие — нет.
+	// Чистятся только протухшие сессии.
 	if err := s.CreateSession(ctx, u.ID, "старая", "csrf", time.Now().Add(-time.Hour)); err != nil {
 		t.Fatalf("CreateSession (старая): %v", err)
 	}
@@ -247,7 +328,6 @@ func TestSessions(t *testing.T) {
 		t.Fatalf("свежая сессия не должна удаляться: %v", err)
 	}
 
-	// Смена пароля гасит все сессии пользователя.
 	if err := s.CreateSession(ctx, u.ID, "другая", "csrf", expires); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -277,12 +357,10 @@ func TestResetTokenSingleUse(t *testing.T) {
 		t.Fatalf("ConsumeResetToken: %v, userID=%d", err, userID)
 	}
 
-	// Повторный переход по той же ссылке не работает.
 	if _, err := s.ConsumeResetToken(ctx, "rt1"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("повторное использование должно вернуть ErrNotFound: %v", err)
 	}
 
-	// Просроченный токен тоже не работает.
 	if err := s.CreateResetToken(ctx, u.ID, "просроченный", time.Now().Add(-time.Minute)); err != nil {
 		t.Fatalf("CreateResetToken: %v", err)
 	}
@@ -316,8 +394,8 @@ func TestActionsAndLeads(t *testing.T) {
 
 // --- импорт счётчика из старого visits.dat ---
 
-// TestImportVisits — счётчик переносится один раз, дальше файл .bak и
-// повторные старты ничего не делают; растущий счётчик не затирается.
+// TestImportVisits: счётчик переносится один раз (дальше файл .bak),
+// растущий счётчик не затирается.
 func TestImportVisits(t *testing.T) {
 	dir := t.TempDir()
 	visits := filepath.Join(dir, "visits.dat")
@@ -335,7 +413,6 @@ func TestImportVisits(t *testing.T) {
 	if n, err := s.Visits(ctx); err != nil || n != 77 {
 		t.Fatalf("Visits: %v, ожидалось 77, получили %d", err, n)
 	}
-	// Файл убран в .bak, но не удалён.
 	if _, err := os.Stat(visits); !os.IsNotExist(err) {
 		t.Fatal("visits.dat должен быть переименован")
 	}
@@ -343,14 +420,12 @@ func TestImportVisits(t *testing.T) {
 		t.Fatalf(".bak должен существовать: %v", err)
 	}
 
-	// Повторный старт: файла уже нет — no-op.
 	imported, err = s.ImportVisits(ctx, visits)
 	if err != nil || imported {
 		t.Fatalf("повторный импорт должен быть no-op: %v, imported=%v", err, imported)
 	}
 
-	// Счётчик уже растёт (77 + 1 визит) — старое значение 77 из файла
-	// не должно затирать его.
+	// Растущий счётчик (77 + 1 визит) не должен затираться значением 77 из файла.
 	if _, err := s.Hit(ctx); err != nil {
 		t.Fatalf("Hit: %v", err)
 	}
@@ -366,9 +441,8 @@ func TestImportVisits(t *testing.T) {
 	}
 }
 
-// TestImportVisitsReportsGarbage — мусорный visits.dat не теряется молча:
-// файл уходит в .bak (импорт сходится к нулю различий), но ошибка
-// возвращается — оператор видит её в логе один раз на старте.
+// TestImportVisitsReportsGarbage: мусорный visits.dat не теряется молча,
+// файл уходит в .bak, ошибка возвращается оператору в лог.
 func TestImportVisitsReportsGarbage(t *testing.T) {
 	dir := t.TempDir()
 	visits := filepath.Join(dir, "visits.dat")
@@ -386,14 +460,13 @@ func TestImportVisitsReportsGarbage(t *testing.T) {
 	if _, err := os.Stat(visits + ".bak"); err != nil {
 		t.Fatalf(".bak должен существовать (значение восстановимо руками): %v", err)
 	}
-	// Повторный старт — уже без файла — чисто закрывается.
 	if _, err := s.ImportVisits(context.Background(), visits); err != nil {
 		t.Fatalf("повторный импорт: %v", err)
 	}
 }
 
-// TestConsumeResetTokenParallel — два параллельных перехода по одной
-// ссылке: ровно один успех, второй — store.ErrNotFound.
+// TestConsumeResetTokenParallel: два параллельных перехода по одной
+// ссылке, ровно один успех и один store.ErrNotFound.
 func TestConsumeResetTokenParallel(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -427,15 +500,14 @@ func TestConsumeResetTokenParallel(t *testing.T) {
 		}
 	}
 	if ok != 1 || denied != 1 {
-		t.Fatalf("успехов %d, отказов %d — ждали 1 и 1", ok, denied)
+		t.Fatalf("успехов %d, отказов %d, ждали 1 и 1", ok, denied)
 	}
 }
 
-// --- почта не должна дублироваться (баг: у email не было UNIQUE) ---
+// --- почта не должна дублироваться ---
 
-// TestCreateUserRejectsDuplicateEmail: без индекса второй аккаунт с тем же
-// адресом заводился молча, и UserByEmail возвращал произвольную строку —
-// письмо со сбросом пароля уходило не тому человеку. Регистр не важен.
+// TestCreateUserRejectsDuplicateEmail: дубль почты (регистр не важен)
+// должен давать ErrEmailTaken.
 func TestCreateUserRejectsDuplicateEmail(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -447,8 +519,7 @@ func TestCreateUserRejectsDuplicateEmail(t *testing.T) {
 		t.Fatalf("дубль почты должен давать ErrEmailTaken, получили: %v", err)
 	}
 
-	// Пустая почта (легаси-пользователи) дублироваться может — индекс
-	// частичный, незанятые адреса не мешают.
+	// Пустая почта дублироваться может: индекс частичный.
 	if _, err := s.CreateUser(ctx, "безпочты1", "хэш", "", ""); err != nil {
 		t.Fatalf("пустая почта: %v", err)
 	}
@@ -457,8 +528,8 @@ func TestCreateUserRejectsDuplicateEmail(t *testing.T) {
 	}
 }
 
-// TestUpdateProfileRejectsDuplicateEmail: смена почты в профиле обходитает
-// ту же проверку — иначе профиль незаметно крадёт чужой адрес для сброса.
+// TestUpdateProfileRejectsDuplicateEmail: смена почты в профиле проходит
+// ту же проверку, иначе профиль незаметно крадёт чужой адрес для сброса.
 func TestUpdateProfileRejectsDuplicateEmail(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -473,16 +544,12 @@ func TestUpdateProfileRejectsDuplicateEmail(t *testing.T) {
 	if err := s.UpdateProfile(ctx, u2.ID, "", "a@b.ru"); !errors.Is(err, store.ErrEmailTaken) {
 		t.Fatalf("смена на занятую почту должна давать ErrEmailTaken, получили: %v", err)
 	}
-	// Своё же по прежнему можно (смена имени без смены почты).
 	if err := s.UpdateProfile(ctx, u2.ID, "Имя", "other@b.ru"); err != nil {
 		t.Fatalf("обновление без смены почты: %v", err)
 	}
 }
 
-// TestSnapshot: копия снимается на живой базе и содержит те же данные;
-// на месте оригинала ничего не меняется. Копия нужна деплою как настоящий
-// откат — миграции накатываются при старте, старый бинарник без старой
-// базы не откатывается.
+// TestSnapshot: копия снимается на живой базе, оригинал не меняется.
 func TestSnapshot(t *testing.T) {
 	dir := t.TempDir()
 	s, err := store.Open(dir)
@@ -505,7 +572,6 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("Snapshot: %v", err)
 	}
 
-	// Копия — самостоятельная база: открываем её напрямую и сверяем данные.
 	db := rawDB(t, dir)
 	defer func() { _ = db.Close() }()
 	if _, err := db.Exec("ATTACH DATABASE ? AS snap", dst); err != nil {
@@ -522,12 +588,10 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("в снимке счётчик = %d (err %v), ждали 1", n, err)
 	}
 
-	// Повторный снимок в существующий файл не затирает старый.
 	if err := store.Snapshot(src, dst); err == nil {
 		t.Fatal("повторный снимок в существующий файл должен отказать")
 	}
 
-	// Несуществующий источник — ошибка, а не пустая копия.
 	if err := store.Snapshot(filepath.Join(dir, "нет.db"), filepath.Join(dir, "пусто.db")); err == nil {
 		t.Fatal("снимок несуществующей базы должен отказать")
 	}

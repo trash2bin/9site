@@ -7,11 +7,8 @@
     <title>Ivan's Little Web — фотоальбом</title>
     <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
 
-    <!-- Два стиля. Обычный включён, печатный выключен атрибутом disabled:
-         кнопка «версия для печати» меняет эти флаги, и браузер перечитывает
-         каскад без перезагрузки страницы.
-         ?v= — версия файла: она меняется вместе с правками CSS, иначе
-         браузер подставляет из кэша старую копию и изменения не видны. -->
+    <!-- Два стиля: печатный выключен атрибутом disabled, кнопка меняет флаги
+         без перезагрузки страницы. ?v= — версия файла для кэша браузера. -->
     <link id="style-print-off" rel="stylesheet" href="/catalog.css?v=1" />
     <link id="style-print-on" rel="stylesheet" href="/print.css?v=2" disabled />
   </head>
@@ -53,9 +50,7 @@
             недоступные варианты гаснут — выбрать их всё равно нельзя, под них ничего не осталось.
           </p>
 
-          <!-- Панель инструментов: кнопка печати, сброс фильтра и счётчик
-               найденного. Стоит над колонками, чтобы не перерисовываться
-               вместе с сеткой карточек. -->
+          <!-- Панель над колонками: её не перерисовывает JS вместе с сеткой. -->
           <div class="catalog-tools">
             <button type="button" class="tool-btn" data-print-toggle aria-pressed="false">версия для печати</button>
             <button type="button" class="tool-btn" data-print-now>распечатать</button>
@@ -63,8 +58,7 @@
             <span class="filter-count" id="filter-count" aria-live="polite"></span>
           </div>
 
-          <!-- Две колонки: фильтр и сетка снимков. Разметка обеих пустая:
-               её целиком собирает JS из src/render.ts. -->
+          <!-- Обе колонки пустые: разметку целиком собирает JS из src/render.ts. -->
           <div class="catalog-layout">
             <aside class="filters-panel" id="filters" aria-label="Фильтр фотоальбома"></aside>
             <div class="parts-grid album-grid" id="elements"></div>

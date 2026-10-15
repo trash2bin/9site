@@ -1,8 +1,5 @@
-// Package webutil — общие для нескольких пакетов мелочи: определение
-// адреса клиента (ClientIP), централизованные ограничители частоты
-// (Limits, отдельный файл limits.go) и проверка адреса почты (ValidEmail).
-// Живут здесь, а не копируются: нужно и авторизации (перебор пароля), и
-// публичной форме Sign Up (спам-заявки).
+// Package webutil общие для нескольких пакетов мелочи: адрес клиента
+// (ClientIP), ограничители частоты (Limits) и проверка почты (ValidEmail).
 package webutil
 
 import (
@@ -12,14 +9,8 @@ import (
 	"strings"
 )
 
-// ClientIP возвращает реальный адрес клиента.
-//
-// За nginx RemoteAddr всегда 127.0.0.1, поэтому смотрим заголовки.
-// X-Real-IP надёжнее X-Forwarded-For: nginx дописывает реальный адрес к
-// клиентской строке ($proxy_add_x_forwarded_for), и полная строка XFF
-// подделывается клиентом — атакующий варьирует свой префикс и получает
-// сколько угодно «адресов» для обхода лимита. Поэтому из XFF берём только
-// последний адрес (шлёт ближайший прокси), а лучше — X-Real-IP.
+// ClientIP возвращает реальный адрес клиента: за nginx RemoteAddr всегда 127.0.0.1.
+// Из X-Forwarded-For берём только последний адрес: свой префикс в начало подставляет клиент, чтобы обойти лимит.
 func ClientIP(r *http.Request) string {
 	if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
 		return ip
@@ -37,11 +28,11 @@ func ClientIP(r *http.Request) string {
 	return host
 }
 
-// emailPattern — проверка адреса почты, одна на все формы сайта (auth и
-// leads): без спорных крайностей RFC, но мусор отсекает.
+// emailPattern почта, одна на все формы (auth и leads): без крайностей
+// RFC, но мусор отсекает.
 var emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
-// ValidEmail сообщает, похож ли адрес на почту. 254 — предел длины адреса.
+// ValidEmail похож ли адрес на почту; 254 предел длины.
 func ValidEmail(email string) bool {
 	return len(email) <= 254 && emailPattern.MatchString(email)
 }

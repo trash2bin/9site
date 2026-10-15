@@ -79,7 +79,7 @@ func openStore(t *testing.T) *store.Store {
 	return st
 }
 
-// TestIndexCounter — главная отдаётся с подставленным числом визитов.
+// TestIndexCounter: главная отдаётся с подставленным числом визитов.
 func TestIndexCounter(t *testing.T) {
 	st := openStore(t)
 	t.Cleanup(func() { _ = st.Close() })
@@ -93,7 +93,7 @@ func TestIndexCounter(t *testing.T) {
 	}
 }
 
-// TestIndexFallbackOnDBFailure — сбой базы не должен ронять главную:
+// TestIndexFallbackOnDBFailure: сбой базы не должен ронять главную:
 // страница рисуется с последним известным числом визитов.
 func TestIndexFallbackOnDBFailure(t *testing.T) {
 	st := openStore(t)
@@ -113,7 +113,7 @@ func TestIndexFallbackOnDBFailure(t *testing.T) {
 	}
 }
 
-// TestPageRoutes — красивые адреса и подстановка «спасибо» по ?sent=1.
+// TestPageRoutes: красивые адреса и подстановка «спасибо» по ?sent=1.
 func TestPageRoutes(t *testing.T) {
 	st := openStore(t)
 	t.Cleanup(func() { _ = st.Close() })

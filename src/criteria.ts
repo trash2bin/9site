@@ -21,7 +21,6 @@ export type CriterionKey = (typeof CRITERIA)[number]["key"];
 export type FilterState = Partial<Record<CriterionKey, string[]>>;
 export type Availability = Partial<Record<CriterionKey, Set<string>>>;
 
-/** Проверяет, что строка — имя описанного критерия. */
 export function isCriterionKey(value: string): value is CriterionKey {
   return CRITERIA.some(({ key }) => key === value);
 }

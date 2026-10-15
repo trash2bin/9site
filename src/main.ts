@@ -9,7 +9,6 @@ const FILTERS = "#filters";
 const PHOTOS_GRID = "#elements";
 const RESULT_COUNT = "#filter-count";
 
-/** Применяет состояние и обновляет карточки, счётчик и доступность чекбоксов. */
 function refresh(): void {
   const state = readState(FILTERS);
   const matchingPhotos = applyFilters(PHOTOS, state);

@@ -1,9 +1,6 @@
-/** Умная фильтрация и доступность значений фотоальбома. */
-
 import { CRITERIA, type Availability, type FilterState } from "./criteria.js";
 import type { Photo } from "./model.js";
 
-/** Проверяет, подходит ли снимок под все выбранные значения. */
 function matches(photo: Photo, state: FilterState): boolean {
   return CRITERIA.every(({ key, valueOf }) => {
     const selected = state[key] ?? [];
@@ -11,14 +8,13 @@ function matches(photo: Photo, state: FilterState): boolean {
   });
 }
 
-/** Выбирает снимки, совпадающие с текущим состоянием фильтра. */
 export function applyFilters(photos: Photo[], state: FilterState): Photo[] {
   return photos.filter((photo) => matches(photo, state));
 }
 
 /**
- * Для каждого варианта проверяет, найдётся ли хотя бы один снимок при
- * текущих выборах в остальных группах. Результат используется для disabled.
+ * Для каждого варианта проверяет, найдётся ли снимок при выборах в остальных
+ * группах; результат используется для disabled.
  */
 export function getAvailability(photos: Photo[], state: FilterState): Availability {
   const availability: Availability = {};

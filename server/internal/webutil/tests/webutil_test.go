@@ -1,6 +1,7 @@
 package webutil_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
-// TestClientIP — реальный адрес клиента за nginx. XFF целиком брать
+// TestClientIP: реальный адрес клиента за nginx. XFF целиком брать
 // нельзя: клиент подставляет себе префикс и получает сколько угодно
 // «адресов» для обхода лимита.
 func TestClientIP(t *testing.T) {
@@ -22,7 +24,7 @@ func TestClientIP(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "без заголовков — из RemoteAddr",
+			name:   "без заголовков: из RemoteAddr",
 			remote: "192.0.2.1:1234",
 			want:   "192.0.2.1",
 		},
@@ -65,7 +67,7 @@ func TestClientIP(t *testing.T) {
 	}
 }
 
-// TestValidEmail — одна проверка почты на все формы сайта (auth и leads).
+// TestValidEmail: одна проверка почты на все формы сайта (auth и leads).
 func TestValidEmail(t *testing.T) {
 	for _, c := range []struct {
 		email string
@@ -88,14 +90,14 @@ func TestValidEmail(t *testing.T) {
 // testLimits собирает реестр с маленьким окном для тестов.
 func testLimits(t *testing.T, budgets map[string]webutil.Budget) *webutil.Limits {
 	t.Helper()
-	l, err := webutil.NewLimits(budgets, nil)
+	l, err := webutil.NewLimits(budgets, testLogger(t))
 	if err != nil {
 		t.Fatalf("NewLimits: %v", err)
 	}
 	return l
 }
 
-// TestLimitsAllow — базовое поведение: бюджет вычитается, другие ключи и
+// TestLimitsAllow: базовое поведение: бюджет вычитается, другие ключи и
 // другие бюджеты не страдают, протухшее окно освобождает лимит.
 func TestLimitsAllow(t *testing.T) {
 	l := testLimits(t, map[string]webutil.Budget{
@@ -109,7 +111,7 @@ func TestLimitsAllow(t *testing.T) {
 		}
 	}
 
-	// Четвёртая — за лимитом; но другой ключ и другой бюджет свободны.
+	// Четвёртая уже за лимитом; другой ключ и другой бюджет свободны.
 	if l.Allow("auth.login", "a") {
 		t.Fatal("4-я попытка должна быть в лимите")
 	}
@@ -123,14 +125,14 @@ func TestLimitsAllow(t *testing.T) {
 		t.Fatal("form.signup с лимитом 1 должен отказать со второй попытки")
 	}
 
-	// Окно протухло — попытки снова разрешены.
+	// Окно протухло, попытки снова разрешены.
 	time.Sleep(70 * time.Millisecond)
 	if !l.Allow("auth.login", "a") {
 		t.Fatal("после протухания окна лимит должен сброситься")
 	}
 }
 
-// TestLimitsRetryAfter — сколько ждать: ноль, пока бюджет цел, и около
+// TestLimitsRetryAfter: сколько ждать: ноль, пока бюджет цел, и около
 // окна, когда исчерпан. Заголовок Retry-After без этого бессмыслен.
 func TestLimitsRetryAfter(t *testing.T) {
 	window := 500 * time.Millisecond
@@ -148,7 +150,7 @@ func TestLimitsRetryAfter(t *testing.T) {
 	}
 }
 
-// TestLimitsUnknownBudget — опечатка в имени бюджета обязана быть слышна
+// TestLimitsUnknownBudget: опечатка в имени бюджета обязана быть слышна
 // сразу, а не превращаться в лимит, которого нет.
 func TestLimitsUnknownBudget(t *testing.T) {
 	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1, Window: time.Minute}})
@@ -161,7 +163,17 @@ func TestLimitsUnknownBudget(t *testing.T) {
 	l.Allow("auth.loging", "a")
 }
 
-// TestNewLimitsRejectsBadBudget — нулевой порог не должен дожить до прода.
+// testLogger логгер в никуда: реестру он обязателен, тестам не нужен.
+func testLogger(t *testing.T) *logging.Logger {
+	t.Helper()
+	log, err := logging.New(logging.Config{Output: io.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return log
+}
+
+// TestNewLimitsRejectsBadBudget: нулевой порог не должен дожить до прода.
 func TestNewLimitsRejectsBadBudget(t *testing.T) {
 	for name, budgets := range map[string]map[string]webutil.Budget{
 		"пусто":      {},
@@ -169,13 +181,13 @@ func TestNewLimitsRejectsBadBudget(t *testing.T) {
 		"окно ноль":  {"x": {Limit: 1, Window: 0}},
 		"без имени":  {"": {Limit: 1, Window: time.Minute}},
 	} {
-		if _, err := webutil.NewLimits(budgets, nil); err == nil {
+		if _, err := webutil.NewLimits(budgets, testLogger(t)); err == nil {
 			t.Fatalf("%s: ожидалась ошибка", name)
 		}
 	}
 }
 
-// TestLimitsMiddleware — ключ считает сам middleware (адрес клиента, а не
+// TestLimitsMiddleware: ключ считает сам middleware (адрес клиента, а не
 // хендлер), при лимите идёт Retry-After и вызывается свой обработчик
 // ответа, а не следующий по маршруту.
 func TestLimitsMiddleware(t *testing.T) {
@@ -191,7 +203,7 @@ func TestLimitsMiddleware(t *testing.T) {
 	})
 	h := l.Middleware("auth.login", over, next)
 
-	// Ключ — из X-Real-IP, как за nginx.
+	// Ключ берётся из X-Real-IP, как за nginx.
 	post := func(ip string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "/auth/login", nil)
 		r.Header.Set("X-Real-IP", ip)
@@ -223,7 +235,7 @@ func TestLimitsMiddleware(t *testing.T) {
 	}
 }
 
-// TestLimitsConcurrent — реестр общий на весь процесс: параллельные
+// TestLimitsConcurrent: реестр общий на весь процесс: параллельные
 // запросы не должны ломать счётчик (гонку ловит -race).
 func TestLimitsConcurrent(t *testing.T) {
 	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1000, Window: time.Minute}})
@@ -242,7 +254,7 @@ func TestLimitsConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-// TestMiddlewareUnknownBudgetPanicsAtStart — незаданный бюджет должен
+// TestMiddlewareUnknownBudgetPanicsAtStart: незаданный бюджет должен
 // упасть при регистрации маршрута, а не при первом посетителе.
 func TestMiddlewareUnknownBudgetPanicsAtStart(t *testing.T) {
 	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1, Window: time.Minute}})
@@ -254,7 +266,7 @@ func TestMiddlewareUnknownBudgetPanicsAtStart(t *testing.T) {
 	_ = l.Middleware("auth.forgot", nil, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 }
 
-// TestMiddlewareDefaultOver — без своего обработчика дежурный текст и 429.
+// TestMiddlewareDefaultOver: без своего обработчика дежурный текст и 429.
 func TestMiddlewareDefaultOver(t *testing.T) {
 	l := testLimits(t, map[string]webutil.Budget{"form.signup": {Limit: 1, Window: time.Minute}})
 	h := l.Middleware("form.signup", nil, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
