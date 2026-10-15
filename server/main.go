@@ -156,7 +156,7 @@ func run() error {
 	// прогоняются в home.New — битый staticRoot валит запуск, а не отдаёт
 	// посетителю пустую страницу.
 	homeServer, err := home.New(home.Config{
-		StaticRoot: envOr("STATIC_ROOT", "public"),
+		StaticRoot: envOr("STATIC_ROOT", publicRoot()),
 		Log:        logger,
 		Store:      st,
 	})
@@ -221,6 +221,19 @@ func envOr(name, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// publicRoot ищет каталог статики, когда STATIC_ROOT не задан: локально
+// сайт запускают и из корня (go run ./server), и из server/ (go run
+// main.go), поэтому один "public" относительно cwd не всегда верный.
+// В проде путь всегда абсолютный из юнита — тут только локальное удобство.
+func publicRoot() string {
+	for _, dir := range []string{"public", filepath.Join("..", "public")} {
+		if fi, err := os.Stat(filepath.Join(dir, "index.html")); err == nil && !fi.IsDir() {
+			return dir
+		}
+	}
+	return "public"
 }
 
 // envInt читает числовую переменную окружения. Мусор вместо числа — не
