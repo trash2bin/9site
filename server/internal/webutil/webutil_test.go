@@ -1,7 +1,10 @@
 package webutil
 
 import (
+	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -60,27 +63,190 @@ func TestClientIP(t *testing.T) {
 	}
 }
 
-// TestLimiter — не больше limit действий за окно, протухшее забывается.
-func TestLimiter(t *testing.T) {
-	l := NewLimiter(3, 50*time.Millisecond)
+// testLimits собирает реестр с маленьким окном для тестов.
+func testLimits(t *testing.T, budgets map[string]Budget) *Limits {
+	t.Helper()
+	l, err := NewLimits(budgets, nil)
+	if err != nil {
+		t.Fatalf("NewLimits: %v", err)
+	}
+	return l
+}
+
+// TestLimitsAllow — базовое поведение: бюджет вычитается, другие ключи и
+// другие бюджеты не страдают, протухшее окно освобождает лимит.
+func TestLimitsAllow(t *testing.T) {
+	l := testLimits(t, map[string]Budget{
+		"auth.login":  {Limit: 3, Window: 60 * time.Millisecond},
+		"form.signup": {Limit: 1, Window: time.Minute},
+	})
 
 	for i := 0; i < 3; i++ {
-		if l.Throttle("a") {
+		if !l.Allow("auth.login", "a") {
 			t.Fatalf("попытка %d не должна быть в лимите", i+1)
 		}
 	}
-	if !l.Throttle("a") {
+
+	// Четвёртая — за лимитом; но другой ключ и другой бюджет свободны.
+	if l.Allow("auth.login", "a") {
 		t.Fatal("4-я попытка должна быть в лимите")
 	}
-
-	// Другой адрес не страдает.
-	if l.Throttle("b") {
-		t.Fatal("адрес b не должен зависеть от a")
+	if !l.Allow("auth.login", "b") {
+		t.Fatal("ключ b не должен зависеть от a")
+	}
+	if !l.Allow("form.signup", "a") {
+		t.Fatal("бюджет form.signup не должен зависеть от auth.login")
+	}
+	if l.Allow("form.signup", "a") {
+		t.Fatal("form.signup с лимитом 1 должен отказать со второй попытки")
 	}
 
 	// Окно протухло — попытки снова разрешены.
-	time.Sleep(60 * time.Millisecond)
-	if l.Throttle("a") {
+	time.Sleep(70 * time.Millisecond)
+	if !l.Allow("auth.login", "a") {
 		t.Fatal("после протухания окна лимит должен сброситься")
+	}
+}
+
+// TestLimitsRetryAfter — сколько ждать: ноль, пока бюджет цел, и около
+// окна, когда исчерпан. Заголовок Retry-After без этого бессмыслен.
+func TestLimitsRetryAfter(t *testing.T) {
+	window := 500 * time.Millisecond
+	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1, Window: window}})
+
+	if d := l.RetryAfter("auth.login", "a"); d != 0 {
+		t.Fatalf("до первой попытки ждать нечего, получили %s", d)
+	}
+	if !l.Allow("auth.login", "a") {
+		t.Fatal("первая попытка должна проходить")
+	}
+	d := l.RetryAfter("auth.login", "a")
+	if d <= 0 || d > window {
+		t.Fatalf("после исчерпания ждать должны до окна (%s), получили %s", window, d)
+	}
+}
+
+// TestLimitsUnknownBudget — опечатка в имени бюджета обязана быть слышна
+// сразу, а не превращаться в лимит, которого нет.
+func TestLimitsUnknownBudget(t *testing.T) {
+	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1, Window: time.Minute}})
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("неизвестный бюджет должен паниковать, а не молча пропускать")
+		}
+	}()
+	l.Allow("auth.loging", "a")
+}
+
+// TestNewLimitsRejectsBadBudget — нулевой порог не должен дожить до прода.
+func TestNewLimitsRejectsBadBudget(t *testing.T) {
+	for name, budgets := range map[string]map[string]Budget{
+		"пусто":      {},
+		"лимит ноль": {"x": {Limit: 0, Window: time.Minute}},
+		"окно ноль":  {"x": {Limit: 1, Window: 0}},
+		"без имени":  {"": {Limit: 1, Window: time.Minute}},
+	} {
+		if _, err := NewLimits(budgets, nil); err == nil {
+			t.Fatalf("%s: ожидалась ошибка", name)
+		}
+	}
+}
+
+// TestLimitsMiddleware — ключ считает сам middleware (адрес клиента, а не
+// хендлер), при лимите идёт Retry-After и вызывается свой обработчик
+// ответа, а не следующий по маршруту.
+func TestLimitsMiddleware(t *testing.T) {
+	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 2, Window: time.Minute}})
+
+	var reached int
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached++
+		_, _ = w.Write([]byte("ок"))
+	})
+	over := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "перебор", http.StatusTooManyRequests)
+	})
+	h := l.Middleware("auth.login", over, next)
+
+	// Ключ — из X-Real-IP, как за nginx.
+	post := func(ip string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/auth/login", nil)
+		r.Header.Set("X-Real-IP", ip)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+
+	if w := post("198.51.100.1"); w.Code != http.StatusOK {
+		t.Fatalf("1-я попытка: статус %d", w.Code)
+	}
+	if w := post("198.51.100.1"); w.Code != http.StatusOK {
+		t.Fatalf("2-я попытка: статус %d", w.Code)
+	}
+	w := post("198.51.100.1")
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("3-я попытка: статус %d, ждали 429", w.Code)
+	}
+	if w.Header().Get("Retry-After") == "" {
+		t.Fatal("при лимите обязан стоять Retry-After")
+	}
+	if reached != 2 {
+		t.Fatalf("next вызван %d раз, ждали 2", reached)
+	}
+
+	// Другой адрес не задет.
+	if w := post("198.51.100.2"); w.Code != http.StatusOK {
+		t.Fatalf("другой адрес: статус %d", w.Code)
+	}
+}
+
+// TestLimitsConcurrent — реестр общий на весь процесс: параллельные
+// запросы не должны ломать счётчик (гонку ловит -race).
+func TestLimitsConcurrent(t *testing.T) {
+	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1000, Window: time.Minute}})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				l.Allow("auth.login", "key")
+				l.RetryAfter("auth.login", "key")
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// TestMiddlewareUnknownBudgetPanicsAtStart — незаданный бюджет должен
+// упасть при регистрации маршрута, а не при первом посетителе.
+func TestMiddlewareUnknownBudgetPanicsAtStart(t *testing.T) {
+	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1, Window: time.Minute}})
+	defer func() {
+		if recover() == nil {
+			t.Fatal("незаданный бюджет должен паниковать на старте")
+		}
+	}()
+	_ = l.Middleware("auth.forgot", nil, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+}
+
+// TestMiddlewareDefaultOver — без своего обработчика дежурный текст и 429.
+func TestMiddlewareDefaultOver(t *testing.T) {
+	l := testLimits(t, map[string]Budget{"form.signup": {Limit: 1, Window: time.Minute}})
+	h := l.Middleware("form.signup", nil, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	r := httptest.NewRequest("POST", "/signup", nil)
+	if !l.Allow("form.signup", ClientIP(r)) {
+		t.Fatal("первая заявка должна проходить")
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("статус %d, ждали 429", w.Code)
+	}
+	if body := w.Body.String(); !strings.Contains(body, "слишком много запросов") {
+		t.Fatalf("дежурный текст не тот: %q", body)
 	}
 }

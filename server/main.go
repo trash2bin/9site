@@ -7,8 +7,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/ivan223/web1-personal-site/server/internal/auth"
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
@@ -33,8 +35,9 @@ type app struct {
 	// приходят параллельно.
 	lastVisits atomic.Int64
 
-	// signupLimit — ограничитель частоты заявок с публичной формы.
-	signupLimit *webutil.Limiter
+	// limits — централизованные ограничители частоты: одна таблица
+	// бюджетов на весь процесс (собирается в run), вешается на маршруты.
+	limits *webutil.Limits
 }
 
 func main() {
@@ -48,6 +51,14 @@ func main() {
 
 func run() error {
 	dataDir := envOr("DATA_DIR", "var")
+
+	// Отдельная команда «снять копию базы»: ею пользуется деплой перед
+	// рестартом. Миграции накатываются при старте нового бинарника, поэтому
+	// настоящий откат возможен только со снимком, снятым ДО старта. Копия
+	// снимается на живой базе (VACUUM INTO) — сервис останавливать не нужно.
+	if len(os.Args) == 3 && os.Args[1] == "backup" {
+		return store.Snapshot(filepath.Join(dataDir, "site.db"), os.Args[2])
+	}
 
 	// База открывается первой: логгер пишет её ошибки и дублирует действия
 	// пользователей в её журнал, поэтому создаётся уже с открытым store.
@@ -85,11 +96,42 @@ func run() error {
 		return fmt.Errorf("BASE_URL должен быть абсолютным адресом вида https://example.com, получено %q", baseURL)
 	}
 
+	// Ограничители частоты: вся таблица бюджетов здесь, в одном месте —
+	// срезы присылают только имена (auth.BudgetLogin и т.п.), порогов в
+	// своих пакетах больше нет. Порог любого бюджета переопределяется
+	// переменной окружения с тем же именем в верхнем регистре
+	// (LIMIT_AUTH_LOGIN=50), окно остаётся константой. Опечатка в имени
+	// или нулевой порог валит запуск, а не включает молча «лимита нет».
+	budgets := map[string]webutil.Budget{
+		auth.BudgetLogin:    {Limit: 20, Window: 10 * time.Minute},
+		auth.BudgetRegister: {Limit: 20, Window: 10 * time.Minute},
+		auth.BudgetForgot:   {Limit: 20, Window: 10 * time.Minute},
+		signupBudget:        {Limit: signupLimit, Window: signupWindow},
+	}
+	for name, b := range budgets {
+		budgets[name] = limitBudget(logger, name, b)
+	}
+	limits, err := webutil.NewLimits(budgets, logger)
+	if err != nil {
+		return fmt.Errorf("лимиты: %w", err)
+	}
+	// Список бюджетов в лог при старте: что ограничено и насколько —
+	// видно сразу, а не из кода.
+	names := make([]string, 0, len(budgets))
+	for name := range budgets {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		b := budgets[name]
+		logger.Info("лимит частоты", "бюджет", name, "лимит", b.Limit, "окно", b.Window)
+	}
+
 	a := &app{
-		log:         logger,
-		store:       st,
-		baseURL:     baseURL,
-		signupLimit: webutil.NewLimiter(signupLimit, signupWindow),
+		log:     logger,
+		store:   st,
+		baseURL: baseURL,
+		limits:  limits,
 	}
 
 	if err := a.checkIndex(); err != nil {
@@ -116,6 +158,7 @@ func run() error {
 		OutboxDir:  filepath.Join(dataDir, "outbox"),
 		BaseURL:    a.baseURL,
 		Log:        logger,
+		Throttle:   limits,
 		SMTP: auth.SMTPConfig{
 			// Провайдер (gmail|yandex|mailru) подставляет хост и порт
 			// сам; свой сервер задаётся через SMTP_HOST + SMTP_PORT.
@@ -152,13 +195,28 @@ func run() error {
 		mux.HandleFunc("GET "+route+"/{$}", a.pageHandler(file))
 	}
 
-	// Форма Sign Up со страницы /maket.
-	mux.HandleFunc("POST /signup", a.signupHandler)
+	// Форма Sign Up со страницы /maket — под бюджетом form.signup.
+	mux.Handle("POST /signup", a.limits.Middleware(signupBudget,
+		http.HandlerFunc(a.signupTooMany), http.HandlerFunc(a.signupHandler)))
 
 	a.log.Info("Ivan's Little Web запущен", "addr", "http://localhost:8080")
+
+	// Не хватает http.ListenAndServe только по одному аргументу: у него нет
+	// таймаутов, и висящее соединение держит горутину вечно. Настройки
+	// минимальные и продуманные: ReadHeaderTimeout гасит slowloris на
+	// заголовках, IdleTimeout — забытые keep-alive-соединения. ReadTimeout
+	// и WriteTimeout не ставим специально: общий таймер оборвал бы и
+	// загрузку аватара, и отдачу статики на медленном канале; тело запроса
+	// и так ограничивает nginx (client_max_body_size).
+	srv := &http.Server{
+		Addr:              "127.0.0.1:8080",
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	// Слушаем только localhost: наружу сайт открывает nginx. Прямой доступ
 	// к порту включал бы обход лимитеров подделкой X-Real-IP.
-	return http.ListenAndServe("127.0.0.1:8080", mux)
+	return srv.ListenAndServe()
 }
 
 // journal — адаптер «журнал действий» (logging.ActionSink) поверх store.

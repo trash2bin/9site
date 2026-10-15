@@ -136,23 +136,32 @@ func avatarExt(data []byte) (string, error) {
 	}
 }
 
-// saveAvatar проверяет и сохраняет загруженный файл под служебным именем.
-// Имя генерирует сервер: имя файла от пользователя нигде не используется.
-func (s *Server) saveAvatar(u *User, file multipartFile) (string, error) {
+// readAvatar читает и проверяет загруженный файл, возвращая содержимое
+// и расширение. Вызывается ДО создания пользователя: невалидный файл —
+// это ошибка формы, а не повод оставлять полузарегистрованный аккаунт
+// (раньше порядок был обратным: аккаунт создавался, форма показывала
+// ошибку, а повтор с исправленным файлом отвечал «логин уже занят»).
+func readAvatar(file multipartFile) (data []byte, ext string, err error) {
 	const maxAvatar = 512 << 10 // 512 КБ — с запасом на любую аватарку
 
-	data, err := io.ReadAll(io.LimitReader(file, maxAvatar+1))
+	data, err = io.ReadAll(io.LimitReader(file, maxAvatar+1))
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if len(data) > maxAvatar {
-		return "", fmt.Errorf("аватар больше 512 КБ")
+		return nil, "", fmt.Errorf("аватар больше 512 КБ")
 	}
-	ext, err := avatarExt(data)
+	ext, err = avatarExt(data)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
+	return data, ext, nil
+}
 
+// writeAvatar сохраняет уже проверенный файл под служебным именем и
+// удаляет прежний. Имя генерирует сервер: имя файла от пользователя
+// нигде не используется.
+func (s *Server) writeAvatar(u *User, data []byte, ext string) (string, error) {
 	// Имя вида u<id>-<случайное>.<ext>: не пересекается с чужими файлами и
 	// не содержит ничего из имени, присланного клиентом.
 	suffix := make([]byte, 6)

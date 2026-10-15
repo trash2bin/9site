@@ -482,3 +482,57 @@ func TestUpdateProfileRejectsDuplicateEmail(t *testing.T) {
 		t.Fatalf("обновление без смены почты: %v", err)
 	}
 }
+
+// TestSnapshot: копия снимается на живой базе и содержит те же данные;
+// на месте оригинала ничего не меняется. Копия нужна деплою как настоящий
+// откат — миграции накатываются при старте, старый бинарник без старой
+// базы не откатывается.
+func TestSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	ctx := context.Background()
+	if _, err := s.CreateUser(ctx, "keeper", "хэш", "Хранитель", "keep@b.ru"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if _, err := s.Hit(ctx); err != nil {
+		t.Fatalf("Hit: %v", err)
+	}
+
+	src := filepath.Join(dir, "site.db")
+	dst := filepath.Join(dir, "snapshot.db")
+	if err := store.Snapshot(src, dst); err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+
+	// Копия — самостоятельная база: открываем её напрямую и сверяем данные.
+	db := rawDB(t, dir)
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec("ATTACH DATABASE ? AS snap", dst); err != nil {
+		t.Fatalf("ATTACH снимка: %v", err)
+	}
+	defer func() { _, _ = db.Exec("DETACH DATABASE snap") }()
+
+	var login string
+	if err := db.QueryRow(`SELECT login FROM snap.users WHERE login = 'keeper'`).Scan(&login); err != nil {
+		t.Fatalf("в снимке нет пользователя: %v", err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT n FROM snap.visits WHERE id = 1`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("в снимке счётчик = %d (err %v), ждали 1", n, err)
+	}
+
+	// Повторный снимок в существующий файл не затирает старый.
+	if err := store.Snapshot(src, dst); err == nil {
+		t.Fatal("повторный снимок в существующий файл должен отказать")
+	}
+
+	// Несуществующий источник — ошибка, а не пустая копия.
+	if err := store.Snapshot(filepath.Join(dir, "нет.db"), filepath.Join(dir, "пусто.db")); err == nil {
+		t.Fatal("снимок несуществующей базы должен отказать")
+	}
+}

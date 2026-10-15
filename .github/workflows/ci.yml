@@ -92,7 +92,9 @@ jobs:
         run: shellcheck -S warning scripts/*.sh deploy/*.sh
 
       - name: go test
-        run: go test $(go list ./... | grep -v node_modules)
+        # -race обязателен: бэкенд теперь весь параллелённый (атомик счётчика,
+        # мьютексы лимитера, WAL), гонку ловит только эта проверка.
+        run: go test -race $(go list ./... | grep -v node_modules)
 
       - name: Build server
         run: go build -o /tmp/site-server ./server
@@ -111,6 +113,13 @@ jobs:
       vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
+    # Деплой не отменяется в пользу более свежего пуша. cancel-in-progress
+    # убил бы идущий rsync/рестарт на середине и оставил бы сервер с новым
+    # бинарником и старой статикой (или наоборот). Следующий деплой просто
+    # подождёт.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     env:
       # Only SSH_HOST and SSH_PRIVATE_KEY are required. The rest fall back
       # to defaults, so there is no need to override them.
@@ -118,6 +127,9 @@ jobs:
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
+      # Должен совпадать с DATA_DIR из 9site.service: тут считается путь к
+      # базе для резервной копии перед рестартом.
+      DATA_DIR: ${{ secrets.DATA_DIR || '/var/lib/9site' }}
       RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'sudo systemctl restart 9site' }}
       TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
       SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
@@ -151,9 +163,13 @@ jobs:
           # rsync сам создаёт отсутствующий public/, но mkdir не даёт
           # первому деплою упасть по неочевидной причине, если не создаст.
           $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/public' && chmod 755 '$DEPLOY_PATH/public'"
+          # Корневые страницы и стили выгружаются шаблоном, а не списком
+          # имён: новая страница сама попадает на сервер, без правки CI.
+          # Список имён здесь — это сайт, который на сервере отстаёт от
+          # репозитория, и первый же старт нового бинарника падает на
+          # startup-проверке отсутствующего файла.
           rsync -avz -e "$SSH_OPTS" \
-            public/index.html public/style.css public/design.html public/design.css \
-            public/catalog.html public/catalog.css public/print.css \
+            public/*.html public/*.css \
             "$TARGET:$DEPLOY_PATH/public/"
           # Слои стилей копируются отдельно: --delete-after убирает файлы,
           # оставшиеся на сервере от прежней разбивки, иначе public/css
@@ -174,14 +190,58 @@ jobs:
           # Install next to the old binary and swap with mv: a rename inside
           # one filesystem is atomic, so the service never goes a moment
           # without a binary and never hits "Text file busy".
+          #
+          # Прежний бинарник сохраняется как site-server.prev: работающий
+          # процесс держит свой inode, поэтому сервис не видит ни одного
+          # момента без файла, а откат становится одной командой.
           $SSH_OPTS "$TARGET" "
             install -m 755 /tmp/site-server.new '$DEPLOY_PATH/site-server.new' &&
+            if [ -f '$DEPLOY_PATH/site-server' ]; then
+              mv -f '$DEPLOY_PATH/site-server' '$DEPLOY_PATH/site-server.prev';
+            fi &&
             mv -f '$DEPLOY_PATH/site-server.new' '$DEPLOY_PATH/site-server' &&
             rm -f /tmp/site-server.new
           "
 
+      # Снимок базы снимается ДО рестарта — иначе он не откат: миграции
+      # накатываются при старте нового бинарника. Поэтому шаг идёт перед
+      # Restart, а не после.
+      #
+      # Побочный эффект полезный: снимок делает уже новый бинарник, то есть
+      # если тот вообще не запускается, деплой встаёт здесь — на сервере
+      # продолжает работать старый процесс, и сайт не падает.
+      - name: Backup database before restart
+        run: |
+          set -euo pipefail
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          $SSH_OPTS "$TARGET" "set -eu
+            mkdir -p '$DATA_DIR/backups'
+            if [ -f '$DATA_DIR/site.db' ]; then
+              '$DEPLOY_PATH/site-server' backup '$DATA_DIR/backups/site-$stamp.db'
+              # Держим последние 10 копий: бэкапы не копятся вечно.
+              cd '$DATA_DIR/backups'
+              ls -1t site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
+              echo 'Backup: $DATA_DIR/backups/site-$stamp.db'
+            else
+              echo 'site.db ещё нет — первый деплой, снимок пропущен'
+            fi"
+
       - name: Restart service
         run: $SSH_OPTS "$TARGET" "$RESTART_CMD"
+
+      # systemctl restart возвращает успех, даже если процесс упал через
+      # секунду (Restart=on-failure его поднимет заново). Отдельная проверка
+      # ловит цикл перезапусков: например, опечатку в SMTP-конфиге, из-за
+      # которой бинарник вообще не стартует.
+      - name: Check that the service is active
+        run: |
+          set -euo pipefail
+          state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
+          echo "service state: $state"
+          if [ "$state" != "active" ]; then
+            echo "Сервис не active — смотри journalctl -u 9site"
+            exit 1
+          fi
 
       # Check not only that the process started but that it actually
       # responds: the site is served and the closed files stay closed.
@@ -213,7 +273,20 @@ jobs:
           check http://127.0.0.1:8080/studio?auth=login 200
           check http://127.0.0.1:8080/vault             303
           check http://127.0.0.1:8080/css/auth/auth.css 200
+          # Восстановление пароля: страница по ссылке есть (без токена —
+          # редирект на окно входа), а POST-адреса входа/регистрации наружу
+          # не светятся — GET на них отдаёт 404.
+          check http://127.0.0.1:8080/reset             303
+          check http://127.0.0.1:8080/auth/register     404
+          check http://127.0.0.1:8080/auth/login        404
+          # Оглавления каталогов закрыты: иначе наружу уходит список файлов
+          # с именами и датами.
+          check http://127.0.0.1:8080/css/              404
+          check http://127.0.0.1:8080/css/auth/         404
+          check http://127.0.0.1:8080/assets/           404
+          check http://127.0.0.1:8080/js/               404
           # База авторизации и чужие файлы наружу не отдаются.
+          check http://127.0.0.1:8080/var/site.db       404
           check http://127.0.0.1:8080/var/auth.db   404
           check http://127.0.0.1:8080/avatars/u0-0.png 404
           check http://127.0.0.1:8080/main.go    404

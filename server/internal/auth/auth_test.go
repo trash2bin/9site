@@ -22,11 +22,21 @@ import (
 	"time"
 
 	"github.com/ivan223/web1-personal-site/server/internal/store"
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // testServer поднимает сервер авторизации во временном каталоге: базу
-// (реальную SQLite — тесты интеграционные) и каталоги файлов.
+// (реальную SQLite — тесты интеграционные) и каталоги файлов. Лимит
+// попыток заведомо большой, чтобы обычным тестам не мешать; лимитные
+// проверки зовут testServerBudget со своим числом.
 func testServer(t *testing.T) (*httptest.Server, *Server) {
+	t.Helper()
+	return testServerBudget(t, 1000)
+}
+
+// testServerBudget — тот же сервер, но с заданным лимитом на каждый
+// бюджет модуля.
+func testServerBudget(t *testing.T, limit int) (*httptest.Server, *Server) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -37,11 +47,14 @@ func testServer(t *testing.T) (*httptest.Server, *Server) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
+	limits := testThrottle(t, limit)
+
 	srv, err := New(Config{
 		Users:      st,
 		Sessions:   st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
+		Throttle:   limits,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +69,22 @@ func testServer(t *testing.T) (*httptest.Server, *Server) {
 	srv.cfg.BaseURL = ts.URL
 
 	return ts, srv
+}
+
+// testThrottle — реестр лимитов для тестов: бюджеты модуля с заданным
+// порогом. Тот же *webutil.Limits, что вешает main на маршруты.
+func testThrottle(t *testing.T, limit int) Throttle {
+	t.Helper()
+
+	limits, err := webutil.NewLimits(map[string]webutil.Budget{
+		BudgetLogin:    {Limit: limit, Window: time.Minute},
+		BudgetRegister: {Limit: limit, Window: time.Minute},
+		BudgetForgot:   {Limit: limit, Window: time.Minute},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return limits
 }
 
 // client — браузерный клиент с cookie-банкой: cookie переживают запросы,
@@ -425,15 +454,18 @@ func TestProfileUpdate(t *testing.T) {
 	}
 }
 
+// testGIF — валидная картинка для загрузки аватара: обнаружение типа
+// идёт по содержимому, а не по имени файла.
+var testGIF = []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04" +
+	"\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+
 // TestAvatar — картинка сохраняется и отдаётся, файлы-не-картинки
 // отвергаются (иначе под видом аватара заливается stored XSS).
 func TestAvatar(t *testing.T) {
 	ts, srv := testServer(t)
 	c := client(t)
 
-	gif := []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04" +
-		"\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
-	register(t, c, ts.URL, "shooter", "secret-pass-1", "", "shooter@example.com", bytes.NewReader(gif))
+	register(t, c, ts.URL, "shooter", "secret-pass-1", "", "shooter@example.com", bytes.NewReader(testGIF))
 
 	user, err := srv.userByLogin(context.Background(), "shooter")
 	if err != nil {
@@ -457,6 +489,145 @@ func TestAvatar(t *testing.T) {
 		strings.NewReader("<html><script>alert(1)</script></html>"))
 	if !bytes.Contains(page, []byte("изображением")) {
 		t.Fatalf("не-картинка не отвергнута:\n%s", page)
+	}
+}
+
+// TestRegisterBadAvatarDoesNotCreateUser: раньше невалидный аватар
+// оставлял полузарегистрованный аккаунт. Форма показывала ошибку, но
+// логин и почта уже были заняты: повтор с исправленным файлом отвечал
+// «логин уже занят», а сброс пароля шёл бы на почту никем не подтверждённой
+// регистрации. Ошибка файла — ошибка формы, аккаунт появляться не должен.
+func TestRegisterBadAvatarDoesNotCreateUser(t *testing.T) {
+	ts, srv := testServer(t)
+	c := client(t)
+
+	// Случай 1: файл не картинка.
+	code, page := register(t, c, ts.URL, "halfdone", "secret-pass-1", "Пол Данных", "half@example.com",
+		strings.NewReader("<html><script>alert(1)</script></html>"))
+	if code == http.StatusSeeOther {
+		t.Fatal("файл-не-картинка не должен проходить регистрацию")
+	}
+	if !bytes.Contains(page, []byte("изображением")) {
+		t.Fatalf("форма должна объяснить проблему с аватаром:\n%s", page)
+	}
+	if _, err := srv.userByLogin(context.Background(), "halfdone"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("после неудачного аватара аккаунт не должен существовать, получили: %v", err)
+	}
+
+	// Случай 2: картинка больше лимита — та же история.
+	big := make([]byte, 0, 520<<10)
+	for len(big) <= 512<<10 {
+		big = append(big, testGIF...)
+	}
+	code, page = register(t, c, ts.URL, "bigfella", "secret-pass-1", "", "big@example.com", bytes.NewReader(big))
+	if code == http.StatusSeeOther {
+		t.Fatal("аватар больше 512 КБ не должен проходить регистрацию")
+	}
+	if !bytes.Contains(page, []byte("512 КБ")) {
+		t.Fatalf("форма должна объяснить про размер:\n%s", page)
+	}
+	if _, err := srv.userByLogin(context.Background(), "bigfella"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("аккаунт создался при невалидном аватаре: %v", err)
+	}
+
+	// Исправленный файл проходит — не «логин уже занят».
+	if code, page := register(t, c, ts.URL, "halfdone", "secret-pass-1", "Пол Данных", "half@example.com",
+		bytes.NewReader(testGIF)); code != http.StatusSeeOther {
+		t.Fatalf("повтор с исправленным аватаром должен пройти:\n%s", page)
+	}
+	user, err := srv.userByLogin(context.Background(), "halfdone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Avatar == "" {
+		t.Fatal("аватар со второй попытки не сохранился")
+	}
+}
+
+// TestForgotWithoutSMTPHidesLink: без работающей почты ссылка на экран
+// постороннему не попадает (иначе любой мог бы запросить сброс чужого
+// аккаунта и получить рабочую ссылку), а сообщение отличает «почта не
+// настроена» от настоящего сбоя отправки — иначе администратор ищет
+// поломку там, где её нет.
+func TestForgotWithoutSMTPHidesLink(t *testing.T) {
+	ts, srv := testServer(t)
+	c := client(t)
+
+	register(t, c, ts.URL, "mailless", "secret-pass-1", "", "mailless@example.com", nil)
+	logout(t, c, ts.URL)
+
+	form := url.Values{"email": {"mailless@example.com"}, "csrf": {formCSRF(t, c, ts.URL)}}
+	req, err := http.NewRequest("POST", ts.URL+"/auth/forgot", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// Запрос пришёл не с самого сервера — как у любого посетителя сайта.
+	req.Header.Set("X-Real-IP", "203.0.113.5")
+
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+
+	if bytes.Contains(page, []byte("/reset?token=")) {
+		t.Fatal("рабочая ссылка сброса пароля показана постороннему")
+	}
+	if !bytes.Contains(page, []byte("не настроено")) {
+		t.Fatalf("форма должна честно сказать, что почта не настроена:\n%s", page)
+	}
+
+	// Письмо при этом не потеряно: администратор достанет его из outbox.
+	matches, _ := filepath.Glob(filepath.Join(srv.outboxDir, "*.eml"))
+	if len(matches) != 1 {
+		t.Fatalf("в почтовом ящике %d писем, ждали 1", len(matches))
+	}
+}
+
+// TestLoginThrottled — лимит попыток входа: после бюджета форма возвращается
+// со своей страницей студии (а не дежурным 429) и заголовком Retry-After.
+// Раньше проверка жила внутри обработчика — теперь маршрутом заворачивает
+// middleware, и это тоже должно работать.
+func TestLoginThrottled(t *testing.T) {
+	ts, _ := testServerBudget(t, 2)
+	c := client(t)
+	csrf := formCSRF(t, c, ts.URL)
+
+	// Две попытки в бюджет — проходят (и неудачные, они-то и считаются).
+	for i := 0; i < 2; i++ {
+		res, err := c.PostForm(ts.URL+"/auth/login", url.Values{
+			"login": {"kto-to"}, "password": {"neverno"}, "csrf": {csrf},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		if res.Header.Get("Retry-After") != "" {
+			t.Fatalf("попытка %d: Retry-After не должен стоять, пока бюджет цел", i+1)
+		}
+	}
+
+	// Третья — за лимитом.
+	res, err := c.PostForm(ts.URL+"/auth/login", url.Values{
+		"login": {"kto-to"}, "password": {"neverno"}, "csrf": {csrf},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+
+	if !bytes.Contains(page, []byte("слишком много попыток входа")) {
+		t.Fatalf("страница лимита не та:\n%s", page)
+	}
+	if res.Header.Get("Retry-After") == "" {
+		t.Fatal("без Retry-After клиент не знает, когда вернуться")
+	}
+	// Ответ — HTML студии, а не пустой 429 из middleware по умолчанию.
+	if !bytes.Contains(page, []byte("name=\"csrf\"")) {
+		t.Fatalf("лимит должен отдавать страницу с формой и CSRF:\n%s", page)
 	}
 }
 
@@ -489,6 +660,7 @@ func TestLoginStorageError(t *testing.T) {
 		Sessions:   st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
+		Throttle:   testThrottle(t, 1000),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -19,12 +19,22 @@ var (
 	emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 )
 
-// Ограничение частоты заявок с одного адреса: бот не выкачает таблицу leads,
-// а человек с лимитом не столкнётся.
+// Бюджет публичной формы Sign Up. Имя — контракт с main.go, где объявлена
+// вся таблица бюджетов процесса (порог переопределяется переменной
+// окружения LIMIT_FORM_SIGNUP). Смысл ограничения: бот не выкачает
+// таблицу leads, а человек с лимитом не столкнётся.
 const (
+	signupBudget = "form.signup"
+
 	signupLimit  = 5
 	signupWindow = 10 * time.Minute
 )
+
+// signupTooMany — ответ при исчерпанном бюджете заявок. Middleware уже
+// выставил Retry-After и записал срабатывание в лог с именем бюджета.
+func (a *app) signupTooMany(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "слишком много заявок — попробуйте позже", http.StatusTooManyRequests)
+}
 
 // signupHandler принимает форму Sign Up со страницы /maket и сохраняет
 // заявку в таблицу leads. Схема PRG: после сохранения — редирект обратно
@@ -34,13 +44,9 @@ const (
 // заполняет), лимитер по адресу и проверка Origin. CSRF здесь не нужен:
 // форма анонимная и публичная, мутирует только таблица заявок.
 func (a *app) signupHandler(w http.ResponseWriter, r *http.Request) {
+	// Лимит заявок (бюджет form.signup) висит middleware в main; здесь
+	// остаётся только адрес — он идёт в заявку и в журнал действий.
 	ip := webutil.ClientIP(r)
-
-	if a.signupLimit.Throttle(ip) {
-		a.log.Warn("форма Sign Up: лимит заявок", "ip", ip)
-		http.Error(w, "слишком много заявок — попробуйте позже", http.StatusTooManyRequests)
-		return
-	}
 
 	// Запрос с чужого сайта (или подделанный Origin) отсекаем: браузер
 	// Origin присылает всегда, curl и старые браузеры — не присылают.

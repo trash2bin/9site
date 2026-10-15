@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/ivan223/web1-personal-site/server/internal/store"
-	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // Имена cookie. sid — токен сессии, csrf — подпись форм анонимных
@@ -53,12 +52,21 @@ const (
 	resetTTL   = time.Hour
 )
 
-// Ограничение частоты: не больше attemptsLimit попыток входа/регистрации с
-// одного адреса за attemptsWindow. Простейшая защита от перебора пароля —
-// вместо капчи из методички, которая требует внешнего сервиса.
+// Имена бюджетов ограничителей модуля — контракт с main.go: там, в одной
+// таблице, объявлены все бюджеты процесса вместе с порогами, и каждый
+// порог можно поднять переменной окружения (LIMIT_AUTH_LOGIN и т.п.)
+// без пересборки.
+//
+// Бюджетов три — по одному на действие, а не один общий: иначе перебор
+// пароля гасил бы и регистрацию, и восстановление пароля. В офисах и у
+// мобильных операторов, где за одним адресом живёт много людей, общий
+// счётчик выглядел бы как поломка сайта — «у всех ничего не работает
+// десять минут». Это и есть простейшая защита от перебора вместо капчки
+// из методички.
 const (
-	attemptsLimit  = 20
-	attemptsWindow = 10 * time.Minute
+	BudgetLogin    = "auth.login"
+	BudgetRegister = "auth.register"
+	BudgetForgot   = "auth.forgot"
 )
 
 // User и Session — доменные типы данных модуля. Живут они в пакете store
@@ -110,6 +118,16 @@ type Sessions interface {
 	ConsumeResetToken(ctx context.Context, tokenHash string) (int64, error)
 }
 
+// Throttle — централизованное ограничение частоты. Граница объявлена у
+// потребителя (как у вас принято): модулю нужно только уметь заворачивать
+// свои обработчики, а где живёт таблица бюджетов и как считается ключ,
+// его не касается. Реализация — *webutil.Limits, собирается в main.
+type Throttle interface {
+	// Middleware возвращает обработчик, пропускающий запросы, пока хватает
+	// бюджета name; при исчерпании — вызывается over со своим ответом.
+	Middleware(name string, over, next http.Handler) http.Handler
+}
+
 // SMTPConfig — параметры почтового сервера для писем восстановления.
 // Пустой Host означает «SMTP не настроен»: письма уходят в файл-«почтовый
 // ящик» и показываются на экране.
@@ -156,6 +174,9 @@ type Config struct {
 	// OutboxDir — каталог «почтового ящика»: сюда письма складываются,
 	// когда SMTP не настроен.
 	OutboxDir string
+	// Throttle — централизованные лимиты частоты (см. интерфейс выше).
+	// Обязателен: без них вход, регистрация и сброс открыты для перебора.
+	Throttle Throttle
 	// BaseURL — внешний адрес сайта: в письмах ссылки должны быть абсолютными.
 	BaseURL string
 	// Log — центральный логгер сервера. Действия пользователей идут через
@@ -173,7 +194,8 @@ type Server struct {
 	avatarDir string
 	outboxDir string
 	mailer    Mailer
-	limiter   *webutil.Limiter
+	// throttle — обёртка маршрутов централизованным ограничителем.
+	throttle Throttle
 }
 
 // New готовит модуль: проверяет конфиг, создаёт каталоги, собирает почтовый
@@ -182,6 +204,9 @@ type Server struct {
 func New(cfg Config) (*Server, error) {
 	if cfg.Users == nil || cfg.Sessions == nil {
 		return nil, errors.New("auth: нужны хранилища Users и Sessions")
+	}
+	if cfg.Throttle == nil {
+		return nil, errors.New("auth: нужен ограничитель частоты (Throttle)")
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "http://localhost:8080"
@@ -216,7 +241,7 @@ func New(cfg Config) (*Server, error) {
 		log:       log,
 		avatarDir: cfg.AvatarsDir,
 		outboxDir: cfg.OutboxDir,
-		limiter:   webutil.NewLimiter(attemptsLimit, attemptsWindow),
+		throttle:  cfg.Throttle,
 	}
 	s.mailer = s.buildMailer()
 
@@ -239,24 +264,39 @@ func New(cfg Config) (*Server, error) {
 }
 
 // Register подключает маршруты авторизации к общему роутеру сервера.
+// Вход, регистрация и сброс заворачиваются здесь, при регистрации
+// маршрута, — а не внутри обработчиков: лимит виден рядом с адресом
+// и не может быть забыт.
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /studio", s.handleStudio)
 	mux.HandleFunc("GET /studio/{$}", s.handleStudio)
 	mux.HandleFunc("GET /vault", s.handleVault)
-	mux.HandleFunc("POST /auth/register", s.handleRegister)
-	mux.HandleFunc("POST /auth/login", s.handleLogin)
+	mux.Handle("POST /auth/register", s.throttled(BudgetRegister, "register",
+		"слишком много попыток регистрации — подождите несколько минут", s.handleRegister))
+	mux.Handle("POST /auth/login", s.throttled(BudgetLogin, "login",
+		"слишком много попыток входа — подождите несколько минут", s.handleLogin))
 	mux.HandleFunc("POST /auth/logout", s.handleLogout)
 	mux.HandleFunc("POST /auth/profile", s.handleProfile)
-	mux.HandleFunc("POST /auth/forgot", s.handleForgot)
+	mux.Handle("POST /auth/forgot", s.throttled(BudgetForgot, "forgot",
+		"слишком много запросов — подождите несколько минут", s.handleForgot))
 	mux.HandleFunc("GET /reset", s.handleResetForm)
 	mux.HandleFunc("POST /reset", s.handleResetApply)
 	mux.HandleFunc("GET /avatars/", s.handleAvatar)
 }
 
-// throttled — превысил ли клиент лимит попыток. Тот же тип лимитера, что
-// и у публичной формы Sign Up (пакет webutil), но свой экземпляр со
-// своими порогами: перебор пароля — не заявки.
-func (s *Server) throttled(ip string) bool { return s.limiter.Throttle(ip) }
+// throttled оборачивает обработчик централизованным ограничителем. Здесь —
+// только имя бюджета, вкладка, которую открыть, и текст ошибки; счёт
+// попыток и ключ (адрес клиента) — на стороне реестра в webutil. Раньше
+// эта проверка жила внутри каждого обработчика: забытая строка с ключом
+// превращала лимит в общий для всех посетителей — лок, которого на
+// локальной разработке не видно. Открытая вкладка теперь та же, что и
+// у самой формы (раньше перебор регистрации показывал окно входа).
+func (s *Server) throttled(name, open, msg string, next http.HandlerFunc) http.Handler {
+	over := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.renderStudio(w, studioData{Error: msg, Open: open, CSRF: s.csrfToken(w, r)})
+	})
+	return s.throttle.Middleware(name, over, next)
+}
 
 // token выдаёт криптостойкое значение для cookie или подписи форм.
 func token() (string, error) {

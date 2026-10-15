@@ -22,6 +22,15 @@ func staticOnly(next http.Handler) http.Handler {
 			return
 		}
 
+		// Каталоги наружу не отдаются: http.FileServer показал бы оглавление —
+		// список файлов с именами, размерами и датами. Проверяем исходный
+		// путь, а не cleaned: Clean срезает концевую косую черту и
+		// "/css/auth" проходило бы как обычный файл.
+		if !allowedStatic[cleaned] && strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

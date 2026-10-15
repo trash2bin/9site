@@ -62,14 +62,9 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 
 // handleLogin — вход по логину и паролю.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if s.throttled(webutil.ClientIP(r)) {
-		s.renderStudio(w, studioData{
-			Error: "слишком много попыток входа — подождите несколько минут",
-			Open:  "login",
-			CSRF:  s.csrfToken(w, r),
-		})
-		return
-	}
+	// Лимит попыток (бюджет auth.login) смотрит middleware в Register:
+	// здесь остаётся только адрес для журнала действий.
+	ip := webutil.ClientIP(r)
 
 	login := strings.TrimSpace(r.PostFormValue("login"))
 	password := r.PostFormValue("password")
@@ -90,7 +85,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)) != nil {
 		// Одно и то же сообщение на неверный логин и неверный пароль:
 		// иначе форма превращается в перечислитель существующих логинов.
-		s.log.Action(login, "вход не удался", webutil.ClientIP(r))
+		s.log.Action(login, "вход не удался", ip)
 		s.loginWall(w, r, "неверный логин или пароль")
 		return
 	}
@@ -101,17 +96,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.log.Action(user.Login, "вход", webutil.ClientIP(r))
+	s.log.Action(user.Login, "вход", ip)
 	http.Redirect(w, r, "/studio", http.StatusSeeOther)
 }
 
 // handleRegister — самостоятельная регистрация: логин, пароль, ФИО, почта
 // и аватар (минимальный набор полей из задания).
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if s.throttled(webutil.ClientIP(r)) {
-		s.loginWall(w, r, "слишком много попыток регистрации — подождите несколько минут")
-		return
-	}
+	// Лимит попыток (бюджет auth.register) — в middleware Register.
+	ip := webutil.ClientIP(r)
 
 	if !s.csrfOK(r) {
 		s.loginWall(w, r, "форма устарела — попробуйте ещё раз")
@@ -143,6 +136,26 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Файл проверяем ДО создания аккаунта. Иначе невалидный аватар
+	// оставлял бы полузарегистрованный пользователь без сессии: форма
+	// показывала ошибку, а повтор с исправленным файлом отвечал
+	// «логин уже занят».
+	var (
+		avatarData []byte
+		avatarKind string
+	)
+	if file, _, err := r.FormFile("avatar"); err == nil {
+		defer func() { _ = file.Close() }()
+		if avatarData, avatarKind, err = readAvatar(file); err != nil {
+			s.renderStudio(w, studioData{
+				Error: err.Error(),
+				Open:  "register",
+				CSRF:  s.csrfToken(w, r),
+			})
+			return
+		}
+	}
+
 	user, err := s.createUser(r.Context(), login, passHash, fullName, email)
 	if errors.Is(err, errLoginTaken) {
 		s.renderStudio(w, studioData{
@@ -165,16 +178,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Аватар не обязателен, но если прислали — проверяем и сохраняем.
-	if file, _, err := r.FormFile("avatar"); err == nil {
-		defer func() { _ = file.Close() }()
-		name, err := s.saveAvatar(user, file)
+	// Аватар не обязателен; файл уже проверен выше, здесь только сохраняем.
+	if avatarData != nil {
+		name, err := s.writeAvatar(user, avatarData, avatarKind)
 		if err != nil {
-			s.renderStudio(w, studioData{
-				Error: err.Error(),
-				Open:  "register",
-				CSRF:  s.csrfToken(w, r),
-			})
+			s.internalError(w, err)
 			return
 		}
 		if err := s.updateAvatar(r.Context(), user, name); err != nil {
@@ -183,7 +191,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.log.Action(user.Login, "регистрация", webutil.ClientIP(r))
+	s.log.Action(user.Login, "регистрация", ip)
 	if err := s.startSession(r.Context(), w, r, user); err != nil {
 		s.internalError(w, err)
 		return
@@ -199,6 +207,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ip := webutil.ClientIP(r)
 	_, user := s.sessionFrom(r)
 	if cookie, err := r.Cookie(cookieSID); err == nil {
 		s.deleteSession(r.Context(), cookie.Value)
@@ -209,7 +218,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if user != nil {
 		login = user.Login
 	}
-	s.log.Action(login, "выход", webutil.ClientIP(r))
+	s.log.Action(login, "выход", ip)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -276,9 +285,14 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 
 	if file, _, err := r.FormFile("avatar"); err == nil {
 		defer func() { _ = file.Close() }()
-		name, err := s.saveAvatar(user, file)
+		data, kind, err := readAvatar(file)
 		if err != nil {
 			s.renderStudio(w, studioData{User: user, Avatar: avatarURL(user), Error: err.Error(), CSRF: s.csrfToken(w, r)})
+			return
+		}
+		name, err := s.writeAvatar(user, data, kind)
+		if err != nil {
+			s.internalError(w, err)
 			return
 		}
 		if err := s.updateAvatar(r.Context(), user, name); err != nil {
@@ -299,10 +313,9 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 // handleForgot — заявка на восстановление пароля. Ответ всегда одинаковый:
 // иначе форма выдаёт, какие почты зарегистрированы на сайте.
 func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
-	if s.throttled(webutil.ClientIP(r)) {
-		s.loginWall(w, r, "слишком много запросов — подождите несколько минут")
-		return
-	}
+	// Лимит запросов (бюджет auth.forgot) — в middleware Register.
+	ip := webutil.ClientIP(r)
+
 	if !s.csrfOK(r) {
 		s.loginWall(w, r, "форма устарела — попробуйте ещё раз")
 		return
@@ -330,7 +343,7 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 			user.Login, s.cfg.BaseURL, link,
 		)
 
-		s.log.Action(user.Login, "запрос сброса пароля", webutil.ClientIP(r))
+		s.log.Action(user.Login, "запрос сброса пароля", ip)
 		mailErr = s.sendMail(r.Context(), user.Email, "Смена пароля на "+s.cfg.BaseURL, body)
 		if mailErr != nil {
 			s.log.Error("письмо не ушло", "to", user.Email, "err", mailErr)
@@ -351,18 +364,26 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 	// сайте иначе любой мог бы запросить сброс чужого аккаунта и получить
 	// рабочую ссылку: без работающего SMTP показывать её нельзя никому.
 	if link != "" && (!s.cfg.SMTP.Configured() || mailErr != nil) {
-		if isLoopback(webutil.ClientIP(r)) {
+		loopback := isLoopback(ip)
+		switch {
+		case loopback && mailErr != nil:
 			data.ResetLink = link
-			if mailErr != nil {
-				data.Message = "письмо не ушло — ссылка показана здесь и сохранена в файл"
-			} else {
-				data.Message = "SMTP не настроен, поэтому ссылка показана здесь и сохранена в файл"
-			}
-		} else {
+			data.Message = "письмо не ушло — ссылка показана здесь и сохранена в файл"
+		case loopback:
+			data.ResetLink = link
+			data.Message = "SMTP не настроен, поэтому ссылка показана здесь и сохранена в файл"
+		case mailErr != nil:
 			// Файл в outbox остаётся — администратор достанет его сам.
 			s.log.Warn("сброс пароля: письмо не доставлено, ссылка не показана — запрос не с localhost",
 				"login", user.Login, "err", mailErr)
 			data.Message = "письмо не удалось отправить — напишите администратору"
+		default:
+			// Письмо не «не ушло», его некому слать: почта не настроена.
+			// Сообщение об этом должно отличаться от сбоя отправки — иначе
+			// администратор ищет поломку там, где её нет.
+			s.log.Warn("сброс пароля: SMTP не настроен, ссылка не показана — запрос не с localhost",
+				"login", user.Login)
+			data.Message = "восстановление пароля пока не настроено — напишите администратору"
 		}
 	}
 	s.renderStudio(w, data)

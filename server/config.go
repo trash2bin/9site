@@ -4,6 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // staticRoot — каталог, внутри которого лежит вся статика сайта:
@@ -33,6 +37,26 @@ func (a *app) envInt(name string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// limitBudget — порог бюджета ограничителей с переопределением из
+// окружения. Имя переменной — бюджет в верхнем регистре, с точками на
+// подчёркивания: auth.login → LIMIT_AUTH_LOGIN. Мусор не роняет запуск:
+// берём дефолт и пишем warn (как envInt). Само окно из окружения не
+// читается — его меняют в коде, а срочно поднять лимит на сервере можно.
+func limitBudget(log *logging.Logger, name string, def webutil.Budget) webutil.Budget {
+	env := "LIMIT_" + strings.ToUpper(strings.ReplaceAll(name, ".", "_"))
+	v := os.Getenv(env)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		log.Warn("лимит: переменная окружения не положительное число",
+			"переменная", env, "значение", v, "взят дефолт", def.Limit)
+		return def
+	}
+	return webutil.Budget{Limit: n, Window: def.Window}
 }
 
 // allowedStatic — единственные файлы в корне staticRoot, которые видит

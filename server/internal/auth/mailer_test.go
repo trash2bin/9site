@@ -34,6 +34,7 @@ func serverWithMail(t *testing.T, smtp SMTPConfig) (*Server, error) {
 		Sessions:   st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
+		Throttle:   testThrottle(t, 1000),
 		SMTP:       smtp,
 	})
 }

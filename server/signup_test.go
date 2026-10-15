@@ -35,15 +35,23 @@ func testApp(t *testing.T) (*app, *httptest.Server) {
 		t.Fatal(err)
 	}
 
+	limits, err := webutil.NewLimits(map[string]webutil.Budget{
+		signupBudget: {Limit: signupLimit, Window: signupWindow},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	a := &app{
-		log:         log,
-		store:       st,
-		baseURL:     testOrigin,
-		signupLimit: webutil.NewLimiter(signupLimit, signupWindow),
+		log:     log,
+		store:   st,
+		baseURL: testOrigin,
+		limits:  limits,
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /signup", a.signupHandler)
+	mux.Handle("POST /signup", a.limits.Middleware(signupBudget,
+		http.HandlerFunc(a.signupTooMany), http.HandlerFunc(a.signupHandler)))
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 
