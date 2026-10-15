@@ -8,7 +8,7 @@
     "format:check": "prettier --config config/prettierrc.json --ignore-path config/prettierignore --check .",
     "lint:css": "stylelint --config config/stylelintrc.json \"public/**/*.css\"",
     "lint:css:fix": "stylelint --config config/stylelintrc.json \"public/**/*.css\" --fix",
-    "lint:go": "gofmt -l . && go vet ./...",
+    "lint:go": "gofmt -l $(git ls-files '*.go') && go vet $(go list ./... | grep -v node_modules)",
     "lint:ts": "tsc --noEmit",
     "build:ts": "npm run lint:ts && node -e \"require('node:fs').rmSync('public/js', { recursive: true, force: true })\" && esbuild src/main.ts --bundle --minify --target=es2020 --charset=utf8 --outfile=public/js/main.js",
     "size": "bash scripts/check-size.sh",
@@ -17,9 +17,9 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "prettier": "^3.9.7",
-    "stylelint": "^16.26.1",
-    "stylelint-config-standard": "^38.0.0",
+    "prettier": "^3.9.10",
+    "stylelint": "^17.16.0",
+    "stylelint-config-standard": "^40.0.0",
     "typescript": "^7.0.2"
   },
   "engines": {

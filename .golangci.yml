@@ -1,0 +1,25 @@
+# Конфигурация golangci-lint v2 (формат: version: "2" обязателен).
+# Гоняется в CI; локально — `golangci-lint run ./...`.
+version: "2"
+
+linters:
+  # Базовый набор по умолчанию: errcheck, govet, ineffassign, staticcheck,
+  # unused. Их достаточно для проекта такого размера.
+  default: standard
+  enable:
+    # Подсказывает правки в духе «цикл с единственной итерацией»,
+    # лишние else, мелкие антипаттерны — ловит то, что не ловит staticcheck.
+    - gocritic
+    # Опечатки в идентификаторах и комментариях (по-английски; русские
+    # комментарии он не трогает).
+    - misspell
+  settings:
+    misspell:
+      # Код и документация проекта — на смеси русского и английского,
+      # locale ставим US, чтобы не «чинил» слово color в colour.
+      locale: US
+  exclusions:
+    paths:
+      # В node_modules лежит Go-пакет библиотеки flatted (транзитивная
+      # зависимость npm) — чужой код, мы его не линтуем.
+      - node_modules/

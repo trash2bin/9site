@@ -1,9 +1,8 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
-	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -12,20 +11,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
-
-// User — запись таблицы users.
-type User struct {
-	ID       int64
-	Login    string
-	PassHash string
-	FullName string
-	Email    string
-	Avatar   string
-}
 
 // Ограничения полей формы. Логин — как в методичке: буквы и цифры, 3–30.
 var (
@@ -77,91 +65,55 @@ func hashPassword(password string) (string, error) {
 	return string(raw), err
 }
 
-// --- запросы к базе. Везде плейсхолдеры $N: подстановки строкой нет,
-// поэтому SQL-инъекция через поля форм невозможна (контрольный вопрос N7). ---
+// --- работа с пользователями. Всё хранение — за интерфейсом Users; здесь
+// только тонкие обёртки с именами, которые знают обработчики. ---
 
-// createUser добавляет пользователя и возвращает его запись.
-func (s *Server) createUser(login, passHash, fullName, email string) (*User, error) {
-	res, err := s.db.Exec(
-		`INSERT INTO users (login, pass_hash, full_name, email) VALUES ($1, $2, $3, $4)`,
-		login, passHash, fullName, email,
-	)
-	if err != nil {
-		// UNIQUE по логину — естественный источник ошибки «логин занят».
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return nil, errLoginTaken
-		}
-		return nil, err
-	}
-
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	return &User{ID: id, Login: login, PassHash: passHash, FullName: fullName, Email: email}, nil
+func (s *Server) createUser(ctx context.Context, login, passHash, fullName, email string) (*User, error) {
+	return s.users.CreateUser(ctx, login, passHash, fullName, email)
 }
 
-// errLoginTaken — сигнал «логин уже занят» наверх, в форму.
-var errLoginTaken = errors.New("login taken")
-
-// userByLogin ищет пользователя по логину. sql.ErrNoRows — «не найден».
-func (s *Server) userByLogin(login string) (*User, error) {
-	return s.scanUser(s.db.QueryRow(
-		`SELECT id, login, pass_hash, full_name, email, avatar FROM users WHERE login = $1`,
-		login,
-	))
+// userByLogin ищет пользователя по логину. store.ErrNotFound — «не найден».
+func (s *Server) userByLogin(ctx context.Context, login string) (*User, error) {
+	return s.users.UserByLogin(ctx, login)
 }
 
 // userByID ищет пользователя по идентификатору.
-func (s *Server) userByID(id int64) (*User, error) {
-	return s.scanUser(s.db.QueryRow(
-		`SELECT id, login, pass_hash, full_name, email, avatar FROM users WHERE id = $1`,
-		id,
-	))
+func (s *Server) userByID(ctx context.Context, id int64) (*User, error) {
+	return s.users.UserByID(ctx, id)
 }
 
 // userByEmail ищет пользователя по почте — для сброса пароля.
-func (s *Server) userByEmail(email string) (*User, error) {
-	return s.scanUser(s.db.QueryRow(
-		`SELECT id, login, pass_hash, full_name, email, avatar FROM users WHERE email = $1 COLLATE NOCASE`,
-		email,
-	))
-}
-
-func (s *Server) scanUser(row *sql.Row) (*User, error) {
-	var u User
-	if err := row.Scan(&u.ID, &u.Login, &u.PassHash, &u.FullName, &u.Email, &u.Avatar); err != nil {
-		return nil, err
-	}
-	return &u, nil
+func (s *Server) userByEmail(ctx context.Context, email string) (*User, error) {
+	return s.users.UserByEmail(ctx, email)
 }
 
 // updateProfile меняет данные профиля (логин, как и положено, не меняется).
-func (s *Server) updateProfile(u *User, fullName, email string) error {
-	_, err := s.db.Exec(
-		`UPDATE users SET full_name = $1, email = $2 WHERE id = $3`,
-		fullName, email, u.ID,
-	)
-	return err
+func (s *Server) updateProfile(ctx context.Context, u *User, fullName, email string) error {
+	return s.users.UpdateProfile(ctx, u.ID, fullName, email)
 }
 
-// updatePassword меняет пароль и отозвает все сессии пользователя: чужая
-// украденная cookie после смены пароля перестаёт работать.
-func (s *Server) updatePassword(u *User, passHash string) error {
-	if _, err := s.db.Exec(`UPDATE users SET pass_hash = $1 WHERE id = $2`, passHash, u.ID); err != nil {
+// updatePassword меняет пароль и отзывает все сессии пользователя: чужая
+// украденная cookie после смены пароля перестаёт работать. Правило отзыва
+// живёт здесь, в auth, а не в хранилище пользователей — так оно переживёт
+// переезд сессий в другое хранилище.
+func (s *Server) updatePassword(ctx context.Context, u *User, passHash string) error {
+	// Порядок — не случайный: сначала отзыв, потом пароль. Если между
+	// операциями что-то упадёт, безопаснее «старый пароль, но все cookie
+	// погашены» (пользователь просто введёт пароль заново), чем «новый
+	// пароль со старой чужой cookie».
+	if err := s.sessions.DeleteUserSessions(ctx, u.ID); err != nil {
 		return err
 	}
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = $1`, u.ID)
-	return err
+	return s.users.UpdatePassword(ctx, u.ID, passHash)
 }
 
 // updateAvatar запоминает имя нового файла аватара.
-func (s *Server) updateAvatar(u *User, name string) error {
-	_, err := s.db.Exec(`UPDATE users SET avatar = $1 WHERE id = $2`, name, u.ID)
-	if err == nil {
-		u.Avatar = name
+func (s *Server) updateAvatar(ctx context.Context, u *User, name string) error {
+	if err := s.users.UpdateAvatar(ctx, u.ID, name); err != nil {
+		return err
 	}
-	return err
+	u.Avatar = name
+	return nil
 }
 
 // --- аватар ---
@@ -186,7 +138,7 @@ func avatarExt(data []byte) (string, error) {
 
 // saveAvatar проверяет и сохраняет загруженный файл под служебным именем.
 // Имя генерирует сервер: имя файла от пользователя нигде не используется.
-func (s *Server) saveAvatar(u *User, file multipartFile, filename string) (string, error) {
+func (s *Server) saveAvatar(u *User, file multipartFile) (string, error) {
 	const maxAvatar = 512 << 10 // 512 КБ — с запасом на любую аватарку
 
 	data, err := io.ReadAll(io.LimitReader(file, maxAvatar+1))
@@ -215,9 +167,10 @@ func (s *Server) saveAvatar(u *User, file multipartFile, filename string) (strin
 
 	// Прежний файл удаляем, чтобы каталог не рос.
 	if u.Avatar != "" && avatarName.MatchString(u.Avatar) {
-		os.Remove(filepath.Join(s.avatarDir, u.Avatar))
+		if err := os.Remove(filepath.Join(s.avatarDir, u.Avatar)); err != nil {
+			s.log.Warn("прежний аватар не удалён", "err", err)
+		}
 	}
-	_ = filename
 
 	return name, nil
 }
@@ -244,9 +197,4 @@ func contentTypeFor(name string) string {
 		}
 	}
 	return "application/octet-stream"
-}
-
-// nowPlus — метка времени для сроков годности (формат базы: UTC RFC3339).
-func nowPlus(d time.Duration) string {
-	return time.Now().UTC().Add(d).Format(time.RFC3339)
 }

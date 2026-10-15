@@ -6,6 +6,8 @@ package auth
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -18,17 +20,32 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
 
-// testServer поднимает сервер авторизации во временном каталоге.
+// testServer поднимает сервер авторизации во временном каталоге: базу
+// (реальную SQLite — тесты интеграционные) и каталоги файлов.
 func testServer(t *testing.T) (*httptest.Server, *Server) {
 	t.Helper()
 
-	srv, err := New(Config{DataDir: t.TempDir()})
+	dir := t.TempDir()
+
+	st, err := store.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { srv.Close() })
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv, err := New(Config{
+		Users:      st,
+		Sessions:   st,
+		AvatarsDir: filepath.Join(dir, "avatars"),
+		OutboxDir:  filepath.Join(dir, "outbox"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
 	srv.Register(mux)
@@ -69,7 +86,7 @@ func formCSRF(t *testing.T, c *http.Client, base string) string {
 		t.Fatal(err)
 	}
 	page, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +141,7 @@ func register(t *testing.T, c *http.Client, base, login, password, fullName, ema
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	page, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -145,7 +162,7 @@ func loginForm(t *testing.T, c *http.Client, base, login, password string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	return res.StatusCode
 }
 
@@ -157,7 +174,7 @@ func logout(t *testing.T, c *http.Client, base string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 }
 
 // TestFullFlow — сценарий лабораторной целиком: закрытый раздел не пускает
@@ -172,7 +189,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, _ := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("GET /studio без авторизации: статус %d, ждали 200", res.StatusCode)
 	}
@@ -185,7 +202,7 @@ func TestFullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("GET /vault без авторизации: статус %d, ждали 303", res.StatusCode)
 	}
@@ -204,7 +221,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, _ = io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	if !bytes.Contains(page, []byte("секретный раздел")) {
 		t.Fatalf("авторизованный не увидел закрытый раздел:\n%s", page)
 	}
@@ -215,7 +232,7 @@ func TestFullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("после выхода /vault отдал %d, ждали 303", res.StatusCode)
 	}
@@ -241,7 +258,7 @@ func TestSessionSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("во втором сеансе /vault отдал %d, ждали 200", res.StatusCode)
@@ -286,7 +303,7 @@ func TestXSSEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, _ := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 
 	if bytes.Contains(page, []byte(malicious)) {
 		t.Fatal("вредоносная разметка попала в ответ без экранирования")
@@ -313,10 +330,10 @@ func TestPasswordReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 
 	// Письмо лежит в файле — достаём ссылку.
-	matches, _ := filepath.Glob(filepath.Join(srv.cfg.DataDir, "outbox", "*.eml"))
+	matches, _ := filepath.Glob(filepath.Join(srv.outboxDir, "*.eml"))
 	if len(matches) != 1 {
 		t.Fatalf("в почтовом ящике %d писем, ждали 1", len(matches))
 	}
@@ -339,7 +356,7 @@ func TestPasswordReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("сброс пароля: статус %d, ждали 303", res.StatusCode)
 	}
@@ -362,7 +379,7 @@ func TestPasswordReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, _ := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	if !bytes.Contains(page, []byte("недействительна")) {
 		t.Fatalf("повторная ссылка сработала:\n%s", page)
 	}
@@ -389,7 +406,7 @@ func TestProfileUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, _ := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 
 	if !bytes.Contains(page, []byte("Новое Имя")) {
 		t.Fatalf("ФИО не обновилось:\n%s", page)
@@ -418,7 +435,7 @@ func TestAvatar(t *testing.T) {
 		"\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 	register(t, c, ts.URL, "shooter", "secret-pass-1", "", "shooter@example.com", bytes.NewReader(gif))
 
-	user, err := srv.userByLogin("shooter")
+	user, err := srv.userByLogin(context.Background(), "shooter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +447,7 @@ func TestAvatar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("аватар отдал %d, ждали 200", res.StatusCode)
 	}
@@ -440,5 +457,92 @@ func TestAvatar(t *testing.T) {
 		strings.NewReader("<html><script>alert(1)</script></html>"))
 	if !bytes.Contains(page, []byte("изображением")) {
 		t.Fatalf("не-картинка не отвергнута:\n%s", page)
+	}
+}
+
+// --- страховки после ревью ---
+
+// brokenUsers — хранилище, у которого «отвалилась» таблица пользователей.
+// Нужно, чтобы отличить в обработчике сбой базы от неверного пароля.
+type brokenUsers struct {
+	*store.Store
+}
+
+func (brokenUsers) UserByLogin(context.Context, string) (*store.User, error) {
+	return nil, errors.New("база недоступна")
+}
+
+// TestLoginStorageError — сбой хранилища при входе не должен маскироваться
+// под «неверный логин или пароль»: пользователю показывается честное
+// «попробуйте позже».
+func TestLoginStorageError(t *testing.T) {
+	dir := t.TempDir()
+
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv, err := New(Config{
+		Users:      brokenUsers{Store: st},
+		Sessions:   st,
+		AvatarsDir: filepath.Join(dir, "avatars"),
+		OutboxDir:  filepath.Join(dir, "outbox"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	srv.Register(mux)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	srv.cfg.BaseURL = ts.URL
+
+	c := client(t)
+	csrf := formCSRF(t, c, ts.URL)
+
+	res, err := c.PostForm(ts.URL+"/auth/login", url.Values{
+		"login":    {"кто-то"},
+		"password": {"пароль"},
+		"csrf":     {csrf},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+
+	body := string(page)
+	if !strings.Contains(body, "не удалось войти — попробуйте позже") {
+		t.Fatalf("сбой хранилища должен показать «попробуйте позже»:\n%s", body)
+	}
+	if strings.Contains(body, "неверный логин или пароль") {
+		t.Fatalf("сбой хранилища не должен выглядеть как неверный пароль")
+	}
+}
+
+// TestRegisterDuplicateEmail: раньше второй аккаунт с чужой почтой
+// заводился молча — письмо со сбросом пароля могло уйти не тому человеку.
+// Теперь форма обязана вернуться с понятной ошибкой.
+func TestRegisterDuplicateEmail(t *testing.T) {
+	ts, _ := testServer(t)
+	c := client(t)
+
+	if code, _ := register(t, c, ts.URL, "first1", "secret-pass-1", "Иван", "same@example.com", nil); code != http.StatusSeeOther {
+		t.Fatalf("первая регистрация: статус %d, ждали 303", code)
+	}
+
+	code, page := register(t, c, ts.URL, "second1", "secret-pass-1", "Пётр", "Same@Example.com", nil)
+	if code == http.StatusSeeOther {
+		t.Fatal("дубль почты не должен заводить второй аккаунт")
+	}
+	body := string(page)
+	if !strings.Contains(body, "почт") || !strings.Contains(body, "уже") {
+		t.Fatalf("форма должна объяснить про занятую почту:\n%s", body)
+	}
+	if strings.Contains(body, "500") || strings.Contains(body, "internal") {
+		t.Fatalf("дубль почты — не ошибка сервера, а ошибка формы:\n%s", body)
 	}
 }

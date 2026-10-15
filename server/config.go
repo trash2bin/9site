@@ -69,11 +69,19 @@ func indexFile() string {
 	return filepath.Join(staticRoot, "index.html")
 }
 
-// counterPath — файл, где лежит число визитов. В проде systemd подставляет
-// путь из StateDirectory, локально файл лежит рядом с бинарником.
+// counterPath — старый файл со счётчиком (visits.dat). Читается только
+// при импорте legacy-данных в site.db; в рабочем процессе участия не
+// принимает. В проде systemd подставляет путь из StateDirectory.
 func counterPath() string {
 	if p := os.Getenv("VISITS_FILE"); p != "" {
 		return p
 	}
 	return "visits.dat"
+}
+
+// pageMarkers — метки, которые обязаны быть в страницах: по ним сервер
+// подставляет динамические куски. Пропавшая метка ломает запуск, а не
+// молчит (проверка в static.go).
+var pageMarkers = map[string]string{
+	"design.html": thanksMark,
 }

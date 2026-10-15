@@ -207,12 +207,18 @@
       </section>
 
       <!-- 8. Take action: тёмный фон, форма в одну строку -->
-      <!-- TODO: у формы нет обработчика — в Go-сервере нет эндпоинта,
-           сейчас action="#" ничего не отправляет. Нужен POST-роут. -->
+      <!-- Форма уходит на POST /signup (Go-сервер), скрытое поле company —
+           honeypot для ботов: человек его не заполняет. После отправки —
+           редирект сюда же с ?sent=1, и маркер <!--sent-->
+      заменяется блоком «спасибо». -->
       <section class="action" id="contact">
         <div class="container action-grid">
           <h3 class="action-title">Take action</h3>
-          <form class="signup" action="#" method="post">
+          <form class="signup" action="/signup" method="post">
+            <p class="sr-only" aria-hidden="true">
+              <label for="signup-company">Company</label>
+              <input id="signup-company" name="company" type="text" tabindex="-1" autocomplete="off" />
+            </p>
             <p class="field">
               <label class="sr-only" for="signup-name">Name</label>
               <input id="signup-name" name="name" type="text" placeholder="Name" autocomplete="name" />
@@ -227,6 +233,7 @@
             </p>
             <button class="signup-button" type="submit">Sign Up</button>
           </form>
+          <!--sent-->
         </div>
       </section>
 

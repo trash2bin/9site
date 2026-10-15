@@ -160,7 +160,6 @@ body {
     11pt/1.35 Georgia,
     serif;
   text-align: center;
-  page-break-inside: avoid;
   break-inside: avoid;
 }
 

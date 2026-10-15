@@ -53,13 +53,21 @@ func (a *app) checkIndex() error {
 	return nil
 }
 
-// checkPages проверяет на старте, что все страницы из pageRoutes на месте.
-// Иначе адрес из меню отдавал бы 500 вместо вёрстки.
+// checkPages проверяет на старте, что все страницы из pageRoutes на месте
+// и содержат свои метки (пока — «спасибо» после заявки на /maket).
+// Иначе адрес из меню отдавал бы 500 вместо вёрстки, а сломанная разметка
+// молча не показала бы «спасибо».
 func (a *app) checkPages() error {
 	for route, file := range pageRoutes {
 		name := filepath.Join(staticRoot, file)
-		if _, err := os.Stat(name); err != nil {
+		body, err := os.ReadFile(name)
+		if err != nil {
 			return fmt.Errorf("%s (%s): %w", name, route, err)
+		}
+
+		mark, ok := pageMarkers[file]
+		if ok && !strings.Contains(string(body), mark) {
+			return fmt.Errorf("%s (%s): нет метки %s", name, route, mark)
 		}
 	}
 	return nil
