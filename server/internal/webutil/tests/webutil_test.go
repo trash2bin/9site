@@ -1,4 +1,4 @@
-package webutil
+package webutil_test
 
 import (
 	"net/http"
@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // TestClientIP — реальный адрес клиента за nginx. XFF целиком брать
@@ -56,17 +58,37 @@ func TestClientIP(t *testing.T) {
 			for k, v := range c.hdr {
 				r.Header.Set(k, v)
 			}
-			if got := ClientIP(r); got != c.want {
+			if got := webutil.ClientIP(r); got != c.want {
 				t.Fatalf("ClientIP = %q, ожидалось %q", got, c.want)
 			}
 		})
 	}
 }
 
+// TestValidEmail — одна проверка почты на все формы сайта (auth и leads).
+func TestValidEmail(t *testing.T) {
+	for _, c := range []struct {
+		email string
+		ok    bool
+	}{
+		{"i@example.com", true},
+		{"ivan.petrov+tag@mail.ru", true},
+		{"почта", false},
+		{"no-at.example.com", false},
+		{"a@b", false},
+		{"", false},
+		{strings.Repeat("a", 250) + "@example.com", false},
+	} {
+		if got := webutil.ValidEmail(c.email); got != c.ok {
+			t.Fatalf("ValidEmail(%q) = %v, ожидалось %v", c.email, got, c.ok)
+		}
+	}
+}
+
 // testLimits собирает реестр с маленьким окном для тестов.
-func testLimits(t *testing.T, budgets map[string]Budget) *Limits {
+func testLimits(t *testing.T, budgets map[string]webutil.Budget) *webutil.Limits {
 	t.Helper()
-	l, err := NewLimits(budgets, nil)
+	l, err := webutil.NewLimits(budgets, nil)
 	if err != nil {
 		t.Fatalf("NewLimits: %v", err)
 	}
@@ -76,7 +98,7 @@ func testLimits(t *testing.T, budgets map[string]Budget) *Limits {
 // TestLimitsAllow — базовое поведение: бюджет вычитается, другие ключи и
 // другие бюджеты не страдают, протухшее окно освобождает лимит.
 func TestLimitsAllow(t *testing.T) {
-	l := testLimits(t, map[string]Budget{
+	l := testLimits(t, map[string]webutil.Budget{
 		"auth.login":  {Limit: 3, Window: 60 * time.Millisecond},
 		"form.signup": {Limit: 1, Window: time.Minute},
 	})
@@ -112,7 +134,7 @@ func TestLimitsAllow(t *testing.T) {
 // окна, когда исчерпан. Заголовок Retry-After без этого бессмыслен.
 func TestLimitsRetryAfter(t *testing.T) {
 	window := 500 * time.Millisecond
-	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1, Window: window}})
+	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1, Window: window}})
 
 	if d := l.RetryAfter("auth.login", "a"); d != 0 {
 		t.Fatalf("до первой попытки ждать нечего, получили %s", d)
@@ -129,7 +151,7 @@ func TestLimitsRetryAfter(t *testing.T) {
 // TestLimitsUnknownBudget — опечатка в имени бюджета обязана быть слышна
 // сразу, а не превращаться в лимит, которого нет.
 func TestLimitsUnknownBudget(t *testing.T) {
-	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1, Window: time.Minute}})
+	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1, Window: time.Minute}})
 
 	defer func() {
 		if recover() == nil {
@@ -141,13 +163,13 @@ func TestLimitsUnknownBudget(t *testing.T) {
 
 // TestNewLimitsRejectsBadBudget — нулевой порог не должен дожить до прода.
 func TestNewLimitsRejectsBadBudget(t *testing.T) {
-	for name, budgets := range map[string]map[string]Budget{
+	for name, budgets := range map[string]map[string]webutil.Budget{
 		"пусто":      {},
 		"лимит ноль": {"x": {Limit: 0, Window: time.Minute}},
 		"окно ноль":  {"x": {Limit: 1, Window: 0}},
 		"без имени":  {"": {Limit: 1, Window: time.Minute}},
 	} {
-		if _, err := NewLimits(budgets, nil); err == nil {
+		if _, err := webutil.NewLimits(budgets, nil); err == nil {
 			t.Fatalf("%s: ожидалась ошибка", name)
 		}
 	}
@@ -157,7 +179,7 @@ func TestNewLimitsRejectsBadBudget(t *testing.T) {
 // хендлер), при лимите идёт Retry-After и вызывается свой обработчик
 // ответа, а не следующий по маршруту.
 func TestLimitsMiddleware(t *testing.T) {
-	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 2, Window: time.Minute}})
+	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 2, Window: time.Minute}})
 
 	var reached int
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -204,7 +226,7 @@ func TestLimitsMiddleware(t *testing.T) {
 // TestLimitsConcurrent — реестр общий на весь процесс: параллельные
 // запросы не должны ломать счётчик (гонку ловит -race).
 func TestLimitsConcurrent(t *testing.T) {
-	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1000, Window: time.Minute}})
+	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1000, Window: time.Minute}})
 
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
@@ -223,7 +245,7 @@ func TestLimitsConcurrent(t *testing.T) {
 // TestMiddlewareUnknownBudgetPanicsAtStart — незаданный бюджет должен
 // упасть при регистрации маршрута, а не при первом посетителе.
 func TestMiddlewareUnknownBudgetPanicsAtStart(t *testing.T) {
-	l := testLimits(t, map[string]Budget{"auth.login": {Limit: 1, Window: time.Minute}})
+	l := testLimits(t, map[string]webutil.Budget{"auth.login": {Limit: 1, Window: time.Minute}})
 	defer func() {
 		if recover() == nil {
 			t.Fatal("незаданный бюджет должен паниковать на старте")
@@ -234,10 +256,10 @@ func TestMiddlewareUnknownBudgetPanicsAtStart(t *testing.T) {
 
 // TestMiddlewareDefaultOver — без своего обработчика дежурный текст и 429.
 func TestMiddlewareDefaultOver(t *testing.T) {
-	l := testLimits(t, map[string]Budget{"form.signup": {Limit: 1, Window: time.Minute}})
+	l := testLimits(t, map[string]webutil.Budget{"form.signup": {Limit: 1, Window: time.Minute}})
 	h := l.Middleware("form.signup", nil, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	r := httptest.NewRequest("POST", "/signup", nil)
-	if !l.Allow("form.signup", ClientIP(r)) {
+	if !l.Allow("form.signup", webutil.ClientIP(r)) {
 		t.Fatal("первая заявка должна проходить")
 	}
 

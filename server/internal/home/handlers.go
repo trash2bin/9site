@@ -1,4 +1,4 @@
-package main
+package home
 
 import (
 	"context"
@@ -25,38 +25,37 @@ const digitCount = 5
 const thanksHTML = `<p class="thanks">Спасибо! Мы свяжемся с вами.</p>`
 
 // indexHandler отдаёт index.html с подставленным счётчиком визитов.
-// Страница собирается в памяти, поэтому файл на диске не меняется и
-// остаётся статикой, которую можно открыть и без сервера.
-func (a *app) indexHandler(w http.ResponseWriter, r *http.Request) {
-	page, err := os.ReadFile(indexFile())
+// Страница собирается в памяти, поэтому файл на диске остаётся статикой,
+// которую можно открыть и без сервера.
+func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
+	page, err := os.ReadFile(s.indexFile())
 	if err != nil {
-		a.log.Error("index.html не читается", "err", err)
+		s.log.Error("index.html не читается", "err", err)
 		http.Error(w, "index.html не читается", http.StatusInternalServerError)
 		return
 	}
 
-	html := strings.Replace(string(page), visitMark, counterHTML(a.hit(r.Context())), 1)
+	html := strings.Replace(string(page), visitMark, counterHTML(s.hit(r.Context())), 1)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Без no-store браузер и прокси могут показать вчерашний счёт.
 	w.Header().Set("Cache-Control", "no-store")
 	if _, err := w.Write([]byte(html)); err != nil {
-		a.log.Error("ответ не ушёл", "err", err)
+		s.log.Error("ответ не ушёл", "err", err)
 	}
 }
 
 // hit увеличивает счётчик визитов и возвращает новое число. Ошибка записи
 // наверх не отдаётся: страницу надо показать в любом случае, а сбой базы —
 // повод для warn в логе, а не для 500 на главной.
-func (a *app) hit(ctx context.Context) int {
-	// Контекст без отмены: визит уже случился: обрыв соединения браузером
-	// не должен его отменить.
-	n, err := a.store.Hit(context.WithoutCancel(ctx))
+func (s *Server) hit(ctx context.Context) int {
+	// Контекст без отмены: визит уже случился, обрыв соединения его не отменяет.
+	n, err := s.store.Hit(context.WithoutCancel(ctx))
 	if err != nil {
-		a.log.Warn("счётчик: не сохранён", "err", err)
-		return int(a.lastVisits.Load())
+		s.log.Warn("счётчик: не сохранён", "err", err)
+		return int(s.lastVisits.Load())
 	}
-	a.lastVisits.Store(int64(n))
+	s.lastVisits.Store(int64(n))
 	return n
 }
 
@@ -79,13 +78,13 @@ func counterHTML(n int) string {
 // pageHandler отдаёт страницу из pageRoutes как HTML. Файл читается на
 // каждый запрос: правки вёрстки видны сразу, без перезапуска сервера.
 // Маркер «спасибо» подставляется после заявки с формы Sign Up (?sent=1).
-func (a *app) pageHandler(file string) http.HandlerFunc {
+func (s *Server) pageHandler(file string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		name := filepath.Join(staticRoot, file)
+		name := filepath.Join(s.staticRoot, file)
 
 		page, err := os.ReadFile(name)
 		if err != nil {
-			a.log.Error("страница не читается", "file", name, "err", err)
+			s.log.Error("страница не читается", "file", name, "err", err)
 			http.Error(w, file+" не читается", http.StatusInternalServerError)
 			return
 		}
@@ -99,7 +98,7 @@ func (a *app) pageHandler(file string) http.HandlerFunc {
 		// Без no-store браузер покажет вчерашний макет после правки вёрстки.
 		w.Header().Set("Cache-Control", "no-store")
 		if _, err := w.Write([]byte(body)); err != nil {
-			a.log.Error("ответ не ушёл", "err", err)
+			s.log.Error("ответ не ушёл", "err", err)
 		}
 	}
 }

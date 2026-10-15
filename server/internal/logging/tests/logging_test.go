@@ -1,4 +1,4 @@
-package logging
+package logging_test
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 )
 
 // fakeSink — журнал в памяти: проверяем, что действия доходят, а ошибка
@@ -26,7 +28,7 @@ func (f *fakeSink) Action(login, action, ip string) error {
 // TestActionToSink — действия пользователей уходят в журнал действий.
 func TestActionToSink(t *testing.T) {
 	sink := &fakeSink{}
-	log, err := New(Config{Output: io.Discard, Actions: sink})
+	log, err := logging.New(logging.Config{Output: io.Discard, Actions: sink})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -45,7 +47,7 @@ func TestActionToSink(t *testing.T) {
 // TestActionSinkError — сломанный журнал логируется, но не ломает вызов.
 func TestActionSinkError(t *testing.T) {
 	var buf bytes.Buffer
-	log, err := New(Config{Output: &buf, Actions: &fakeSink{fail: true}})
+	log, err := logging.New(logging.Config{Output: &buf, Actions: &fakeSink{fail: true}})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestActionSinkError(t *testing.T) {
 
 // TestActionWithoutSink — без журнала Action работает как обычная запись.
 func TestActionWithoutSink(t *testing.T) {
-	log, err := New(Config{Output: io.Discard})
+	log, err := logging.New(logging.Config{Output: io.Discard})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -69,7 +71,7 @@ func TestActionWithoutSink(t *testing.T) {
 // TestLevel — уровень info прячет debug-записи из консоли.
 func TestLevel(t *testing.T) {
 	var buf bytes.Buffer
-	log, err := New(Config{Level: "info", Output: &buf})
+	log, err := logging.New(logging.Config{Level: "info", Output: &buf})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

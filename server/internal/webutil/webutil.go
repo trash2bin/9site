@@ -1,13 +1,14 @@
-// Package webutil — общие для нескольких пакетов HTTP-мелочи: определение
-// адреса клиента (ClientIP) и централизованные ограничители частоты
-// (Limits, отдельный файл limits.go). Живут здесь, а не копируются:
-// и то, и другое нужно и авторизации (перебор пароля), и публичной форме
-// Sign Up (спам-заявки).
+// Package webutil — общие для нескольких пакетов мелочи: определение
+// адреса клиента (ClientIP), централизованные ограничители частоты
+// (Limits, отдельный файл limits.go) и проверка адреса почты (ValidEmail).
+// Живут здесь, а не копируются: нужно и авторизации (перебор пароля), и
+// публичной форме Sign Up (спам-заявки).
 package webutil
 
 import (
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -34,4 +35,13 @@ func ClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// emailPattern — проверка адреса почты, одна на все формы сайта (auth и
+// leads): без спорных крайностей RFC, но мусор отсекает.
+var emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// ValidEmail сообщает, похож ли адрес на почту. 254 — предел длины адреса.
+func ValidEmail(email string) bool {
+	return len(email) <= 254 && emailPattern.MatchString(email)
 }

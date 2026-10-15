@@ -1,8 +1,7 @@
-package main
-
-// Тесты формы Sign Up (POST /signup) и фолбэка счётчика: ровно те места,
-// которые ревью отметило как непокрытые рискованные — Origin, honeypot,
-// лимитер, валидация, PRG и поведение главной страницы при сбое базы.
+// Тесты публичной формы заявок (POST /signup) через настоящий leads.Register:
+// Origin, honeypot, лимитер, валидация и PRG. Проводка маршрутов — боевая,
+// поэтому тест ловит и ошибку сборки, а не только в обработчике.
+package leads_test
 
 import (
 	"context"
@@ -12,16 +11,21 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ivan223/web1-personal-site/server/internal/leads"
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
-const testOrigin = "http://example.com"
+const (
+	testOrigin = "http://example.com"
+	testLimit  = 5
+)
 
-// testApp поднимает минимальный сервер с формой Sign Up и реальной базой.
-func testApp(t *testing.T) (*app, *httptest.Server) {
+// testServer поднимает срез заявок с реальной базой.
+func testServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
 
 	st, err := store.Open(t.TempDir())
@@ -36,26 +40,28 @@ func testApp(t *testing.T) (*app, *httptest.Server) {
 	}
 
 	limits, err := webutil.NewLimits(map[string]webutil.Budget{
-		signupBudget: {Limit: signupLimit, Window: signupWindow},
+		leads.BudgetSignup: {Limit: testLimit, Window: 10 * time.Minute},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	a := &app{
-		log:     log,
-		store:   st,
-		baseURL: testOrigin,
-		limits:  limits,
+	srv, err := leads.New(leads.Config{
+		Store:    st,
+		BaseURL:  testOrigin,
+		Log:      log,
+		Throttle: limits,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /signup", a.limits.Middleware(signupBudget,
-		http.HandlerFunc(a.signupTooMany), http.HandlerFunc(a.signupHandler)))
+	srv.Register(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 
-	return a, ts
+	return ts, st
 }
 
 // postSignup отправляет форму; дописывает заголовки поверх формы.
@@ -86,17 +92,17 @@ func postSignup(t *testing.T, ts *httptest.Server, form url.Values, header http.
 	return res
 }
 
-func leadCount(t *testing.T, a *app) int {
+func leadCount(t *testing.T, st *store.Store) int {
 	t.Helper()
-	leads, err := a.store.ListLeads(context.Background(), 100)
+	all, err := st.ListLeads(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("ListLeads: %v", err)
 	}
-	return len(leads)
+	return len(all)
 }
 
 func TestSignupValid(t *testing.T) {
-	a, ts := testApp(t)
+	ts, st := testServer(t)
 
 	res := postSignup(t, ts, url.Values{
 		"name":  {"Иван Тестов"},
@@ -110,13 +116,13 @@ func TestSignupValid(t *testing.T) {
 	if got := res.Header.Get("Location"); got != "/maket?sent=1#contact" {
 		t.Fatalf("редирект %q, ожидался /maket?sent=1#contact", got)
 	}
-	if n := leadCount(t, a); n != 1 {
+	if n := leadCount(t, st); n != 1 {
 		t.Fatalf("заявок %d, ожидалась 1", n)
 	}
 }
 
 func TestSignupHoneypot(t *testing.T) {
-	a, ts := testApp(t)
+	ts, st := testServer(t)
 
 	// Бот заполняет скрытое поле: отвечаем успехом, но не сохраняем.
 	res := postSignup(t, ts, url.Values{
@@ -129,13 +135,13 @@ func TestSignupHoneypot(t *testing.T) {
 	if got := res.Header.Get("Location"); got != "/maket#contact" {
 		t.Fatalf("редирект %q, ожидался /maket#contact без «спасибо»", got)
 	}
-	if n := leadCount(t, a); n != 0 {
+	if n := leadCount(t, st); n != 0 {
 		t.Fatalf("бот не должен оставлять заявки, а их %d", n)
 	}
 }
 
 func TestSignupForeignOrigin(t *testing.T) {
-	a, ts := testApp(t)
+	ts, st := testServer(t)
 
 	res := postSignup(t, ts, url.Values{
 		"name":  {"X"},
@@ -146,13 +152,13 @@ func TestSignupForeignOrigin(t *testing.T) {
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("статус %d, ожидался 403", res.StatusCode)
 	}
-	if n := leadCount(t, a); n != 0 {
+	if n := leadCount(t, st); n != 0 {
 		t.Fatalf("заявка с чужого Origin не должна сохраняться")
 	}
 }
 
 func TestSignupInvalid(t *testing.T) {
-	a, ts := testApp(t)
+	ts, st := testServer(t)
 
 	res := postSignup(t, ts, url.Values{
 		"name":  {"X"},
@@ -163,72 +169,20 @@ func TestSignupInvalid(t *testing.T) {
 	if got := res.Header.Get("Location"); got != "/maket#contact" {
 		t.Fatalf("редирект %q, ожидался /maket#contact", got)
 	}
-	if n := leadCount(t, a); n != 0 {
+	if n := leadCount(t, st); n != 0 {
 		t.Fatalf("невалидная заявка не должна сохраняться")
 	}
 }
 
 func TestSignupRateLimit(t *testing.T) {
-	_, ts := testApp(t)
+	ts, _ := testServer(t)
 
-	// Жжём лимит невалидными заявками (лимит — signupLimit за окно).
+	// Жжём лимит невалидными заявками (лимит — testLimit за окно).
 	var last *http.Response
-	for i := 0; i <= signupLimit; i++ {
+	for i := 0; i <= testLimit; i++ {
 		last = postSignup(t, ts, url.Values{"name": {"X"}}, nil)
 	}
 	if last.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("статус %d, ожидался 429 после исчерпания лимита", last.StatusCode)
-	}
-}
-
-func TestValidateLead(t *testing.T) {
-	cases := []struct {
-		lead store.Lead
-		ok   bool
-	}{
-		{store.Lead{Name: "Иван", Phone: "+7 900 123-45-67", Email: "i@example.com"}, true},
-		{store.Lead{Name: "Иван", Phone: "8(900)123-45-67", Email: "i@example.com"}, true},
-		{store.Lead{Name: "И", Phone: "+79001234567", Email: "i@example.com"}, false},                // имя короче 2
-		{store.Lead{Name: "Иван", Phone: "", Email: "i@example.com"}, false},                         // без телефона
-		{store.Lead{Name: "Иван", Phone: "+79001234567", Email: "почта"}, false},                     // мусор
-		{store.Lead{Name: strings.Repeat("а", 101), Phone: "+79001234567", Email: "i@x.com"}, false}, // имя длиннее 100
-	}
-
-	for _, c := range cases {
-		errText := validateLead(c.lead)
-		if c.ok && errText != "" {
-			t.Fatalf("%+v: неожиданная ошибка %q", c.lead, errText)
-		}
-		if !c.ok && errText == "" {
-			t.Fatalf("%+v: ожидалась ошибка валидации", c.lead)
-		}
-	}
-}
-
-// TestHitFallback — сбой базы не должен ронять главную страницу: страница
-// рисуется с последним известным числом визитов.
-func TestHitFallback(t *testing.T) {
-	st, err := store.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	log, err := logging.New(logging.Config{Output: io.Discard})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := &app{log: log, store: st}
-
-	// Работающая база: число растёт.
-	if n := a.hit(context.Background()); n != 1 {
-		t.Fatalf("первый визит %d, ожидался 1", n)
-	}
-
-	// База «умерла»: страница получает последнее известное число.
-	if err := st.Close(); err != nil {
-		t.Fatal(err)
-	}
-	a.lastVisits.Store(41)
-	if n := a.hit(context.Background()); n != 41 {
-		t.Fatalf("после сбоя счётчик %d, ожидался фолбэк 41", n)
 	}
 }

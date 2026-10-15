@@ -13,12 +13,13 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // Ограничения полей формы. Логин — как в методичке: буквы и цифры, 3–30.
 var (
 	loginPattern = regexp.MustCompile(`^[a-zA-Z0-9]{3,30}$`)
-	emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 	avatarName   = regexp.MustCompile(`^u[0-9]+-[0-9a-f]+\.(gif|png|jpg|webp)$`)
 )
 
@@ -41,7 +42,7 @@ func validatePassword(pass string) string {
 }
 
 func validateEmail(email string) string {
-	if !emailPattern.MatchString(email) || len(email) > 254 {
+	if !webutil.ValidEmail(email) {
 		return "укажите корректный адрес почты — на него придёт ссылка для входа"
 	}
 	return ""
