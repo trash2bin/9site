@@ -184,6 +184,7 @@ jobs:
             public/js/ "$TARGET:$DEPLOY_PATH/public/js/"
 
       - name: Upload server binary
+        id: swap
         run: |
           set -euo pipefail
           rsync -avz -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
@@ -202,6 +203,10 @@ jobs:
             mv -f '$DEPLOY_PATH/site-server.new' '$DEPLOY_PATH/site-server' &&
             rm -f /tmp/site-server.new
           "
+          # Флаг для авто-отката в конце job: откатывать можно только
+          # после реально состоявшегося свапа, иначе он вернул бы на
+          # место бинарник, который и так работает.
+          echo "swapped=true" >> "$GITHUB_OUTPUT"
 
       # Снимок базы снимается ДО рестарта — иначе он не откат: миграции
       # накатываются при старте нового бинарника. Поэтому шаг идёт перед
@@ -226,6 +231,23 @@ jobs:
               echo 'site.db ещё нет — первый деплой, снимок пропущен'
             fi"
 
+      # Dry-run: новый бинарник прогоняет ВСЕ startup-проверки (миграции,
+      # BASE_URL, SMTP-конфиг, лимиты, статика, роутинг) со всем окружением
+      # юнита, но слушатель не поднимает. Старый сервис крутится и
+      # обслуживает сайт всё это время — плохой бинарник встаёт тут,
+      # и деплой падает, не тронув работающий процесс.
+      #
+      # Окружение вычитывается из юнита (systemctl show), а не дублируется
+      # в CI: иначе ENV-дрифт между юнитом и workflow ломал бы деплой
+      # загадочно. Значения в юните — без пробелов, разделитель — пробел.
+      - name: Dry-run new binary before restart
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" "set -eu
+            cd '$DEPLOY_PATH'
+            envs=\$(systemctl show 9site -p Environment --value | tr ' ' '\n' | grep = | tr '\n' ' ')
+            env \$envs ./site-server check"
+
       - name: Restart service
         run: $SSH_OPTS "$TARGET" "$RESTART_CMD"
 
@@ -233,13 +255,30 @@ jobs:
       # секунду (Restart=on-failure его поднимет заново). Отдельная проверка
       # ловит цикл перезапусков: например, опечатку в SMTP-конфиге, из-за
       # которой бинарник вообще не стартует.
+      #
+      # Во время паузы RestartSec состояние — «activating», поэтому чеку
+      # даём несколько секунд на оседание. Если так и не active — падаем
+      # НЕ с «смотри journalctl», а с самим журналом: причина падения
+      # (стоп: … из stderr бинарника) должна быть видна в логе прогона,
+      # иначе деплой чинится вслепую.
       - name: Check that the service is active
         run: |
           set -euo pipefail
-          state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
+          state=""
+          for _ in 1 2 3 4 5; do
+            state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
+            if [ "$state" = "active" ]; then
+              break
+            fi
+            sleep 2
+          done
           echo "service state: $state"
           if [ "$state" != "active" ]; then
-            echo "Сервис не active — смотри journalctl -u 9site"
+            echo "Сервис не active — status и журнал:"
+            $SSH_OPTS "$TARGET" \
+              "sudo systemctl status 9site --no-pager -l -n 20 || true; \
+               echo '--- journalctl ---'; \
+               sudo journalctl -u 9site -n 80 --no-pager || true"
             exit 1
           fi
 
@@ -335,6 +374,74 @@ jobs:
             exit 1
           fi
           echo "Counter is growing"
+
+      # --- авто-откат ---------------------------------------------------
+      # Если после свапа что-то упало (dry-run, рестарт, чеки, счётчик),
+      # сервер не должен остаться с новым бинарником: возвращаем .prev.
+      # Отвергнутый бинарник сохраняется как site-server.failed — его
+      # можно скачать и воспроизвести падение локально.
+
+      - name: Capture logs on failure
+        if: failure() && steps.swap.outputs.swapped == 'true'
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" \
+            "sudo systemctl status 9site --no-pager -l -n 20 || true; \
+             echo '--- journalctl ---'; \
+             sudo journalctl -u 9site -n 120 --no-pager || true"
+
+      - name: Roll back to previous binary
+        if: failure() && steps.swap.outputs.swapped == 'true'
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" "
+            set -eu
+            if [ -f '$DEPLOY_PATH/site-server.prev' ]; then
+              mv -f '$DEPLOY_PATH/site-server' '$DEPLOY_PATH/site-server.failed'
+              mv -f '$DEPLOY_PATH/site-server.prev' '$DEPLOY_PATH/site-server'
+              echo 'бинарник откатан, отвергнутый сохранён как site-server.failed'
+            else
+              echo 'site-server.prev отсутствует (первый деплой) — откатывать не на что' >&2
+            fi
+          "
+
+      # Рестартуем откатанный бинарник только если сервис реально лёг:
+      # при падении dry-run старый процесс всё это время работать и
+      # продолжает — убивать его повторным рестартом незачем.
+      - name: Restart service after rollback
+        if: failure() && steps.swap.outputs.swapped == 'true'
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" "
+            set -eu
+            state=\$(sudo systemctl is-active 9site || true)
+            if [ \"\$state\" != 'active' ]; then
+              sudo systemctl restart 9site
+              echo 'сервис перезапущен откатанным бинарником'
+            else
+              echo 'сервис и так active — рестарт не нужен'
+            fi
+          "
+
+      - name: Check the site responds after rollback
+        if: failure() && steps.swap.outputs.swapped == 'true'
+        run: |
+          set -euo pipefail
+          state=""
+          for _ in 1 2 3 4 5; do
+            state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
+            if [ "$state" = "active" ]; then
+              break
+            fi
+            sleep 2
+          done
+          code="$($SSH_OPTS "$TARGET" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/" || true)"
+          printf '  service: %s, GET / -> %s\n' "$state" "${code:-no response}"
+          if [ "$state" != "active" ] || [ "$code" != "200" ]; then
+            echo 'Откат не помог — сайт всё ещё лежит, разбирайся по журналу выше'
+            exit 1
+          fi
+          echo 'Сайт снова отвечает после отката'
 
       - name: Summary
         run: echo "Deployed commit ${{ github.sha }}"
