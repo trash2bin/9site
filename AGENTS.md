@@ -79,8 +79,6 @@
   поднимается переменной `LIMIT_<БЮДЖЕТ>`.
 - Текст ошибок SQLite не парсим: «занято / не занято» — уточняющими запросами
   и индексами.
-- Код, сообщения и комментарии — по-русски. Ошибки: `fmt.Errorf("%w")`,
-  сантинелы в store, `errors.Is` наверху.
 
 ## Проверки
 
@@ -89,9 +87,10 @@
 
 ## Деплой
 
-`.github/workflows/ci.yml`: **checks** (фронт, бэк, shellcheck, бюджет
-главной) и **deploy** — только main, когда checks зелёный и
-`vars.DEPLOY_ENABLED == 'true'`. Ключевое:
+`.github/workflows/ci.yml`: отдельные job'ы на тулчейн — `format`, `css`,
+`ts`, `go`, `shell`, `size` — и **deploy** только main, когда все job'ы
+зелёные и `vars.DEPLOY_ENABLED == 'true'`. Feedback (имена шагов, echo,
+вывод) — по-английски ключевое:
 
 1. Статика — rsync; бинарник — `install` + `mv` (атомарный своп), прежний
    остаётся как `site-server.prev`.

@@ -60,12 +60,12 @@ jobs:
           $SSH_OPTS "$TARGET" "
             set -eu
             if [ ! -f '$DEPLOY_PATH/site-server.prev' ]; then
-              echo 'site-server.prev отсутствует — откатывать не на что (первый деплой?)' >&2
+              echo 'no site-server.prev (first deploy?), nothing to roll back to' >&2
               exit 1
             fi
             mv -f '$DEPLOY_PATH/site-server' '$DEPLOY_PATH/site-server.failed'
             mv -f '$DEPLOY_PATH/site-server.prev' '$DEPLOY_PATH/site-server'
-            echo 'бинарник откатан, отвергнутый сохранён как site-server.failed'
+            echo 'rolled back, rejected binary kept as site-server.failed'
           "
 
       - name: Restart service
@@ -86,7 +86,7 @@ jobs:
           done
           echo "service state: $state"
           if [ "$state" != "active" ]; then
-            echo "Сервис не active — status и журнал:"
+            echo "Service not active, status and journal:"
             $SSH_OPTS "$TARGET" \
               "sudo systemctl status 9site --no-pager -l -n 20 || true; \
                echo '--- journalctl ---'; \
