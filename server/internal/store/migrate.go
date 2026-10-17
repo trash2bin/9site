@@ -2,10 +2,8 @@ package store
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"embed"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -18,7 +16,13 @@ import (
 var migrationsFS embed.FS
 
 // migrate прогоняет migrations/*.sql, каждую в своей транзакции, и пишет sha256 файла в
-// schema_migrations: применённый файл править нельзя, база новее бинарника гасит старт.
+// schema_migrations: применённый файл править нельзя.
+//
+// База новее бинарника - это штатный откат деплоя, а не авария: прошлый
+// бинарник обязан открыть базу, которую мигратил новый, и работать на ней.
+// Иначе авто-роллбэк возвращает бинарник, получает exit 1 на store.Open, и
+// цикл Restart=on-failure держит сайт в 502 до ручной правки сервера.
+// Чужие версии пропускаем: их SQL в нашей сборке нет.
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(`
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -43,6 +47,11 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	}
 	sort.Strings(names)
 
+	applied, err := s.appliedVersions()
+	if err != nil {
+		return err
+	}
+
 	for _, name := range names {
 		version, err := migrationVersion(name)
 		if err != nil {
@@ -55,22 +64,26 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		}
 		sum := sha256.Sum256(body)
 
-		var appliedSum string
-		err = s.db.QueryRow(
-			`SELECT sha256 FROM schema_migrations WHERE version = $1`, version,
-		).Scan(&appliedSum)
-		switch {
-		case err == nil:
+		if appliedVersion(applied, version) {
+			// Уже накачена этим же файлом: sha сверяем ниже, повторно не гоним.
+			var appliedSum string
+			err = s.db.QueryRow(
+				`SELECT sha256 FROM schema_migrations WHERE version = $1`, version,
+			).Scan(&appliedSum)
+			if err != nil {
+				return fmt.Errorf("версия миграций: %w", err)
+			}
 			if appliedSum != hex.EncodeToString(sum[:]) {
 				return fmt.Errorf("миграция %s изменена после применения, правьте только новым файлом", name)
 			}
 			continue
-		case errors.Is(err, sql.ErrNoRows):
-			// Ещё не применена, накатываем ниже.
-		default:
-			return fmt.Errorf("версия миграций: %w", err)
 		}
 
+		if futureApplied(applied, version) {
+			// База уже новее файла: в нашей сборке его SQL нет, пропускаем,
+			// иначе откат бинарника не сможет стартовать.
+			continue
+		}
 		tx, err := s.db.Begin()
 		if err != nil {
 			return fmt.Errorf("миграция %s: %w", name, err)
@@ -91,20 +104,47 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		}
 	}
 
-	// База из будущего: продолжать - молча ломать данные, старт падает явно.
-	var maxApplied, maxKnown int
-	if err := s.db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&maxApplied); err != nil {
-		return fmt.Errorf("версия миграций: %w", err)
+	return nil
+}
+
+// appliedVersions уже накаченные в базу версии миграций.
+func (s *Store) appliedVersions() ([]int, error) {
+	rows, err := s.db.Query(`SELECT version FROM schema_migrations`)
+	if err != nil {
+		return nil, fmt.Errorf("версия миграций: %w", err)
 	}
-	if len(names) > 0 {
-		if maxKnown, err = migrationVersion(names[len(names)-1]); err != nil {
-			return err
+	defer func() { _ = rows.Close() }()
+
+	out := make([]int, 0, 4)
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("версия миграций: %w", err)
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// appliedVersion есть ли ровно эта версия среди применённых.
+func appliedVersion(applied []int, version int) bool {
+	for _, v := range applied {
+		if v == version {
+			return true
 		}
 	}
-	if maxApplied > maxKnown {
-		return fmt.Errorf("база знает миграции до %d, бинарник только до %d: откат невозможен, нужен бэкап и ручной разбор", maxApplied, maxKnown)
+	return false
+}
+
+// futureApplied применил ли кто-то версию выше этой: значит база из будущего
+// для этого бинарника, файл трогать нельзя.
+func futureApplied(applied []int, version int) bool {
+	for _, v := range applied {
+		if v > version {
+			return true
+		}
 	}
-	return nil
+	return false
 }
 
 // migrationVersion достаёт номер из имени файла: "0002_leads.sql" → 2.

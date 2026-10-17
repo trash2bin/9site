@@ -112,23 +112,58 @@ func TestMigrateDetectsEditedFile(t *testing.T) {
 	}
 }
 
-func TestMigrateRejectsFutureSchema(t *testing.T) {
+// TestMigrateAcceptsFutureSchema: база новее бинарника - это условие
+// откатившего деплоя, а не авария. Битый rollback ронял сервис в 502
+// навсегда: прошлый бинарник отказывался открыть базу, которую новый уже
+// мигратил, а systemd крутил его по кругу (activating, рестарт, exit 1).
+// Старт обязан состояться и оставить чужую схему как есть.
+func TestMigrateAcceptsFutureSchema(t *testing.T) {
 	dir := t.TempDir()
+
+	db, err := sql.Open("sqlite", filepath.Join(dir, "site.db"))
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version    INTEGER PRIMARY KEY,
+  sha256     TEXT    NOT NULL,
+  applied_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT
+);`); err != nil {
+		t.Fatalf("схема из будущего: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_migrations (version, sha256) VALUES (999, 'future')`); err != nil {
+		t.Fatalf("версия из будущего: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 
 	s, err := store.Open(dir)
 	if err != nil {
-		t.Fatalf("Open: %v", err)
+		t.Fatalf("Open на базе из будущего упал: %v", err)
 	}
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
+	defer func() { _ = s.Close() }()
+
+	ver := rawDB(t, dir)
+	var n int
+	if err := ver.QueryRow(`SELECT COUNT(*) FROM leads`).Scan(&n); err != nil {
+		t.Fatalf("схема из будущего не пережила старт: %v", err)
 	}
-	// Симулируем откат деплоя: в базе версия, о которой бинарник не знает.
-	if _, err := rawDB(t, dir).Exec(`INSERT INTO schema_migrations (version, sha256) VALUES (999, 'x')`); err != nil {
-		t.Fatalf("вставка будущей версии: %v", err)
+	var v int
+	if err := ver.QueryRow(`SELECT version FROM schema_migrations WHERE version = 999`).Scan(&v); err != nil {
+		t.Fatalf("чужая версия миграций потеряна: %v", err)
 	}
 
-	if _, err := store.Open(dir); err == nil || !strings.Contains(err.Error(), "откат невозможен") {
-		t.Fatalf("ожидалась ошибка о будущей версии, получили: %v", err)
+	if _, err := ver.Exec(`INSERT INTO leads (name) VALUES ('заявка')`); err != nil {
+		t.Fatalf("хранилище не работает на чужой схеме: %v", err)
+	}
+	if err := ver.QueryRow(`SELECT COUNT(*) FROM leads`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("заявка не сохранилась: n=%d err=%v", n, err)
 	}
 }
 

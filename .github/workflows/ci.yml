@@ -269,6 +269,11 @@ jobs:
       # накатываются при старте нового бинарника. Поэтому шаг идёт перед
       # Restart, а не после.
       #
+      # Вторая копия — site.db.pre-deploy: она нужна не как архив, а как
+      # пара к откату бинарника. Откат обязан вернуть базу в то же
+      # состояние, иначе прошлый бинарник падает на "база знает миграции
+      # дальше" и цикл автоперезапусков гасит сайт навсегда.
+      #
       # Побочный эффект полезный: снимок делает уже новый бинарник, то есть
       # если тот вообще не запускается, деплой встаёт здесь — на сервере
       # продолжает работать старый процесс, и сайт не падает.
@@ -284,6 +289,9 @@ jobs:
               cd '$DATA_DIR/backups'
               ls -1t site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
               echo 'Backup: $DATA_DIR/backups/site-$stamp.db'
+              rm -f '$DATA_DIR/site.db.pre-deploy'
+              '$DEPLOY_PATH/site-server' backup '$DATA_DIR/site.db.pre-deploy'
+              echo 'Pre-deploy copy kept for a paired rollback'
             else
               echo 'no site.db yet: first deploy, snapshot skipped'
             fi"
@@ -302,7 +310,7 @@ jobs:
           set -euo pipefail
           $SSH_OPTS "$TARGET" "set -eu
             cd '$DEPLOY_PATH'
-            envs=\$(systemctl show 9site -p Environment --value | tr ' ' '\n' | grep = | tr '\n' ' ')
+            envs=\$(sudo systemctl show 9site -p Environment --value | tr ' ' '\n' | grep = | tr '\n' ' ')
             env \$envs ./site-server check"
 
       - name: Restart service
@@ -322,7 +330,7 @@ jobs:
         run: |
           set -euo pipefail
           state=""
-          for _ in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
             state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
             if [ "$state" = "active" ]; then
               break
@@ -335,7 +343,7 @@ jobs:
             $SSH_OPTS "$TARGET" \
               "sudo systemctl status 9site --no-pager -l -n 20 || true; \
                echo '--- journalctl ---'; \
-               sudo journalctl -u 9site -n 80 --no-pager || true"
+               sudo journalctl -u 9site -n 120 --no-pager || true"
             exit 1
           fi
 
@@ -445,9 +453,13 @@ jobs:
           $SSH_OPTS "$TARGET" \
             "sudo systemctl status 9site --no-pager -l -n 20 || true; \
              echo '--- journalctl ---'; \
-             sudo journalctl -u 9site -n 120 --no-pager || true"
+             sudo journalctl -u 9site -n 200 --no-pager || true"
 
-      - name: Roll back to previous binary
+      # Откат обязан быть парным: вместе с бинарником уходит и схема, которую
+      # этот бинарник накатил на базу. Рестарт прошлого бинарника без отката
+      # базы падает на "база знает миграции дальше", и цикл автоперезапусков
+      # держит сайт в 502 дольше, чем жил сломанный деплой.
+      - name: Roll back binary and database
         if: failure() && steps.swap.outputs.swapped == 'true'
         run: |
           set -euo pipefail
@@ -462,6 +474,29 @@ jobs:
             fi
           "
 
+      # Откат базы парный к бинарнику: новый бинарник уже мог накатить на
+      # site.db схему, которой .prev не знает. Без возврата базы прошлый
+      # бинарник падает на старте, и цикл автоперезапусков держит сайт в 502.
+      # Копия снималась через site-server backup (VACUUM INTO), а не cp: в
+      # WAL-режиме cp забирает только главный файл и теряет свежие записи.
+      # Восстановление забирает с собой и -wal/-shm: чужой WAL поверх
+      # откаченной базы дал бы расхождение схемы и данных.
+      - name: Roll back database
+        if: failure() && steps.swap.outputs.swapped == 'true'
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" "
+            set -eu
+            if [ -f '$DATA_DIR/site.db.pre-deploy' ]; then
+              cp -f '$DATA_DIR/site.db' '$DATA_DIR/site.db.new-schema'
+              cp -f '$DATA_DIR/site.db.pre-deploy' '$DATA_DIR/site.db'
+              rm -f '$DATA_DIR/site.db-wal' '$DATA_DIR/site.db-shm'
+              echo 'database rolled back to the pre-deploy snapshot'
+            else
+              echo 'no site.db.pre-deploy: nothing to restore' >&2
+            fi
+          "
+
       # Рестартуем откатанный бинарник только если сервис реально лёг:
       # при падении dry-run старый процесс всё это время работать и
       # продолжает — убивать его повторным рестартом незачем.
@@ -471,10 +506,14 @@ jobs:
           set -euo pipefail
           $SSH_OPTS "$TARGET" "
             set -eu
+            # Битый swap (нет .prev) уже сообщил о причине: рестарт ниже
+            # вернул бы тот же новый бинарник.
+            [ -f '$DEPLOY_PATH/site-server.prev' ] || exit 0
             state=\$(sudo systemctl is-active 9site || true)
             if [ \"\$state\" != 'active' ]; then
+              sudo systemctl reset-failed 9site || true
               sudo systemctl restart 9site
-              echo 'service restarted with the rolled back binary'
+              echo 'service restarted with the rolled back binary and database'
             else
               echo 'service still active, restart skipped'
             fi
@@ -485,7 +524,7 @@ jobs:
         run: |
           set -euo pipefail
           state=""
-          for _ in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
             state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
             if [ "$state" = "active" ]; then
               break
@@ -496,6 +535,8 @@ jobs:
           printf '  service: %s, GET / -> %s\n' "$state" "${code:-no response}"
           if [ "$state" != "active" ] || [ "$code" != "200" ]; then
             echo 'Rollback did not help, the site is still down, see the journal above'
+            $SSH_OPTS "$TARGET" \
+              "sudo journalctl -u 9site -n 100 --no-pager || true"
             exit 1
           fi
           echo 'Site responds again after rollback'

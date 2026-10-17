@@ -29,6 +29,9 @@ jobs:
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
+      # Должен совпадать с DATA_DIR из 9site.service: отсюда берётся копия
+      # базы для парного с бинарником отката.
+      DATA_DIR: ${{ secrets.DATA_DIR || '/var/lib/9site' }}
       RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'sudo systemctl restart 9site' }}
       TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
       SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
@@ -54,7 +57,7 @@ jobs:
              echo '--- journalctl ---'; \
              sudo journalctl -u 9site -n 120 --no-pager || true"
 
-      - name: Roll back to previous binary
+      - name: Roll back binary
         run: |
           set -euo pipefail
           $SSH_OPTS "$TARGET" "
@@ -68,8 +71,27 @@ jobs:
             echo 'rolled back, rejected binary kept as site-server.failed'
           "
 
+      # Откат парный: бинарник и база возвращаются вместе, иначе прошлый
+      # бинарник падает на схеме из будущего и удерживает сайт в 502.
+      - name: Roll back database
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" "
+            set -eu
+            if [ -f '$DATA_DIR/site.db.pre-deploy' ]; then
+              cp -f '$DATA_DIR/site.db' '$DATA_DIR/site.db.new-schema'
+              cp -f '$DATA_DIR/site.db.pre-deploy' '$DATA_DIR/site.db'
+              echo 'database rolled back to the pre-deploy snapshot'
+            else
+              echo 'no site.db.pre-deploy: nothing to restore' >&2
+            fi
+          "
+
       - name: Restart service
-        run: $SSH_OPTS "$TARGET" "$RESTART_CMD"
+        run: |
+          set -euo pipefail
+          $SSH_OPTS "$TARGET" "sudo systemctl reset-failed 9site || true"
+          $SSH_OPTS "$TARGET" "$RESTART_CMD"
 
       # Тот же ретрай, что в deploy: во время паузы RestartSec состояние
       # «activating» — чеку даём осесть, а при провале вываливаем журнал.
@@ -77,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           state=""
-          for _ in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
             state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
             if [ "$state" = "active" ]; then
               break
