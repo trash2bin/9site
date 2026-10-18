@@ -6,49 +6,29 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=deploy
-Group=deploy
 WorkingDirectory=/var/www/9site
 ExecStart=/var/www/9site/site-server
 
-# Каталог StateDirectory создаёт сам systemd и отдаёт пользователю
-# сервиса; при ProtectSystem=strict он остаётся единственным местом,
-# доступным на запись.
-StateDirectory=9site
-# Все данные сайта — в единой базе site.db: счётчик визитов, пользователи,
-# сессии, журнал действий и заявки с формы. VISITS_FILE указывает на старый
-# файл со счётчиком — он читается один раз при первом старте для импорта
-# в базу (после чего файл переименовывается в .bak).
+# Пользовательский юнит: работает от имени deploy, без root и sudo. Каталог
+# данных создаёт setup-server и отдаёт deploy, под ProtectSystem=strict его
+# открываем на запись явно.
+ReadWritePaths=/var/lib/9site
 Environment=VISITS_FILE=/var/lib/9site/visits.dat
 # Каталог базы, аватаров и исходящих писем.
 Environment=DATA_DIR=/var/lib/9site
-# Статика лежит в /var/www/9site/public (туда её кладёт деплой), а бинарник —
-# в корне DEPLOY_PATH, поэтому каталог задаётся явно, а не относительно cwd.
+# Статика лежит в /var/www/9site/public (туда её кладёт деплой), а бинарник
+# в корне DEPLOY_PATH: каталог задаётся явно, а не относительно cwd.
 Environment=STATIC_ROOT=/var/www/9site/public
-# Внешний адрес сайта: в письмах восстановления пароля ссылки абсолютные.
 Environment=BASE_URL=https://9swag.myftp.biz
-# SMTP для писем восстановления пароля. Вариант 1 — готовый пресет
-# (gmail | yandex | mailru): хост и порт подставляются сами, нужен только
-# ЛОГИН и ПАРОЛЬ ПРИЛОЖЕНИЯ (обычный пароль аккаунта SMTP не пускает):
-#   gmail:  myaccount.google.com → Безопасность → Пароли приложений
-#   yandex: Яндекс ID → Безопасность → Пароли приложений
-#   mailru: настройки почты → Пароли приложений
 #Environment=SMTP_PROVIDER=gmail
 #Environment=SMTP_USER=you@gmail.com
 #Environment=SMTP_PASS=пароль-приложения
-# Вариант 2 — свой SMTP-сервер (вместо SMTP_PROVIDER):
 #Environment=SMTP_HOST=smtp.example.com
 #Environment=SMTP_PORT=587
-#Environment=SMTP_USER=no-reply@example.com
-#Environment=SMTP_PASS=секрет
-#Environment=SMTP_FROM=no-reply@example.com
-# Без этих переменных письма копируются в DATA_DIR/outbox и наружу не уходят.
 
 Restart=on-failure
 RestartSec=3
 
-# Сервер только читает файлы и слушает порт 8080 на localhost.
-# Права ему сверх этого не нужны, поэтому урезаем всё лишнее.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -63,4 +43,4 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

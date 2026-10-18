@@ -1,15 +1,15 @@
 name: Rollback
 
-# Ручной откат прод-сервера на предыдущий бинарник (site-server.prev).
-# Нужен, когда deploy упал после свапа бинарника, а прямого SSH к серверу
-# нет: GitHub Actions — тот же доступ, что у деплоя.
+# Manual rollback of the production server to the previous binary
+# (site-server.prev). It is needed when the deploy failed after the binary
+# swap and there is no direct ssh to the server: GitHub Actions is then the
+# same access the deploy had.
 #
-# Порядок важен: сначала журнал (диагноз, почему новый бинарник падает —
-# он остаётся в логе прогона), потом откат, потом проверки. Если .prev
-# нет (первый деплой), откат падает явно, ничего не трогая.
-#
-# concurrency тем же group, что у деплоя: откат не должен бежать
-# параллельно с деплоем — они дерутся за один сервер.
+# The order matters: journal first (the diagnosis of why the new binary
+# fails, which stays in the run log), then the rollback, then the checks.
+# The rollback itself is deploy/remote/rollback.sh, the same script the
+# deploy runs automatically, so the two cannot drift apart.
+
 on:
   workflow_dispatch:
 
@@ -21,6 +21,8 @@ jobs:
     name: Rollback to previous binary
     runs-on: ubuntu-latest
     environment: production
+    # The same group as the deploy: a rollback must not run next to a
+    # deploy, they fight over one server.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -29,12 +31,13 @@ jobs:
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-      # Должен совпадать с DATA_DIR из 9site.service: отсюда берётся копия
-      # базы для парного с бинарником отката.
+      # Must match DATA_DIR from 9site.service: the copy of the database for
+      # the rollback that is paired with the binary.
       DATA_DIR: ${{ secrets.DATA_DIR || '/var/lib/9site' }}
-      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'sudo systemctl restart 9site' }}
+      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
       TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
       SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
+      SUMMARY: ${{ github.workspace }}/rollback-summary.txt
     steps:
       - uses: actions/checkout@v7
 
@@ -47,131 +50,29 @@ jobs:
           ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           echo "key in place"
 
-      # Диагноз до отката: почему новый бинарник падает («стоп: …» из
-      # stderr). Без этого откат лечит следствие, а причина остаётся.
-      - name: Capture service logs before rollback
+      # Diagnosis before the rollback: why the new binary failed ("стоп: ..."
+      # from its stderr). Without it the rollback treats the symptom and the
+      # cause stays invisible.
+      - name: Capture the journal before the rollback
         run: |
           set -euo pipefail
-          $SSH_OPTS "$TARGET" \
-            "sudo systemctl status 9site --no-pager -l -n 20 || true; \
-             echo '--- journalctl ---'; \
-             sudo journalctl -u 9site -n 120 --no-pager || true"
+          bash deploy/remote/run.sh preflight "DATA_DIR=$DATA_DIR" \
+            "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+          bash deploy/remote/run.sh journal-report | tee -a "$SUMMARY"
 
-      - name: Roll back binary
+      - name: Roll back binary and database
+        run: bash deploy/remote/run.sh rollback "DATA_DIR=$DATA_DIR" \
+          "DEPLOY_PATH=$DEPLOY_PATH" "RESTART_CMD=$RESTART_CMD"
+
+      # The same check the deploy runs, from the same list of urls: a
+      # rollback counts as done only when the whole site is back, not just
+      # a process.
+      - name: Check that the site answers
         run: |
           set -euo pipefail
-          $SSH_OPTS "$TARGET" "
-            set -eu
-            if [ ! -f '$DEPLOY_PATH/site-server.prev' ]; then
-              echo 'no site-server.prev (first deploy?), nothing to roll back to' >&2
-              exit 1
-            fi
-            mv -f '$DEPLOY_PATH/site-server' '$DEPLOY_PATH/site-server.failed'
-            mv -f '$DEPLOY_PATH/site-server.prev' '$DEPLOY_PATH/site-server'
-            echo 'rolled back, rejected binary kept as site-server.failed'
-          "
-
-      # Откат парный: бинарник и база возвращаются вместе, иначе прошлый
-      # бинарник падает на схеме из будущего и удерживает сайт в 502.
-      - name: Roll back database
-        run: |
-          set -euo pipefail
-          $SSH_OPTS "$TARGET" "
-            set -eu
-            if [ -f '$DATA_DIR/site.db.pre-deploy' ]; then
-              cp -f '$DATA_DIR/site.db' '$DATA_DIR/site.db.new-schema'
-              cp -f '$DATA_DIR/site.db.pre-deploy' '$DATA_DIR/site.db'
-              echo 'database rolled back to the pre-deploy snapshot'
-            else
-              echo 'no site.db.pre-deploy: nothing to restore' >&2
-            fi
-          "
-
-      - name: Restart service
-        run: |
-          set -euo pipefail
-          $SSH_OPTS "$TARGET" "sudo systemctl reset-failed 9site || true"
-          $SSH_OPTS "$TARGET" "$RESTART_CMD"
-
-      # Тот же ретрай, что в deploy: во время паузы RestartSec состояние
-      # «activating» — чеку даём осесть, а при провале вываливаем журнал.
-      - name: Check that the service is active
-        run: |
-          set -euo pipefail
-          state=""
-          for _ in 1 2 3 4 5 6 7 8 9 10; do
-            state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
-            if [ "$state" = "active" ]; then
-              break
-            fi
-            sleep 2
-          done
-          echo "service state: $state"
-          if [ "$state" != "active" ]; then
-            echo "Service not active, status and journal:"
-            $SSH_OPTS "$TARGET" \
-              "sudo systemctl status 9site --no-pager -l -n 20 || true; \
-               echo '--- journalctl ---'; \
-               sudo journalctl -u 9site -n 80 --no-pager || true"
-            exit 1
-          fi
-
-      - name: Check that the site responds
-        run: |
-          set -euo pipefail
-
-          check() {
-            local url="$1" want="$2" code
-            code="$($SSH_OPTS "$TARGET" "curl -s -o /dev/null -w '%{http_code}' '$url'" || true)"
-            printf '  %-34s %s\n' "$url" "${code:-no response}"
-            if [ "$code" != "$want" ]; then
-              echo "Expected $want, got ${code:-no response}"
-              return 1
-            fi
-          }
-
-          # Тот же набор, что в deploy: откат считается успешным, только
-          # если вернулся не просто процесс, а весь сайт — со статикой,
-          # витриной и закрытым разделом.
-          check http://127.0.0.1:8080/           200
-          check http://127.0.0.1:8080/style.css  200
-          check http://127.0.0.1:8080/css/base.css 200
-          check http://127.0.0.1:8080/maket      200
-          check http://127.0.0.1:8080/catalog    200
-          check http://127.0.0.1:8080/print.css  200
-          check http://127.0.0.1:8080/js/main.js 200
-          check http://127.0.0.1:8080/studio            200
-          check http://127.0.0.1:8080/vault             303
-          check http://127.0.0.1:8080/css/auth/auth.css 200
-          check http://127.0.0.1:8080/css/              404
-          check http://127.0.0.1:8080/var/site.db       404
-          check http://127.0.0.1:8080/main.go           404
-
-      # Счётчик — единственная живая часть: проверяем число, а не код.
-      - name: Check the visit counter
-        run: |
-          set -euo pipefail
-          visits() {
-            $SSH_OPTS "$TARGET" "curl -s http://127.0.0.1:8080/" \
-              | tr -d '\n' \
-              | awk -F'class="counter"' '{print $2}' \
-              | head -c 200 \
-              | grep -o '<span>[0-9]</span>' | grep -o '[0-9]' | tr -d '\n'
-          }
-          first="$(visits)"
-          second="$(visits)"
-          printf '  before: %s, after: %s\n' "$first" "$second"
-          if [ -z "$first" ] || [ -z "$second" ]; then
-            echo "Counter not found in the response"
-            exit 1
-          fi
-          before=$((10#$first))
-          after=$((10#$second))
-          if [ "$after" -lt "$before" ]; then
-            echo "Counter went down: $before -> $after"
-            exit 1
-          fi
-          echo "Counter is growing"
+          urls="$(grep -v '^#' deploy/smoke-urls.txt)"
+          bash deploy/remote/run.sh check-live "URLS=$urls" \
+            "BASE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
 
       - name: Summary
-        run: echo "Rolled back to previous binary on commit ${{ github.sha }} of this workflow"
+        run: echo "Rolled back to the previous binary on commit ${{ github.sha }} of this workflow"

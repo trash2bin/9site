@@ -1,4 +1,0 @@
-# Пользователь деплоя может перезапускать только этот сервис и читать его
-# журнал: без этого падение сервиса остаётся без причины, и деплой нечем
-# диагностировать.
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start 9site, /usr/bin/systemctl stop 9site, /usr/bin/systemctl restart 9site, /usr/bin/systemctl is-active 9site, /usr/bin/systemctl status 9site, /usr/bin/systemctl status 9site*, /usr/bin/systemctl show 9site*, /usr/bin/systemctl daemon-reload, /usr/bin/journalctl -u 9site*

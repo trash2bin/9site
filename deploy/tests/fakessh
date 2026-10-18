@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Local stand-in for ssh: everything up to the last argument is the
+# connection description, the last argument is the command to run. stdin is
+# passed through untouched, so a piped script stream lands in bash -s.
+#
+# It proves the one thing the inline workflow bash could not: that the
+# script that reaches the server is the script in the repository, with the
+# values as they were quoted with printf %q.
+
+cmd_index=$#
+cmd="${!cmd_index}"
+exec bash -c "$cmd"

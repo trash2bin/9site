@@ -34,7 +34,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for f in 9site.service nginx-9site.conf sudoers-9site-deploy; do
+for f in 9site.service nginx-9site.conf; do
   if [ ! -f "$SCRIPT_DIR/$f" ]; then
     echo "Не найден $SCRIPT_DIR/$f. Запускай скрипт из папки deploy/." >&2
     exit 1
@@ -78,16 +78,25 @@ else
 fi
 
 say "systemd"
-install -m 644 "$SCRIPT_DIR/9site.service" "/etc/systemd/system/$SERVICE_NAME.service"
-systemctl daemon-reload
-systemctl enable "$SERVICE_NAME" >/dev/null
-echo "  юнит установлен, включён в автозапуск"
-echo "  запускать пока нечего: бинарник придёт первым деплоем"
+# Старый системный юнит (если сервер поднят на нём): снять и убрать, иначе
+# два юнита дерутся за порт 8080. Простой ровно до первого деплоя.
+if [ -e "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+  systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+  rm -f "/etc/systemd/system/$SERVICE_NAME.service"
+  systemctl daemon-reload
+  echo "  старый системный юнит $SERVICE_NAME снят и удалён"
+fi
 
-say "Разрешение на перезапуск"
-install -m 0440 "$SCRIPT_DIR/sudoers-9site-deploy" "/etc/sudoers.d/$SERVICE_NAME-deploy"
-visudo -c -f "/etc/sudoers.d/$SERVICE_NAME-deploy" >/dev/null
-echo "  $DEPLOY_USER может перезапускать $SERVICE_NAME без пароля"
+# Пользовательский юнит живёт в ~/.config/systemd/user и ставится деплоем.
+# Здесь только задел: каталог под юнит, каталог данных и linger, чтобы
+# менеджер $DEPLOY_USER поднимался без входной сессии. Дальше ни одного sudo.
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 \
+  "/home/$DEPLOY_USER/.config/systemd/user" "/var/lib/9site"
+loginctl enable-linger "$DEPLOY_USER"
+# Поднять менеджер пользователя сразу, чтобы первый деплой не ждал перезагрузки.
+systemctl start "user@$(id -u "$DEPLOY_USER").service"
+echo "  каталог юнита и /var/lib/9site отданы $DEPLOY_USER, включён linger"
+echo "  сам юнит и сервис приходит первым деплоем, без root"
 
 say "nginx"
 # Дефолтный сайт nginx помечен default_server и перехватывает все запросы,
@@ -186,7 +195,7 @@ cat <<INFO
 
 Переменные (вкладка Variables):
   DEPLOY_ENABLED      = true
-  DEPLOY_RESTART_CMD  = sudo systemctl restart $SERVICE_NAME
+  DEPLOY_RESTART_CMD  = systemctl --user restart $SERVICE_NAME
 
 Секреты (вкладка Secrets):
   SSH_HOST            = IP этого сервера

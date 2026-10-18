@@ -105,18 +105,24 @@ jobs:
 
       - name: gofmt
         run: |
+          set -euo pipefail
           # gofmt идёт по git-файлам: в ./... попадает Go-пакет
           # библиотеки flatted внутри node_modules — чужой код не гоняем.
-          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          # xargs -0 -r вместо $(): без него пайп с пустым вводом молча
+          # запускал бы gofmt без аргументов, а опечатка в git ls-files
+          # при set -e больше не проходила бы мимо.
+          unformatted="$(git ls-files -z '*.go' | xargs -0 -r gofmt -l)"
           if [ -n "$unformatted" ]; then
             echo "Not formatted: $unformatted"
-            gofmt -d $(git ls-files '*.go')
+            git ls-files -z '*.go' | xargs -0 -r gofmt -d
             exit 1
           fi
           echo "OK"
 
       - name: go vet
-        run: go vet $(go list ./... | grep -v node_modules)
+        run: |
+          set -euo pipefail
+          go list ./... | grep -v node_modules | xargs -r go vet
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
@@ -133,7 +139,9 @@ jobs:
           govulncheck ./...
 
       - name: go test
-        run: go test -race $(go list ./... | grep -v node_modules)
+        run: |
+          set -euo pipefail
+          go list ./... | grep -v node_modules | xargs -r go test -race
 
       - name: Build server
         run: go build -o /tmp/site-server ./server
@@ -145,8 +153,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: shellcheck
-        run: shellcheck -S warning scripts/*.sh deploy/*.sh
+      # The shell linters need nothing from npm or go: they look at scripts and
+      # workflows.
+      - name: Install shell linters
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck bats
+          go install github.com/rhysd/actionlint/cmd/actionlint@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: shellcheck for the deploy scripts
+        run: |
+          shellcheck -S warning \
+            scripts/*.sh deploy/*.sh deploy/remote/*.sh deploy/tests/fakessh
+
+      # The workflows plus the behaviour of the deploy scripts with stubbed
+      # server commands.
+      - name: Deploy checks
+        run: bash scripts/check-deploy.sh
 
   # Считает main page: index.html и слои стилей из public/css.
   # Слои макета (public/css/design/) в бюджет не входят.
@@ -159,6 +183,20 @@ jobs:
       - name: Budget check
         run: bash scripts/check-size.sh
 
+  # Full rehearsal of the deploy on a real systemd, as the deploy user over
+  # ssh, with no sudo at all: root is only what a GitHub runner already has
+  # and it stays inside the job. Kept off the deploy gate on purpose: it must
+  # run so drift shows up, but a flaky rehearsal should not block a deploy
+  # that is otherwise green. Flip it into deploy.needs once it proves stable.
+  e2e:
+    name: Deploy e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run the deploy end to end on user systemd
+        run: sudo bash deploy/tests/e2e/run.sh
+
   # Deploy only switches on once the server is ready: set the repository
   # variable DEPLOY_ENABLED=true and fill in the SSH_* secrets (see README).
   deploy:
@@ -170,10 +208,9 @@ jobs:
       vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
-    # Деплой не отменяется в пользу более свежего пуша. cancel-in-progress
-    # убил бы идущий rsync/рестарт на середине и оставил бы сервер с новым
-    # бинарником и старой статикой (или наоборот). Следующий деплой просто
-    # подождёт.
+    # A newer push must not cancel a deploy in flight: it would cut rsync or
+    # a restart in half and leave the server with a new binary and old
+    # static files. The next deploy simply waits.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -184,12 +221,15 @@ jobs:
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-      # Должен совпадать с DATA_DIR из 9site.service: тут считается путь к
-      # базе для резервной копии перед рестартом.
+      # Must match DATA_DIR from 9site.service: the path of the database for
+      # the snapshot taken before the restart.
       DATA_DIR: ${{ secrets.DATA_DIR || '/var/lib/9site' }}
-      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'sudo systemctl restart 9site' }}
+      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
       TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
       SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
+      # Goes to the job summary on failure, so the reason is on the Checks
+      # tab instead of somewhere in the log.
+      SUMMARY: ${{ github.workspace }}/deploy-summary.txt
     steps:
       - uses: actions/checkout@v7
 
@@ -213,333 +253,80 @@ jobs:
           echo "key in place"
 
       - name: Upload static files
+        run: bash deploy/upload-static.sh
+
+      # The deploy user prepares its own runtime: the unit directory and the
+      # linger that keeps the user manager up. No root, so a fresh server is
+      # ready without a human beyond the one-time deploy/migrate.sh.
+      - name: Prepare the user runtime
+        run: bash deploy/remote/run.sh prepare "DATA_DIR=$DATA_DIR" \
+          "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+
+      - name: Check the state of the server
+        run: bash deploy/remote/run.sh preflight "DATA_DIR=$DATA_DIR" \
+          "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+
+      - name: Install service unit
         run: |
           set -euo pipefail
-          # Статика живёт в $DEPLOY_PATH/public, бинарник — в корне
-          # $DEPLOY_PATH: сервис читает её по STATIC_ROOT из юнита.
-          # rsync сам создаёт отсутствующие public/, но mkdir не даёт
-          # первому деплою упасть по неочевидной причине, если не создаст.
-          $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/public' && chmod 755 '$DEPLOY_PATH/public'"
-          # Корневые страницы и стили выгружаются шаблоном, а не списком
-          # имён: новая страница сама попадает на сервер, без правки CI.
-          # Список имён здесь — это сайт, который на сервере отстаёт от
-          # репозитория, и первый же старт нового бинарника падает на
-          # startup-проверке отсутствующего файла.
-          rsync -avz -e "$SSH_OPTS" \
-            public/*.html public/*.css \
-            "$TARGET:$DEPLOY_PATH/public/"
-          # Слои стилей копируются отдельно: --delete-after убирает файлы,
-          # оставшиеся на сервере от прежней разбивки, иначе public/css
-          # постепенно копит мусор, который всё равно раздаётся наружу.
-          rsync -avz --delete-after -e "$SSH_OPTS" \
-            public/css/ "$TARGET:$DEPLOY_PATH/public/css/"
-          rsync -avz --delete-after -e "$SSH_OPTS" \
-            public/assets/ "$TARGET:$DEPLOY_PATH/public/assets/"
-          # Собранный из src/*.ts скрипт — так же, с чисткой: старые модули
-          # не должны оставаться на сервере.
-          rsync -avz --delete-after -e "$SSH_OPTS" \
-            public/js/ "$TARGET:$DEPLOY_PATH/public/js/"
+          rsync -az -e "$SSH_OPTS" deploy/9site.service "$TARGET:/tmp/9site.service"
+          bash deploy/remote/run.sh install-unit "DEPLOY_PATH=$DEPLOY_PATH" \
+            "DATA_DIR=$DATA_DIR" | tee -a "$SUMMARY"
 
       - name: Upload server binary
         id: swap
         run: |
           set -euo pipefail
-          rsync -avz -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
-          # Install next to the old binary and swap with mv: a rename inside
-          # one filesystem is atomic, so the service never goes a moment
-          # without a binary and never hits "Text file busy".
-          #
-          # Прежний бинарник сохраняется как site-server.prev: работающий
-          # процесс держит свой inode, поэтому сервис не видит ни одного
-          # момента без файла, а откат становится одной командой.
-          $SSH_OPTS "$TARGET" "
-            install -m 755 /tmp/site-server.new '$DEPLOY_PATH/site-server.new' &&
-            if [ -f '$DEPLOY_PATH/site-server' ]; then
-              mv -f '$DEPLOY_PATH/site-server' '$DEPLOY_PATH/site-server.prev';
-            fi &&
-            mv -f '$DEPLOY_PATH/site-server.new' '$DEPLOY_PATH/site-server' &&
-            rm -f /tmp/site-server.new
-          "
-          # Флаг для авто-отката в конце job: откатывать можно только
-          # после реально состоявшегося свапа, иначе он вернул бы на
-          # место бинарник, который и так работает.
+          rsync -az -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
+          bash deploy/remote/run.sh swap-binary "DEPLOY_PATH=$DEPLOY_PATH" \
+            | tee -a "$SUMMARY"
           echo "swapped=true" >> "$GITHUB_OUTPUT"
 
-      # Снимок базы снимается ДО рестарта — иначе он не откат: миграции
-      # накатываются при старте нового бинарника. Поэтому шаг идёт перед
-      # Restart, а не после.
-      #
-      # Вторая копия — site.db.pre-deploy: она нужна не как архив, а как
-      # пара к откату бинарника. Откат обязан вернуть базу в то же
-      # состояние, иначе прошлый бинарник падает на "база знает миграции
-      # дальше" и цикл автоперезапусков гасит сайт навсегда.
-      #
-      # Побочный эффект полезный: снимок делает уже новый бинарник, то есть
-      # если тот вообще не запускается, деплой встаёт здесь — на сервере
-      # продолжает работать старый процесс, и сайт не падает.
       - name: Backup database before restart
         run: |
           set -euo pipefail
           stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-          $SSH_OPTS "$TARGET" "set -eu
-            mkdir -p '$DATA_DIR/backups'
-            if [ -f '$DATA_DIR/site.db' ]; then
-              '$DEPLOY_PATH/site-server' backup '$DATA_DIR/backups/site-$stamp.db'
-              # Держим последние 10 копий: бэкапы не копятся вечно.
-              cd '$DATA_DIR/backups'
-              ls -1t site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
-              echo 'Backup: $DATA_DIR/backups/site-$stamp.db'
-              rm -f '$DATA_DIR/site.db.pre-deploy'
-              '$DEPLOY_PATH/site-server' backup '$DATA_DIR/site.db.pre-deploy'
-              echo 'Pre-deploy copy kept for a paired rollback'
-            else
-              echo 'no site.db yet: first deploy, snapshot skipped'
-            fi"
+          bash deploy/remote/run.sh backup-db "STAMP=$stamp" \
+            "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
-      # Dry-run: новый бинарник прогоняет ВСЕ startup-проверки (миграции,
-      # BASE_URL, SMTP-конфиг, лимиты, статика, роутинг) со всем окружением
-      # юнита, но слушатель не поднимает. Старый сервис крутится и
-      # обслуживает сайт всё это время — плохой бинарник встаёт тут,
-      # и деплой падает, не тронув работающий процесс.
-      #
-      # Окружение вычитывается из юнита (systemctl show), а не дублируется
-      # в CI: иначе ENV-дрифт между юнитом и workflow ломал бы деплой
-      # загадочно. Значения в юните — без пробелов, разделитель — пробел.
       - name: Dry-run new binary before restart
-        run: |
-          set -euo pipefail
-          $SSH_OPTS "$TARGET" "set -eu
-            cd '$DEPLOY_PATH'
-            envs=\$(sudo systemctl show 9site -p Environment --value | tr ' ' '\n' | grep = | tr '\n' ' ')
-            env \$envs ./site-server check"
+        run: bash deploy/remote/run.sh dry-run "DEPLOY_PATH=$DEPLOY_PATH" \
+          | tee -a "$SUMMARY"
 
       - name: Restart service
-        run: $SSH_OPTS "$TARGET" "$RESTART_CMD"
+        run: bash deploy/remote/run.sh restart "RESTART_CMD=$RESTART_CMD"
 
-      # systemctl restart возвращает успех, даже если процесс упал через
-      # секунду (Restart=on-failure его поднимет заново). Отдельная проверка
-      # ловит цикл перезапусков: например, опечатку в SMTP-конфиге, из-за
-      # которой бинарник вообще не стартует.
-      #
-      # Во время паузы RestartSec состояние — «activating», поэтому чеку
-      # даём несколько секунд на оседание. Если так и не active — падаем
-      # НЕ с «смотри journalctl», а с самим журналом: причина падения
-      # (стоп: … из stderr бинарника) должна быть видна в логе прогона,
-      # иначе деплой чинится вслепую.
-      - name: Check that the service is active
+      - name: Check that the site answers
         run: |
           set -euo pipefail
-          state=""
-          for _ in 1 2 3 4 5 6 7 8 9 10; do
-            state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
-            if [ "$state" = "active" ]; then
-              break
-            fi
-            sleep 2
-          done
-          echo "service state: $state"
-          if [ "$state" != "active" ]; then
-            echo "Service not active, status and journal:"
-            $SSH_OPTS "$TARGET" \
-              "sudo systemctl status 9site --no-pager -l -n 20 || true; \
-               echo '--- journalctl ---'; \
-               sudo journalctl -u 9site -n 120 --no-pager || true"
-            exit 1
-          fi
+          urls="$(grep -v '^#' deploy/smoke-urls.txt)"
+          bash deploy/remote/run.sh check-live "URLS=$urls" \
+            "BASE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
 
-      # Check not only that the process started but that it actually
-      # responds: the site is served and the closed files stay closed.
-      - name: Check that the site responds
-        run: |
-          set -euo pipefail
+      # --- automatic rollback -------------------------------------------
+      # Everything after the swap that failed should be undone: restore the
+      # previous binary, restore the database it may have migrated, restart.
+      # The rejected binary stays behind as site-server.failed so the commit
+      # can be reproduced locally.
 
-          check() {
-            local url="$1" want="$2" code
-            code="$($SSH_OPTS "$TARGET" "curl -s -o /dev/null -w '%{http_code}' '$url'" || true)"
-            printf '  %-34s %s\n' "$url" "${code:-no response}"
-            if [ "$code" != "$want" ]; then
-              echo "Expected $want, got ${code:-no response}"
-              return 1
-            fi
-          }
-
-          check http://127.0.0.1:8080/           200
-          check http://127.0.0.1:8080/style.css  200
-          check http://127.0.0.1:8080/css/base.css 200
-          check http://127.0.0.1:8080/design.css 200
-          check http://127.0.0.1:8080/maket      200
-          check http://127.0.0.1:8080/catalog    200
-          check http://127.0.0.1:8080/catalog.css 200
-          check http://127.0.0.1:8080/print.css  200
-          check http://127.0.0.1:8080/js/main.js 200
-          # Витрина открыта всем, а закрытый раздел — только после входа.
-          check http://127.0.0.1:8080/studio            200
-          check http://127.0.0.1:8080/studio?auth=login 200
-          check http://127.0.0.1:8080/vault             303
-          check http://127.0.0.1:8080/css/auth/auth.css 200
-          # Восстановление пароля: страница по ссылке есть (без токена —
-          # редирект на окно входа), а POST-адреса входа/регистрации наружу
-          # не светятся — GET на них отдаёт 404.
-          check http://127.0.0.1:8080/reset             303
-          check http://127.0.0.1:8080/auth/register     404
-          check http://127.0.0.1:8080/auth/login        404
-          # Оглавления каталогов закрыты: иначе наружу уходит список файлов
-          # с именами и датами.
-          check http://127.0.0.1:8080/css/              404
-          check http://127.0.0.1:8080/css/auth/         404
-          check http://127.0.0.1:8080/assets/           404
-          check http://127.0.0.1:8080/js/               404
-          # База авторизации и чужие файлы наружу не отдаются.
-          check http://127.0.0.1:8080/var/site.db       404
-          check http://127.0.0.1:8080/var/auth.db   404
-          check http://127.0.0.1:8080/avatars/u0-0.png 404
-          check http://127.0.0.1:8080/main.go    404
-          check http://127.0.0.1:8080/visits.dat 404
-          check http://127.0.0.1/                200
-          # Форма Sign Up: POST /signup есть, но GET на этот адрес
-          # статика отдаёт 404 — конец скрыт, лишнего не видно.
-          check http://127.0.0.1:8080/signup    404
-          check "http://127.0.0.1:8080/maket?sent=1" 200
-
-      # The counter is the only live part of the site, so check the number
-      # itself rather than the status code: it has to grow on every request.
-      - name: Check the visit counter
-        run: |
-          set -euo pipefail
-
-          # Each call is exactly one request to the main page, so the number
-          # inside .counter must increase by one.
-          visits() {
-            $SSH_OPTS "$TARGET" "curl -s http://127.0.0.1:8080/" \
-              | tr -d '\n' \
-              | awk -F'class="counter"' '{print $2}' \
-              | head -c 200 \
-              | grep -o '<span>[0-9]</span>' | grep -o '[0-9]' | tr -d '\n'
-          }
-
-          first="$(visits)"
-          second="$(visits)"
-          printf '  before: %s, after: %s\n' "$first" "$second"
-
-          if [ -z "$first" ] || [ -z "$second" ]; then
-            echo "Counter not found in the response"
-            exit 1
-          fi
-
-          # 10# keeps bash from reading leading zeros as octal and failing
-          # on a number like 008.
-          #
-          # Сайт публичный: между двумя curl может прийти чужой визит,
-          # поэтому проверяем «выросло или осталось», а не строгую
-          # разницу в единицу.
-          before=$((10#$first))
-          after=$((10#$second))
-          if [ "$after" -lt "$before" ]; then
-            echo "Counter went down: $before -> $after"
-            exit 1
-          fi
-          echo "Counter is growing"
-
-      # --- авто-откат ---------------------------------------------------
-      # Если после свапа что-то упало (dry-run, рестарт, чеки, счётчик),
-      # сервер не должен остаться с новым бинарником: возвращаем .prev.
-      # Отвергнутый бинарник сохраняется как site-server.failed — его
-      # можно скачать и воспроизвести падение локально.
-
-      - name: Capture logs on failure
+      - name: Capture the journal on failure
         if: failure() && steps.swap.outputs.swapped == 'true'
         run: |
           set -euo pipefail
-          $SSH_OPTS "$TARGET" \
-            "sudo systemctl status 9site --no-pager -l -n 20 || true; \
-             echo '--- journalctl ---'; \
-             sudo journalctl -u 9site -n 200 --no-pager || true"
+          bash deploy/remote/run.sh journal-report | tee -a "$SUMMARY"
 
-      # Откат обязан быть парным: вместе с бинарником уходит и схема, которую
-      # этот бинарник накатил на базу. Рестарт прошлого бинарника без отката
-      # базы падает на "база знает миграции дальше", и цикл автоперезапусков
-      # держит сайт в 502 дольше, чем жил сломанный деплой.
       - name: Roll back binary and database
         if: failure() && steps.swap.outputs.swapped == 'true'
-        run: |
-          set -euo pipefail
-          $SSH_OPTS "$TARGET" "
-            set -eu
-            if [ -f '$DEPLOY_PATH/site-server.prev' ]; then
-              mv -f '$DEPLOY_PATH/site-server' '$DEPLOY_PATH/site-server.failed'
-              mv -f '$DEPLOY_PATH/site-server.prev' '$DEPLOY_PATH/site-server'
-              echo 'rolled back, rejected binary kept as site-server.failed'
-            else
-              echo 'no site-server.prev (first deploy), nothing to roll back to' >&2
-            fi
-          "
+        run: bash deploy/remote/run.sh rollback "DATA_DIR=$DATA_DIR" \
+          "DEPLOY_PATH=$DEPLOY_PATH" "RESTART_CMD=$RESTART_CMD" \
+          | tee -a "$SUMMARY"
 
-      # Откат базы парный к бинарнику: новый бинарник уже мог накатить на
-      # site.db схему, которой .prev не знает. Без возврата базы прошлый
-      # бинарник падает на старте, и цикл автоперезапусков держит сайт в 502.
-      # Копия снималась через site-server backup (VACUUM INTO), а не cp: в
-      # WAL-режиме cp забирает только главный файл и теряет свежие записи.
-      # Восстановление забирает с собой и -wal/-shm: чужой WAL поверх
-      # откаченной базы дал бы расхождение схемы и данных.
-      - name: Roll back database
+      - name: Check that the site answers after the rollback
         if: failure() && steps.swap.outputs.swapped == 'true'
         run: |
           set -euo pipefail
-          $SSH_OPTS "$TARGET" "
-            set -eu
-            if [ -f '$DATA_DIR/site.db.pre-deploy' ]; then
-              cp -f '$DATA_DIR/site.db' '$DATA_DIR/site.db.new-schema'
-              cp -f '$DATA_DIR/site.db.pre-deploy' '$DATA_DIR/site.db'
-              rm -f '$DATA_DIR/site.db-wal' '$DATA_DIR/site.db-shm'
-              echo 'database rolled back to the pre-deploy snapshot'
-            else
-              echo 'no site.db.pre-deploy: nothing to restore' >&2
-            fi
-          "
-
-      # Рестартуем откатанный бинарник только если сервис реально лёг:
-      # при падении dry-run старый процесс всё это время работать и
-      # продолжает — убивать его повторным рестартом незачем.
-      - name: Restart service after rollback
-        if: failure() && steps.swap.outputs.swapped == 'true'
-        run: |
-          set -euo pipefail
-          $SSH_OPTS "$TARGET" "
-            set -eu
-            # Битый swap (нет .prev) уже сообщил о причине: рестарт ниже
-            # вернул бы тот же новый бинарник.
-            [ -f '$DEPLOY_PATH/site-server.prev' ] || exit 0
-            state=\$(sudo systemctl is-active 9site || true)
-            if [ \"\$state\" != 'active' ]; then
-              sudo systemctl reset-failed 9site || true
-              sudo systemctl restart 9site
-              echo 'service restarted with the rolled back binary and database'
-            else
-              echo 'service still active, restart skipped'
-            fi
-          "
-
-      - name: Check the site responds after rollback
-        if: failure() && steps.swap.outputs.swapped == 'true'
-        run: |
-          set -euo pipefail
-          state=""
-          for _ in 1 2 3 4 5 6 7 8 9 10; do
-            state="$($SSH_OPTS "$TARGET" "sudo systemctl is-active 9site" || true)"
-            if [ "$state" = "active" ]; then
-              break
-            fi
-            sleep 2
-          done
-          code="$($SSH_OPTS "$TARGET" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/" || true)"
-          printf '  service: %s, GET / -> %s\n' "$state" "${code:-no response}"
-          if [ "$state" != "active" ] || [ "$code" != "200" ]; then
-            echo 'Rollback did not help, the site is still down, see the journal above'
-            $SSH_OPTS "$TARGET" \
-              "sudo journalctl -u 9site -n 100 --no-pager || true"
-            exit 1
-          fi
-          echo 'Site responds again after rollback'
+          bash deploy/remote/run.sh check-site \
+            "BASE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
 
       - name: Summary
         run: echo "Deployed commit ${{ github.sha }}"
