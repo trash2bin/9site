@@ -248,7 +248,8 @@ jobs:
 
       # The deploy user prepares its own runtime: the unit directory and the
       # linger that keeps the user manager up. No root, so a fresh server is
-      # ready without a human beyond the one-time deploy/migrate.sh.
+      # ready with no human step: the one-time root setup is
+      # deploy/setup-server.sh.
       - name: Prepare the user runtime
         uses: ./.github/actions/deploy-step
         with:

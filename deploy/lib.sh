@@ -37,6 +37,21 @@ wait_active() {
   return 1
 }
 
+# The user view holds only the per-uid journal files; a lingering user
+# manager writes its units into the system journal, where the same line is
+# reachable through the unit match. Reading both keeps the report working
+# in either layout.
+journal_lines() {
+  local out
+  out="$(journalctl --user -u 9site -n "$1" --no-pager 2>/dev/null || true)"
+  case "$out" in
+    '' | *'-- No entries --'*)
+      out="$(journalctl _SYSTEMD_USER_UNIT=9site.service -n "$1" --no-pager 2>/dev/null || true)"
+      ;;
+  esac
+  printf '%s\n' "$out"
+}
+
 journal_report() {
   local title="$1" lines="$2"
   echo "### $title"
@@ -44,11 +59,7 @@ journal_report() {
   echo '```'
   systemctl --user status 9site --no-pager -l -n 20 || true
   echo '--- journalctl ---'
-  case "$lines" in
-    60) journalctl --user -u 9site -n 60 --no-pager || true ;;
-    160) journalctl --user -u 9site -n 160 --no-pager || true ;;
-    *) journalctl --user -u 9site -n 200 --no-pager || true ;;
-  esac
+  journal_lines "$lines"
   echo '```'
 }
 
@@ -57,7 +68,11 @@ smoke() {
   local url want code rc=0
   while read -r url want; do
     case "$url" in ''|\#*) continue ;; esac
-    code="$(curl -s -o /dev/null -w '%{http_code}' "$url" || true)"
+    # A Type=simple unit says active before the listener is up, and a slow
+    # start on a big database is not a failed deploy: wait for the port.
+    code="$(curl -s --max-time 5 --retry 3 --retry-delay 1 \
+      --retry-connrefused --retry-all-errors \
+      -o /dev/null -w '%{http_code}' "$url" || true)"
     printf '  %-36s %s\n' "$url" "${code:-no response}"
     if [ "$code" != "$want" ]; then
       echo "Expected $want, got ${code:-no response}"

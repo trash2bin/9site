@@ -50,7 +50,10 @@ unit_env() { u "systemctl --user show 9site -p Environment --value" | tr ' ' '\n
 journal_has() {
   local pattern="$1" lines
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-    lines="$(u "journalctl --user -u 9site -n 300 --no-pager" 2>/dev/null)" || true
+    # Both views of the same unit: the user view is empty when the user
+    # manager writes into the system journal, which is what a lingering user
+    # does on the deploy machine.
+    lines="$(u "journalctl --user -u 9site -n 300 --no-pager 2>/dev/null; journalctl _SYSTEMD_USER_UNIT=9site.service -n 300 --no-pager 2>/dev/null" 2>/dev/null)" || true
     case "$lines" in
       *"$pattern"*) return 0 ;;
     esac
@@ -301,6 +304,9 @@ journalctl _SYSTEMD_USER_UNIT=9site.service -n 8 --no-pager 2>&1 | sed 's/^/    
 printf '  what the deploy session sees, journalctl --user -u 9site:\n'
 runuser -u deploy -- env XDG_RUNTIME_DIR=/run/user/"$DEPLOY_UID" \
   journalctl --user -u 9site -n 8 --no-pager 2>&1 | sed 's/^/    /'
+printf '  what the deploy session sees, _SYSTEMD_USER_UNIT=9site.service:\n'
+runuser -u deploy -- env XDG_RUNTIME_DIR=/run/user/"$DEPLOY_UID" \
+  journalctl _SYSTEMD_USER_UNIT=9site.service -n 8 --no-pager 2>&1 | sed 's/^/    /'
 
 printf '\n== result: %s ok, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]
