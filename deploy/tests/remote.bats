@@ -120,7 +120,7 @@ STUB
 
   run remote install-unit DEPLOY_PATH="$www" DATA_DIR="$data"
   [ "$status" -ne 0 ]
-  [[ "$output" == *'database left in the old place'* ]]
+  [[ "$output" == *'live database'* ]]
   [[ "$output" == *"$www/var/site.db"* ]]
 }
 
@@ -129,7 +129,7 @@ STUB
 #!/usr/bin/env bash
 case "$*" in
   *show*Environment*)
-    echo 'DATA_DIR=/var/lib/9site BASE_URL=https://9swag.myftp.biz' ;;
+    echo 'DATA_DIR=/var/www/9site/var BASE_URL=https://9swag.myftp.biz' ;;
   *) exec "$@" ;;
 esac
 STUB
@@ -142,7 +142,7 @@ STUB
 
   run remote dry-run DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'check saw https://9swag.myftp.biz and /var/lib/9site'* ]]
+  [[ "$output" == *'check saw https://9swag.myftp.biz and /var/www/9site/var'* ]]
 }
 
 @test 'dry-run takes the deploy down before it damages the live service' {

@@ -12,7 +12,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 DEPLOY_PATH=/var/www/9site
-DATA_DIR=/var/lib/9site
+DATA_DIR=/var/www/9site/var
 USER_UNIT_DIR=/home/deploy/.config/systemd/user
 UNIT="$USER_UNIT_DIR/9site.service"
 KEY=/root/.ssh/e2e_key
@@ -182,32 +182,17 @@ check "$?" 'the snapshot holds the live database'
 remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'dry-run passes the startup checks'
 
-# --- scenario 2: an old unit without DATA_DIR ----------------------------
-say 'scenario 3: old unit without DATA_DIR'
-grep -v '^Environment=' "$REPO/deploy/9site.service" >"$UNIT"
-chown deploy:deploy "$UNIT"
-u 'systemctl --user daemon-reload'
-u 'systemctl --user restart 9site'
-rm -f "$DATA_DIR/site.db"
-mkdir -p "$DEPLOY_PATH/var"
-printf 'old-schema\n' >"$DEPLOY_PATH/var/site.db"
-chown deploy:deploy "$DEPLOY_PATH/var/site.db"
-rsync -az -e "$SSH" "$REPO/deploy/9site.service" deploy@localhost:/tmp/9site.service
-chown deploy:deploy /tmp/9site.service
-out="$(remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" "DATA_DIR=$DATA_DIR" 2>&1)"
-[ "$?" != 0 ]; check "$?" 'install-unit refuses to deploy into the old layout'
-printf '%s\n' "$out" | grep -q 'database left in the old place'
-check "$?" 'the failure names the place the database was left in'
-[ ! -e "$DATA_DIR/site.db" ]; check "$?" 'no empty database was created, the counter stays'
-printf 'old-schema\n' >"$DATA_DIR/site.db"
-chown deploy:deploy "$DATA_DIR/site.db"
+# --- scenario 3: the database stays where it is --------------------------
+say 'scenario 3: install keeps the database in place'
+before="$(cat "$DATA_DIR/site.db")"
 remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" "DATA_DIR=$DATA_DIR" >/dev/null
-check "$?" 'after the manual move the same step is green'
-[ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the real unit is back in place'
+check "$?" 'install-unit succeeds with the data already present'
+[ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the unit points at the live data dir'
+[ "$(cat "$DATA_DIR/site.db")" = "$before" ]; check "$?" 'the database was neither moved nor reset'
 [ "$(stat -c '%U' "$DATA_DIR/site.db")" = deploy ]
 check "$?" 'the database still belongs to the deploy user'
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null
-wait_http; check "$?" 'the counter did not reset: the site kept serving'
+wait_http; check "$?" 'the site kept serving, the data never moved'
 
 # --- scenario 5: a binary that cannot even run the checks ---------------
 say 'scenario 5: binary that fails the dry-run'

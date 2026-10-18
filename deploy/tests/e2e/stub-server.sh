@@ -12,7 +12,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-STATE = pathlib.Path(os.environ.get("DATA_DIR", "/var/lib/9site"))
+STATE = pathlib.Path(os.environ.get("DATA_DIR", "/var/www/9site/var"))
 FAIL_START = STATE / "fail-start"
 DB = STATE / "site.db"
 

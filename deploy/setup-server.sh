@@ -91,11 +91,11 @@ fi
 # Здесь только задел: каталог под юнит, каталог данных и linger, чтобы
 # менеджер $DEPLOY_USER поднимался без входной сессии. Дальше ни одного sudo.
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 \
-  "/home/$DEPLOY_USER/.config/systemd/user" "/var/lib/9site"
+  "/home/$DEPLOY_USER/.config/systemd/user" "$DEPLOY_PATH/var"
 loginctl enable-linger "$DEPLOY_USER"
 # Поднять менеджер пользователя сразу, чтобы первый деплой не ждал перезагрузки.
 systemctl start "user@$(id -u "$DEPLOY_USER").service"
-echo "  каталог юнита и /var/lib/9site отданы $DEPLOY_USER, включён linger"
+echo "  каталог юнита и $DEPLOY_PATH/var отданы $DEPLOY_USER, включён linger"
 echo "  сам юнит и сервис приходит первым деплоем, без root"
 
 say "nginx"

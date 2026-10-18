@@ -9,13 +9,13 @@ Type=simple
 WorkingDirectory=/var/www/9site
 ExecStart=/var/www/9site/site-server
 
-# Пользовательский юнит: работает от имени deploy, без root и sudo. Каталог
-# данных создаёт setup-server и отдаёт deploy, под ProtectSystem=strict его
-# открываем на запись явно.
-ReadWritePaths=/var/lib/9site
-Environment=VISITS_FILE=/var/lib/9site/visits.dat
+# Пользовательский юнит: работает от имени deploy, без root и sudo. Данные
+# лежат в var/ рабочего каталога (это дефолт бинарника), deploy владеет
+# DEPLOY_PATH, под ProtectSystem=strict каталог открываем на запись явно.
+ReadWritePaths=/var/www/9site/var
+Environment=VISITS_FILE=/var/www/9site/var/visits.dat
 # Каталог базы, аватаров и исходящих писем.
-Environment=DATA_DIR=/var/lib/9site
+Environment=DATA_DIR=/var/www/9site/var
 # Статика лежит в /var/www/9site/public (туда её кладёт деплой), а бинарник
 # в корне DEPLOY_PATH: каталог задаётся явно, а не относительно cwd.
 Environment=STATIC_ROOT=/var/www/9site/public

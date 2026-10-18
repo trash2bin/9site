@@ -33,7 +33,7 @@ jobs:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
       # Must match DATA_DIR from 9site.service: the copy of the database for
       # the rollback that is paired with the binary.
-      DATA_DIR: ${{ secrets.DATA_DIR || '/var/lib/9site' }}
+      DATA_DIR: ${{ secrets.DATA_DIR || '/var/www/9site/var' }}
       RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
       TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
       SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes

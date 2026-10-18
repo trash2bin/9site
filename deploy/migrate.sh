@@ -9,7 +9,6 @@ set -euo pipefail
 SERVICE_NAME=9site
 DEPLOY_USER=deploy
 DEPLOY_PATH=/var/www/9site
-DATA_DIR=/var/lib/9site
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "run as root: sudo bash $0" >&2
@@ -29,17 +28,10 @@ fi
 # nothing of it, so the file leaves too.
 rm -f "/etc/sudoers.d/$SERVICE_NAME-deploy"
 
-# The old system unit kept the database under its working directory; the user
-# unit wants it in DATA_DIR. Move it, or the first start resets the site. This
-# is the one data step that needs root: the deploy user cannot write /var/lib.
-OLD_DATA="$DEPLOY_PATH/var"
-install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 750 "$DATA_DIR"
-if [ -d "$OLD_DATA" ] && [ ! -f "$DATA_DIR/site.db" ]; then
-  cp -a "$OLD_DATA/." "$DATA_DIR/"
-  chown -R "$DEPLOY_USER:$DEPLOY_USER" "$DATA_DIR"
-  echo "database moved from $OLD_DATA to $DATA_DIR"
-  echo "remove $OLD_DATA once the deploy is green"
-fi
+# The data stays in $DEPLOY_PATH/var, the binary's own default; it is not
+# moved anywhere. Only make sure it belongs to the deploy user so the user
+# unit can keep writing it.
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 750 "$DEPLOY_PATH/var"
 
 # Start the user manager now, no reboot required.
 loginctl enable-linger "$DEPLOY_USER"

@@ -103,11 +103,10 @@ guard_db_location() {
   if [ ! -f "$deploy_path/var/site.db" ]; then
     return 0
   fi
-  echo "database left in the old place: $deploy_path/var/site.db" >&2
-  echo "move it, or the first start creates an empty one:" >&2
-  echo "  install -d -o deploy -g deploy -m 755 $data_dir" >&2
-  echo "  cp $deploy_path/var/site.db $data_dir/site.db" >&2
-  echo '  systemctl --user restart 9site' >&2
+  echo "DATA_DIR=$data_dir is empty, but the site keeps its data elsewhere" >&2
+  echo "live database: $deploy_path/var/site.db" >&2
+  echo "point the unit at it, then deploy: DATA_DIR=$deploy_path/var" >&2
+  echo "  or move it: cp $deploy_path/var/site.db $data_dir/site.db" >&2
   exit 1
 }
 
