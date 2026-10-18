@@ -177,6 +177,11 @@ check "$?" 'check-live verifies the whole site'
 # --- scenario 4: a second deploy over a working service ------------------
 say 'scenario 4: second deploy over a working service'
 before="$(cat "$DATA_DIR/site.db")"
+out="$(remote preflight "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
+[ "$?" = 0 ]; check "$?" 'preflight passes over a working service'
+printf '%s\n' "$out" | grep -q 'counter before the deploy'
+check "$?" 'preflight records the number the site serves'
+[ -f "$DATA_DIR/.counter-before" ]; check "$?" 'the number is on disk for check-live'
 put_binary "$STUB"
 remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'a second deploy swaps too'
@@ -188,6 +193,21 @@ check "$?" 'backup-db runs again'
 check "$?" 'the snapshot holds the live database'
 remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'dry-run passes the startup checks'
+out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" \
+  "DATA_DIR=$DATA_DIR" 2>&1)"
+check "$?" 'check-live verifies the site after the second deploy'
+printf '%s\n' "$out" | grep -q 'Counter holds the value'
+check "$?" 'the counter is measured against the one from before the deploy'
+
+# --- a recreated database cannot hide behind a growing counter -----------
+say 'scenario 4b: a recreated database resets the counter'
+printf '1\n' >"$DATA_DIR/visits.dat"
+chown deploy:deploy "$DATA_DIR/visits.dat"
+out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" \
+  "DATA_DIR=$DATA_DIR" 2>&1)"
+[ "$?" != 0 ]; check "$?" 'check-live refuses a site whose counter was reset'
+printf '%s\n' "$out" | grep -q 'Counter went down'
+check "$?" 'the drop against the recorded number is in the log'
 
 # --- scenario 3: the database stays where it is --------------------------
 say 'scenario 3: install keeps the database in place'

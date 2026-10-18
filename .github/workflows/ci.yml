@@ -304,7 +304,7 @@ jobs:
           set -euo pipefail
           urls="$(grep -v '^#' deploy/smoke-urls.txt)"
           bash deploy/remote/run.sh check-live "URLS=$urls" \
-            "BASE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
+            "BASE_URL=http://127.0.0.1:8080/" "DATA_DIR=$DATA_DIR" | tee -a "$SUMMARY"
 
       # --- automatic rollback -------------------------------------------
       # Everything after the swap that failed should be undone: restore the

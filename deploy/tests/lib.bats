@@ -207,6 +207,36 @@ STUB
   [[ "$output" == *'Counter is growing'* ]]
 }
 
+@test 'check_counter refuses a counter reset by a recreated database' {
+  base_url=http://stub/counter
+  data_dir="$BATS_TEST_TMPDIR/data"
+  mkdir -p "$data_dir"
+  printf '4242\n' >"$data_dir/.counter-before"
+  cat >"$bin/curl" <<'STUB'
+#!/usr/bin/env bash
+echo 'x class="counter" y <span>0</span> z'
+STUB
+  chmod +x "$bin/curl"
+  run check_counter
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'Counter went down: 4242 -> 0'* ]]
+}
+
+@test 'check_counter measures the site against the recorded number' {
+  base_url=http://stub/counter
+  data_dir="$BATS_TEST_TMPDIR/data"
+  mkdir -p "$data_dir"
+  printf '7\n' >"$data_dir/.counter-before"
+  cat >"$bin/curl" <<'STUB'
+#!/usr/bin/env bash
+echo 'x class="counter" y <span>9</span> z'
+STUB
+  chmod +x "$bin/curl"
+  run check_counter
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'Counter holds the value from before the deploy'* ]]
+}
+
 @test 'parse_args keeps a value with spaces and rejects an unknown key' {
   # Called directly, not through run: run isolates in a subshell, so the
   # values would not reach the caller, which is how the scripts use it.

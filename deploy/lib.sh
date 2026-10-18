@@ -90,20 +90,38 @@ counter_value() {
     | grep -o '<span>[0-9]</span>' | grep -o '[0-9]' | tr -d '\n'
 }
 
-# The site is public: the number must not go down, not grow by exactly one.
+# The number the site served before the deploy comes from preflight, and the
+# site is measured against it: two reads after the restart cannot tell a
+# healthy site from a recreated database, because a reset counter grows from
+# zero exactly the same way.
 check_counter() {
-  local first second before after
-  first="$(counter_value)"
-  second="$(counter_value)"
-  printf '  before: %s, after: %s\n' "$first" "$second"
-  if [ -z "$first" ] || [ -z "$second" ]; then
+  local recorded before after second
+  recorded=""
+  if [ -n "$data_dir" ] && [ -f "$data_dir/.counter-before" ]; then
+    recorded="$(cat "$data_dir/.counter-before")"
+  fi
+
+  after="$(counter_value)"
+  if [ -z "$after" ]; then
     echo 'Counter not found in the response'
     return 1
   fi
-  before=$((10#$first))
-  after=$((10#$second))
-  if [ "$after" -lt "$before" ]; then
-    echo "Counter went down: $before -> $after"
+
+  if [ -n "$recorded" ]; then
+    before=$((10#$recorded))
+    if [ "$((10#$after))" -lt "$before" ]; then
+      echo "Counter went down: $before -> $((10#$after))"
+      return 1
+    fi
+    echo 'Counter holds the value from before the deploy'
+    return 0
+  fi
+
+  # Nothing recorded, the first deploy: two reads of a live site.
+  second="$(counter_value)"
+  before=$((10#$after))
+  if [ "$((10#$second))" -lt "$before" ]; then
+    echo "Counter went down: $before -> $((10#$second))"
     return 1
   fi
   echo 'Counter is growing'

@@ -103,6 +103,21 @@ STUB
   [[ "$output" == *'status=14'* ]]
 }
 
+@test 'preflight records the counter the site serves before the deploy' {
+  stub systemctl <<'STUB'
+#!/usr/bin/env bash
+case "$*" in *is-active*) echo active ;; esac
+STUB
+  stub curl <<'STUB'
+#!/usr/bin/env bash
+echo 'x class="counter" y <span>1</span><span>3</span> z'
+STUB
+  run remote preflight DATA_DIR="$data" DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$data/.counter-before")" = 13 ]
+  [[ "$output" == *'counter before the deploy: 13'* ]]
+}
+
 @test 'install-unit refuses to leave the database behind in the read-only tree' {
   export HOME="$BATS_TEST_TMPDIR"
   mkdir -p "$HOME/.config/systemd/user"
