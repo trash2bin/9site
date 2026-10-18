@@ -289,5 +289,18 @@ printf '%s\n' "$out" | grep -q 'unable to open database file'
 check "$?" 'the report carries the reason to the job summary'
 chown deploy:deploy "$DATA_DIR/site.db"
 
+# Ground truth for a failing journal check. Root always reads the journal, so
+# compare what root and the deploy session each see for the same unit line:
+# root sees it, deploy does not, is journal access; root sees nothing is routing.
+say 'diagnostics'
+printf '  groups of deploy: %s\n' "$(id -nG deploy | tr -d '\r')"
+printf '  groups the deploy ssh session sees: %s\n' "$(u 'id -nG' 2>&1 | tr -d '\r')"
+printf '  journald is: %s\n' "$(systemctl is-active systemd-journald 2>&1 | tr -d '\r')"
+printf '  what root sees, _SYSTEMD_USER_UNIT=9site.service:\n'
+journalctl _SYSTEMD_USER_UNIT=9site.service -n 8 --no-pager 2>&1 | sed 's/^/    /'
+printf '  what the deploy session sees, journalctl --user -u 9site:\n'
+runuser -u deploy -- env XDG_RUNTIME_DIR=/run/user/"$DEPLOY_UID" \
+  journalctl --user -u 9site -n 8 --no-pager 2>&1 | sed 's/^/    /'
+
 printf '\n== result: %s ok, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]
