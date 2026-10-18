@@ -97,6 +97,10 @@ setup_sandbox() {
   # The deploy user. No sudoers file and no group membership: the service
   # and its data belong to this user, and the unit lives in the user manager.
   id deploy >/dev/null 2>&1 || useradd --system --create-home --shell /bin/bash deploy
+  # journal-report reads journalctl --user as deploy; without the
+  # systemd-journal group the user cannot see the journal and the crash
+  # reason never reaches the rehearsal.
+  usermod -aG systemd-journal deploy 2>/dev/null || true
   install -d -o deploy -g deploy -m 755 "$DEPLOY_PATH" "$DEPLOY_PATH/public" "$DATA_DIR"
   install -d -o deploy -g deploy -m 755 "$USER_UNIT_DIR"
   install -d -m 700 -o root -g root /root/.ssh

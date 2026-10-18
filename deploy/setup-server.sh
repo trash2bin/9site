@@ -92,6 +92,10 @@ fi
 # менеджер $DEPLOY_USER поднимался без входной сессии. Дальше ни одного sudo.
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 \
   "/home/$DEPLOY_USER/.config/systemd/user" "$DEPLOY_PATH/var"
+# journal-report.sh деплоя читает journalctl --user от имени $DEPLOY_USER:
+# без группы systemd-journal пользователь не видит журнал, и необъяснимый
+# фейл старта остаётся без причины. Дали чтение своего журнала.
+usermod -aG systemd-journal "$DEPLOY_USER" 2>/dev/null || true
 loginctl enable-linger "$DEPLOY_USER"
 # Поднять менеджер пользователя сразу, чтобы первый деплой не ждал перезагрузки.
 systemctl start "user@$(id -u "$DEPLOY_USER").service"
