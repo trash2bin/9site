@@ -215,20 +215,9 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     env:
-      # Only SSH_HOST and SSH_PRIVATE_KEY are required. The rest fall back
-      # to defaults, so there is no need to override them.
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
-      SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-      # Must match DATA_DIR from 9site.service: the path of the database for
-      # the snapshot taken before the restart.
-      DATA_DIR: ${{ secrets.DATA_DIR || '/var/www/9site/var' }}
-      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
-      TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
-      SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
       # Goes to the job summary on failure, so the reason is on the Checks
-      # tab instead of somewhere in the log.
+      # tab instead of somewhere in the log. The rest of the deploy env comes
+      # from the deploy action below: one source for deploy and rollback.
       SUMMARY: ${{ github.workspace }}/deploy-summary.txt
     steps:
       - uses: actions/checkout@v7
@@ -243,14 +232,16 @@ jobs:
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -trimpath -ldflags="-s -w" -o build/site-server ./server
 
-      - name: Set up SSH
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          echo "key in place"
+      - name: Deploy environment
+        uses: ./.github/actions/deploy
+        with:
+          ssh_host: ${{ secrets.SSH_HOST }}
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh_port: ${{ secrets.SSH_PORT || '22' }}
+          ssh_user: ${{ secrets.SSH_USER || 'deploy' }}
+          deploy_path: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
+          data_dir: ${{ secrets.DATA_DIR || '/var/www/9site/var' }}
+          restart_cmd: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
 
       - name: Upload static files
         run: bash deploy/upload-static.sh
@@ -259,12 +250,18 @@ jobs:
       # linger that keeps the user manager up. No root, so a fresh server is
       # ready without a human beyond the one-time deploy/migrate.sh.
       - name: Prepare the user runtime
-        run: bash deploy/remote/run.sh prepare "DATA_DIR=$DATA_DIR" \
-          "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: prepare
+          data_dir: ${{ env.DATA_DIR }}
+          deploy_path: ${{ env.DEPLOY_PATH }}
 
       - name: Check the state of the server
-        run: bash deploy/remote/run.sh preflight "DATA_DIR=$DATA_DIR" \
-          "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: preflight
+          data_dir: ${{ env.DATA_DIR }}
+          deploy_path: ${{ env.DEPLOY_PATH }}
 
       - name: Install service unit
         run: |
@@ -290,11 +287,16 @@ jobs:
             "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Dry-run new binary before restart
-        run: bash deploy/remote/run.sh dry-run "DEPLOY_PATH=$DEPLOY_PATH" \
-          | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: dry-run
+          deploy_path: ${{ env.DEPLOY_PATH }}
 
       - name: Restart service
-        run: bash deploy/remote/run.sh restart "RESTART_CMD=$RESTART_CMD"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: restart
+          restart_cmd: ${{ env.RESTART_CMD }}
 
       - name: Check that the site answers
         run: |
@@ -311,22 +313,25 @@ jobs:
 
       - name: Capture the journal on failure
         if: failure() && steps.swap.outputs.swapped == 'true'
-        run: |
-          set -euo pipefail
-          bash deploy/remote/run.sh journal-report | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: journal-report
 
       - name: Roll back binary and database
         if: failure() && steps.swap.outputs.swapped == 'true'
-        run: bash deploy/remote/run.sh rollback "DATA_DIR=$DATA_DIR" \
-          "DEPLOY_PATH=$DEPLOY_PATH" "RESTART_CMD=$RESTART_CMD" \
-          | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: rollback
+          data_dir: ${{ env.DATA_DIR }}
+          deploy_path: ${{ env.DEPLOY_PATH }}
+          restart_cmd: ${{ env.RESTART_CMD }}
 
       - name: Check that the site answers after the rollback
         if: failure() && steps.swap.outputs.swapped == 'true'
-        run: |
-          set -euo pipefail
-          bash deploy/remote/run.sh check-site \
-            "BASE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: check-site
+          base_url: http://127.0.0.1:8080/
 
       - name: Summary
         run: echo "Deployed commit ${{ github.sha }}"

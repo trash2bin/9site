@@ -27,42 +27,45 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
-      SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-      # Must match DATA_DIR from 9site.service: the copy of the database for
-      # the rollback that is paired with the binary.
-      DATA_DIR: ${{ secrets.DATA_DIR || '/var/www/9site/var' }}
-      RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
-      TARGET: ${{ secrets.SSH_USER || 'deploy' }}@${{ secrets.SSH_HOST }}
-      SSH_OPTS: ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT || '22' }} -o StrictHostKeyChecking=yes
+      # Goes to the job summary on failure. The rest of the deploy env comes
+      # from the deploy action below, the same source the deploy uses.
       SUMMARY: ${{ github.workspace }}/rollback-summary.txt
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up SSH
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          echo "key in place"
+      - name: Deploy environment
+        uses: ./.github/actions/deploy
+        with:
+          ssh_host: ${{ secrets.SSH_HOST }}
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh_port: ${{ secrets.SSH_PORT || '22' }}
+          ssh_user: ${{ secrets.SSH_USER || 'deploy' }}
+          deploy_path: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
+          data_dir: ${{ secrets.DATA_DIR || '/var/www/9site/var' }}
+          restart_cmd: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
 
       # Diagnosis before the rollback: why the new binary failed ("стоп: ..."
       # from its stderr). Without it the rollback treats the symptom and the
       # cause stays invisible.
+      - name: Check the state of the server
+        uses: ./.github/actions/deploy-step
+        with:
+          name: preflight
+          data_dir: ${{ env.DATA_DIR }}
+          deploy_path: ${{ env.DEPLOY_PATH }}
+
       - name: Capture the journal before the rollback
-        run: |
-          set -euo pipefail
-          bash deploy/remote/run.sh preflight "DATA_DIR=$DATA_DIR" \
-            "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
-          bash deploy/remote/run.sh journal-report | tee -a "$SUMMARY"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: journal-report
 
       - name: Roll back binary and database
-        run: bash deploy/remote/run.sh rollback "DATA_DIR=$DATA_DIR" \
-          "DEPLOY_PATH=$DEPLOY_PATH" "RESTART_CMD=$RESTART_CMD"
+        uses: ./.github/actions/deploy-step
+        with:
+          name: rollback
+          data_dir: ${{ env.DATA_DIR }}
+          deploy_path: ${{ env.DEPLOY_PATH }}
+          restart_cmd: ${{ env.RESTART_CMD }}
 
       # The same check the deploy runs, from the same list of urls: a
       # rollback counts as done only when the whole site is back, not just

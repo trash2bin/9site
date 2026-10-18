@@ -110,3 +110,27 @@
 
 `public/js/main.js` закоммичен: правка `src/*.ts` без `npm run build:ts` =
 красный CI. Новую страницу или статику добавлять в smoke-список деплоя.
+
+## CI/CD, как расширять
+
+- **Job на тулчейн**: новый линтер или проверка = один самодостаточный job
+  (checkout, свой setup, один tool). Не сцеплять с соседним.
+- **Плагинг деплоя в одном источнике**: `.github/actions/deploy` ставит
+  ssh-ключ и публикует `SSH_*`, `DEPLOY_PATH`, `DATA_DIR`, `RESTART_CMD`,
+  `TARGET`, `SSH_OPTS` в `$GITHUB_ENV`. Deploy и rollback делают `uses:` его
+  и не копируют env. Смена пути или секрета = одна правка, дрейф `DATA_DIR`
+  между юнитом и workflow'ами больше не возможен по построению.
+- **Шаг деплоя**: `deploy/remote/<name>.sh` + тест в `deploy/tests/`, затем
+  `uses: ./.github/actions/deploy-step` (`name` и нужные `KEY=VALUE`; путь и
+  `restart_cmd` с пробелами не рвутся). Шагу, которому надо сначала положить
+  файл (rsync юнита, бинаря) или посчитать значение (stamp, список
+  smoke-url), остаётся обычный `run:`, что заканчивается тем же `run.sh`:
+  так живут install-unit, swap-binary, backup-db, check-live.
+- **Миграции**: `store/migrations/000N_*.sql`, только вперёд, sha256. На
+  деплое безопасность даёт тройка: `dry-run` перед рестартом, снимок
+  `site.db.pre-deploy`, парный `restore_db` в ролбэке (бинарь и база
+  откатываются вместе). Ручной откат: `rollback.yml`.
+- **smoke** = один список `deploy/smoke-urls.txt`, его читают и deploy, и
+  e2e: новая страница или маршрут попадает в проверку сама.
+- **e2e** репетирует deploy целиком на user-systemd, пока вне гейта
+  `deploy.needs`: дрейф он ловит, но флак не блокирует прод.

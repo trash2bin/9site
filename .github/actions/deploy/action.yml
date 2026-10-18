@@ -1,0 +1,51 @@
+name: Deploy environment
+description: >-
+  Install the ssh key and publish the env (SSH_*, DEPLOY_PATH, DATA_DIR,
+  RESTART_CMD, TARGET, SSH_OPTS) that every deploy step reads. One source of
+  truth for the deploy plumbing, shared by the deploy and rollback workflows.
+
+inputs:
+  ssh_host:
+    description: Server host.
+    required: true
+  ssh_private_key:
+    description: Private key for the deploy user.
+    required: true
+  ssh_port:
+    description: Ssh port.
+    default: '22'
+  ssh_user:
+    description: Deploy user on the server.
+    default: deploy
+  deploy_path:
+    description: Where the binary and the static files live.
+    default: /var/www/9site
+  data_dir:
+    description: State directory with the database. Must match the unit.
+    default: /var/www/9site/var
+  restart_cmd:
+    description: How to restart the service.
+    default: systemctl --user restart 9site
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.ssh"
+        printf '%s\n' "${{ inputs.ssh_private_key }}" >"$HOME/.ssh/deploy_key"
+        chmod 600 "$HOME/.ssh/deploy_key"
+        ssh-keyscan -p "${{ inputs.ssh_port }}" -H "${{ inputs.ssh_host }}" \
+          >>"$HOME/.ssh/known_hosts" 2>/dev/null
+        {
+          echo "SSH_HOST=${{ inputs.ssh_host }}"
+          echo "SSH_PORT=${{ inputs.ssh_port }}"
+          echo "SSH_USER=${{ inputs.ssh_user }}"
+          echo "DEPLOY_PATH=${{ inputs.deploy_path }}"
+          echo "DATA_DIR=${{ inputs.data_dir }}"
+          echo "RESTART_CMD=${{ inputs.restart_cmd }}"
+          echo "TARGET=${{ inputs.ssh_user }}@${{ inputs.ssh_host }}"
+          echo "SSH_OPTS=ssh -i $HOME/.ssh/deploy_key -p ${{ inputs.ssh_port }} -o StrictHostKeyChecking=yes"
+        } >>"$GITHUB_ENV"
+        echo "deploy env ready"

@@ -1,0 +1,35 @@
+name: Deploy step
+description: >-
+  Run one deploy/remote/<name>.sh the way the pipeline does, through run.sh
+  over ssh as the deploy user, output into the job summary. Each argument is
+  one KEY=VALUE, so a path or a restart command with spaces stays intact.
+
+inputs:
+  name:
+    description: Remote script name, without .sh.
+    required: true
+  data_dir:
+    default: ''
+  deploy_path:
+    default: ''
+  base_url:
+    default: ''
+  restart_cmd:
+    default: ''
+  stamp:
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        args=()
+        if [ -n "${{ inputs.data_dir }}" ]; then args+=("DATA_DIR=${{ inputs.data_dir }}"); fi
+        if [ -n "${{ inputs.deploy_path }}" ]; then args+=("DEPLOY_PATH=${{ inputs.deploy_path }}"); fi
+        if [ -n "${{ inputs.base_url }}" ]; then args+=("BASE_URL=${{ inputs.base_url }}"); fi
+        if [ -n "${{ inputs.restart_cmd }}" ]; then args+=("RESTART_CMD=${{ inputs.restart_cmd }}"); fi
+        if [ -n "${{ inputs.stamp }}" ]; then args+=("STAMP=${{ inputs.stamp }}"); fi
+        bash deploy/remote/run.sh "${{ inputs.name }}" "${args[@]}" \
+          | tee -a "${SUMMARY:-/dev/null}"
