@@ -39,8 +39,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
-CapabilityBoundingSet=
-AmbientCapabilities=
+# User units cannot drop the capability set; a plain unprivileged binary holds none anyway.
 
 [Install]
 WantedBy=default.target
