@@ -9,15 +9,17 @@ Type=simple
 WorkingDirectory=/var/www/9site
 ExecStart=/var/www/9site/site-server
 
-# Пользовательский юнит: работает от имени deploy, без root и sudo. Данные
-# лежат в var/ рабочего каталога (это дефолт бинарника), deploy владеет
-# DEPLOY_PATH, под ProtectSystem=strict каталог открываем на запись явно.
-ReadWritePaths=/var/www/9site/var
-Environment=VISITS_FILE=/var/www/9site/var/visits.dat
-# Каталог базы, аватаров и исходящих писем.
+# Пользовательский юнит, без root и sudo: работает от имени deploy.
+#
+# Никаких sandbox-строк (ProtectSystem, ReadWritePaths, capability и пр.).
+# Пользовательский менеджер на хосте деплоя падает на шаге CAPABILITIES с
+# EPERM (exit 218) для любого user-юнита, и сервис не стартует вовсе. Сам
+# бинарь это непривилегированный Go-процесс на 127.0.0.1 со своими HTTP-защитами
+# (AGENTS.md), так что sandbox systemd был вторым эшелоном, а не самой защитой.
+
+# Данные лежат в var/ рабочего каталога (это дефолт DATA_DIR бинарника).
 Environment=DATA_DIR=/var/www/9site/var
-# Статика лежит в /var/www/9site/public (туда её кладёт деплой), а бинарник
-# в корне DEPLOY_PATH: каталог задаётся явно, а не относительно cwd.
+Environment=VISITS_FILE=/var/www/9site/var/visits.dat
 Environment=STATIC_ROOT=/var/www/9site/public
 Environment=BASE_URL=https://9swag.myftp.biz
 #Environment=SMTP_PROVIDER=gmail
@@ -28,18 +30,6 @@ Environment=BASE_URL=https://9swag.myftp.biz
 
 Restart=on-failure
 RestartSec=3
-
-NoNewPrivileges=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectSystem=strict
-ProtectHome=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictSUIDSGID=true
-RestrictRealtime=true
-# User units cannot drop the capability set; a plain unprivileged binary holds none anyway.
 
 [Install]
 WantedBy=default.target
