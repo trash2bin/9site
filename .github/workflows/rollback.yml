@@ -41,7 +41,6 @@ jobs:
           ssh_port: ${{ secrets.SSH_PORT || '22' }}
           ssh_user: ${{ secrets.SSH_USER || 'deploy' }}
           deploy_path: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-          data_dir: ${{ secrets.DATA_DIR || '/var/www/9site/var' }}
           restart_cmd: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
 
       # Diagnosis before the rollback: why the new binary failed ("стоп: ..."
@@ -51,7 +50,6 @@ jobs:
         uses: ./.github/actions/deploy-step
         with:
           name: preflight
-          data_dir: ${{ env.DATA_DIR }}
           deploy_path: ${{ env.DEPLOY_PATH }}
 
       - name: Capture the journal before the rollback
@@ -63,7 +61,6 @@ jobs:
         uses: ./.github/actions/deploy-step
         with:
           name: rollback
-          data_dir: ${{ env.DATA_DIR }}
           deploy_path: ${{ env.DEPLOY_PATH }}
           restart_cmd: ${{ env.RESTART_CMD }}
 
@@ -75,7 +72,7 @@ jobs:
           set -euo pipefail
           urls="$(grep -v '^#' deploy/smoke-urls.txt)"
           bash deploy/remote/run.sh check-live "URLS=$urls" \
-            "BASE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
+            "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Summary
         run: echo "Rolled back to the previous binary on commit ${{ github.sha }} of this workflow"

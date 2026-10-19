@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Variables come from parse_args in lib.sh.
+# The startup checks of the new binary, in the environment of the unit: a
+# binary that cannot run never reaches the restart.
+
 # shellcheck disable=SC2154
 parse_args "$@"
+load_env "$deploy_path" || exit 1
 
 cd "$deploy_path" || exit 1
-envs="$(systemctl --user show 9site -p Environment --value | tr ' ' '\n' | grep '=' | tr '\n' ' ')"
-# The unit value list is meant to be split into arguments.
-# shellcheck disable=SC2086
-env $envs ./site-server check
+./site-server check

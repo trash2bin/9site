@@ -8,8 +8,6 @@ inputs:
   name:
     description: Remote script name, without .sh.
     required: true
-  data_dir:
-    default: ''
   deploy_path:
     default: ''
   base_url:
@@ -26,7 +24,6 @@ runs:
       run: |
         set -euo pipefail
         args=()
-        if [ -n "${{ inputs.data_dir }}" ]; then args+=("DATA_DIR=${{ inputs.data_dir }}"); fi
         if [ -n "${{ inputs.deploy_path }}" ]; then args+=("DEPLOY_PATH=${{ inputs.deploy_path }}"); fi
         if [ -n "${{ inputs.base_url }}" ]; then args+=("BASE_URL=${{ inputs.base_url }}"); fi
         if [ -n "${{ inputs.restart_cmd }}" ]; then args+=("RESTART_CMD=${{ inputs.restart_cmd }}"); fi

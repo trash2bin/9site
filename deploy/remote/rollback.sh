@@ -4,6 +4,7 @@
 # One rollback script for the automatic case and for the manual workflow.
 
 parse_args "$@"
+load_env "$deploy_path" || exit 1
 
 if [ ! -f "$deploy_path/site-server.prev" ]; then
   echo 'no site-server.prev (first deploy), nothing to roll back to' >&2

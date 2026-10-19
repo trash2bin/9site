@@ -240,11 +240,14 @@ STUB
 @test 'parse_args keeps a value with spaces and rejects an unknown key' {
   # Called directly, not through run: run isolates in a subshell, so the
   # values would not reach the caller, which is how the scripts use it.
-  parse_args 'DATA_DIR=/var/lib/9site' 'DEPLOY_PATH=/var/www/9site' 'URLS=http://x/ 200
+  parse_args 'DEPLOY_PATH=/var/www/9site' 'URLS=http://x/ 200
 http://y/ 404'
-  [ "$data_dir" = /var/lib/9site ]
   [ "$deploy_path" = /var/www/9site ]
   [ "$(printf '%s\n' "$urls" | wc -l)" -eq 2 ]
+
+  # The data directory comes from the environment file, not from the caller.
+  run parse_args 'DATA_DIR=/var/lib/9site'
+  [ "$status" -ne 0 ]
 
   run parse_args 'WHAT=ever'
   [ "$status" -ne 0 ]

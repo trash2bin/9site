@@ -17,6 +17,11 @@ setup() {
   # The pipeline uploads the binary here first; the swap script only moves it.
   printf '#!/usr/bin/env bash\n' >/tmp/site-server.new
   chmod +x /tmp/site-server.new
+  # One environment file for the unit and the scripts, the way the deploy ships it.
+  printf 'unit\n' >/tmp/9site.service
+  printf 'DATA_DIR=%s\nSTATIC_ROOT=%s/public\nBASE_URL=https://9swag.myftp.biz\n' \
+    "$data" "$www" >/tmp/deploy.env
+  cp /tmp/deploy.env "$www/deploy.env"
 }
 
 remote() {
@@ -54,7 +59,7 @@ stub() {
 
 @test 'backup-db says first deploy when there is no database' {
   run remote backup-db STAMP=20260101T000000Z \
-    DATA_DIR="$data" DEPLOY_PATH="$www"
+    DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [[ "$output" == *'no site.db yet: first deploy, snapshot skipped'* ]]
 }
@@ -76,7 +81,7 @@ STUB
   : >"$ARGS_LOG"
 
   run remote backup-db STAMP=20260101T000000Z \
-    DATA_DIR="$data" DEPLOY_PATH="$www"
+    DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Backup: $data/backups/site-20260101T000000Z.db"* ]]
   [[ "$output" == *'Pre-deploy copy kept for a paired rollback'* ]]
@@ -96,7 +101,7 @@ STUB
 #!/usr/bin/env bash
 echo 'Main process exited, code=exited, status=14'
 STUB
-  run remote preflight DATA_DIR="$data" DEPLOY_PATH="$www"
+  run remote preflight DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [[ "$output" == *'service: inactive'* ]]
   [[ "$output" == *'was already down before the deploy'* ]]
@@ -112,7 +117,7 @@ STUB
 #!/usr/bin/env bash
 echo 'x class="counter" y <span>1</span><span>3</span> z'
 STUB
-  run remote preflight DATA_DIR="$data" DEPLOY_PATH="$www"
+  run remote preflight DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [ "$(cat "$data/.counter-before")" = 13 ]
   [[ "$output" == *'counter before the deploy: 13'* ]]
@@ -121,33 +126,16 @@ STUB
 @test 'install-unit refuses to leave the database behind in the read-only tree' {
   export HOME="$BATS_TEST_TMPDIR"
   mkdir -p "$HOME/.config/systemd/user"
-  printf 'unit\n' >/tmp/9site.service
-  export DATA="$data"
-  stub systemctl <<'STUB'
-#!/usr/bin/env bash
-case "$*" in
-  *show*Environment*) echo "DATA_DIR=$DATA" ;;
-  *) : ;;
-esac
-STUB
   mkdir -p "$www/var"
   echo stale >"$www/var/site.db"
 
-  run remote install-unit DEPLOY_PATH="$www" DATA_DIR="$data"
+  run remote install-unit DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
   [[ "$output" == *'live database'* ]]
   [[ "$output" == *"$www/var/site.db"* ]]
 }
 
-@test 'dry-run passes the values of the unit to the new binary' {
-  stub systemctl <<'STUB'
-#!/usr/bin/env bash
-case "$*" in
-  *show*Environment*)
-    echo 'DATA_DIR=/var/www/9site/var BASE_URL=https://9swag.myftp.biz' ;;
-  *) exec "$@" ;;
-esac
-STUB
+@test 'dry-run passes the values of the environment file to the new binary' {
   cat >"$www/site-server" <<'STUB'
 #!/usr/bin/env bash
 echo "check saw $BASE_URL and $DATA_DIR"
@@ -157,7 +145,7 @@ STUB
 
   run remote dry-run DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'check saw https://9swag.myftp.biz and /var/www/9site/var'* ]]
+  [[ "$output" == *"check saw https://9swag.myftp.biz and $data"* ]]
 }
 
 @test 'dry-run takes the deploy down before it damages the live service' {
@@ -167,10 +155,6 @@ echo 'стоп: миграция 0003 не применилась' >&2
 exit 1
 STUB
   chmod +x "$www/site-server"
-  stub systemctl <<'STUB'
-#!/usr/bin/env bash
-case "$*" in *Environment*) ;; *) exec "$@" ;; esac
-STUB
 
   run remote dry-run DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
@@ -189,7 +173,7 @@ echo "systemctl $*"
 exit 0
 STUB
 
-  run remote rollback DATA_DIR="$data" DEPLOY_PATH="$www"
+  run remote rollback DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [ ! -e "$www/site-server.prev" ]
   [ "$(cat "$www/site-server")" = previous ]
@@ -202,7 +186,7 @@ STUB
 
 @test 'rollback says so on the first deploy and leaves everything alone' {
   echo first >"$www/site-server"
-  run remote rollback DATA_DIR="$data" DEPLOY_PATH="$www"
+  run remote rollback DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [ "$(cat "$www/site-server")" = first ]
   [ ! -e "$www/site-server.failed" ]
@@ -222,7 +206,7 @@ STUB
 echo 'стоп: база знает миграции дальше'
 STUB
 
-  run remote check-site DATA_DIR="$data" DEPLOY_PATH="$www"
+  run remote check-site DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
   [[ "$output" == *'is not active after the rollback'* ]]
   [[ "$output" == *'стоп: база знает миграции дальше'* ]]
@@ -251,7 +235,8 @@ STUB
   export ARGS_LOG="$BATS_TEST_TMPDIR/args.log"
   : >"$ARGS_LOG"
 
-  run remote check-live "URLS=$urls" BASE_URL=http://127.0.0.1:8080/?counter=1
+  run remote check-live "URLS=$urls" "BASE_URL=http://127.0.0.1:8080/?counter=1" \
+    "DEPLOY_PATH=$www"
   [ "$status" -eq 0 ]
   [[ "$output" == *'service is active'* ]]
   [[ "$output" == *'Counter is growing'* ]]

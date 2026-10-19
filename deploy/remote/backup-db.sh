@@ -4,6 +4,7 @@
 # Before the restart, not after: migrations run when the new binary starts.
 
 parse_args "$@"
+load_env "$deploy_path" || exit 1
 
 mkdir -p "$data_dir/backups"
 if [ ! -f "$data_dir/site.db" ]; then

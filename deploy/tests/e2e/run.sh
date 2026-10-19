@@ -43,7 +43,8 @@ remote() {
     bash deploy/remote/run.sh "$name" "$@")
 }
 
-unit_env() { u "systemctl --user show 9site -p Environment --value" | tr ' ' '\n' | sed -n "s/^$1=//p"; }
+unit_env() { sed -n "s/^$1=//p" "$DEPLOY_PATH/deploy.env"; }
+unit_envfile() { sed -n 's/^EnvironmentFile=//p' "$UNIT"; }
 
 # The match is on a variable, not a pipe: grep -q plus pipefail reports
 # failure on SIGPIPE even when the pattern was found.
@@ -149,15 +150,18 @@ install -d -o deploy -g deploy -m 755 "$DEPLOY_PATH" "$DATA_DIR"
 
 # --- scenario 1: the first deploy ---------------------------------------
 say 'scenario 1: first deploy'
-out="$(remote preflight "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
+out="$(remote preflight "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 [ "$?" = 0 ]; check "$?" 'preflight passes on a server with no binary yet'
 [ ! -f "$UNIT" ]; check "$?" 'no unit before the first deploy'
-rsync -az -e "$SSH" "$REPO/deploy/9site.service" deploy@localhost:/tmp/9site.service
-chown deploy:deploy /tmp/9site.service
-out="$(remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" "DATA_DIR=$DATA_DIR" 2>&1)"
+rsync -az -e "$SSH" "$REPO/deploy/9site.service" \
+  "$REPO/deploy/deploy.env" deploy@localhost:/tmp/
+chown deploy:deploy /tmp/9site.service /tmp/deploy.env
+out="$(remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 [ "$?" = 0 ]; check "$?" 'install-unit writes the unit as the deploy user'
 [ -f "$UNIT" ]; check "$?" 'the unit landed in the user directory'
-[ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the unit on the server knows DATA_DIR'
+[ "$(unit_envfile)" = "$DEPLOY_PATH/deploy.env" ]
+check "$?" 'the unit takes its environment from one file'
+[ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the file names the data directory'
 [ ! -f "$DEPLOY_PATH/site-server" ]; check "$?" 'nothing runs before the binary arrives'
 
 put_binary "$STUB"
@@ -165,19 +169,19 @@ remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'swap-binary swaps atomically'
 [ ! -f "$DEPLOY_PATH/site-server.prev" ]; check "$?" 'a first deploy has nothing to roll back to'
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-remote backup-db "STAMP=$stamp" "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
+remote backup-db "STAMP=$stamp" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'backup-db snapshots the database'
 [ -f "$DATA_DIR/site.db.pre-deploy" ]; check "$?" 'the paired snapshot exists'
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null
 check "$?" 'restart succeeds'
 wait_http; check "$?" 'the site answers after the restart'
-remote check-live "URLS=$URLS" BASE_URL=http://127.0.0.1:8080/ >/dev/null
+remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'check-live verifies the whole site'
 
 # --- scenario 4: a second deploy over a working service ------------------
 say 'scenario 4: second deploy over a working service'
 before="$(cat "$DATA_DIR/site.db")"
-out="$(remote preflight "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
+out="$(remote preflight "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 [ "$?" = 0 ]; check "$?" 'preflight passes over a working service'
 printf '%s\n' "$out" | grep -q 'counter before the deploy'
 check "$?" 'preflight records the number the site serves'
@@ -187,14 +191,14 @@ remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'a second deploy swaps too'
 [ -f "$DEPLOY_PATH/site-server.prev" ]; check "$?" 'the previous binary is kept for the rollback'
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-remote backup-db "STAMP=$stamp" "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
+remote backup-db "STAMP=$stamp" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'backup-db runs again'
 [ "$(cat "$DATA_DIR/site.db.pre-deploy")" = "$before" ]
 check "$?" 'the snapshot holds the live database'
 remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'dry-run passes the startup checks'
-out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" \
-  "DATA_DIR=$DATA_DIR" 2>&1)"
+out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" \
+  2>&1)"
 check "$?" 'check-live verifies the site after the second deploy'
 printf '%s\n' "$out" | grep -q 'Counter holds the value'
 check "$?" 'the counter is measured against the one from before the deploy'
@@ -203,8 +207,8 @@ check "$?" 'the counter is measured against the one from before the deploy'
 say 'scenario 4b: a recreated database resets the counter'
 printf '1\n' >"$DATA_DIR/visits.dat"
 chown deploy:deploy "$DATA_DIR/visits.dat"
-out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" \
-  "DATA_DIR=$DATA_DIR" 2>&1)"
+out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" \
+  2>&1)"
 [ "$?" != 0 ]; check "$?" 'check-live refuses a site whose counter was reset'
 printf '%s\n' "$out" | grep -q 'Counter went down'
 check "$?" 'the drop against the recorded number is in the log'
@@ -212,9 +216,9 @@ check "$?" 'the drop against the recorded number is in the log'
 # --- scenario 3: the database stays where it is --------------------------
 say 'scenario 3: install keeps the database in place'
 before="$(cat "$DATA_DIR/site.db")"
-remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" "DATA_DIR=$DATA_DIR" >/dev/null
+remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'install-unit succeeds with the data already present'
-[ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the unit points at the live data dir'
+[ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the environment still names the live data dir'
 [ "$(cat "$DATA_DIR/site.db")" = "$before" ]; check "$?" 'the database was neither moved nor reset'
 [ "$(stat -c '%U' "$DATA_DIR/site.db")" = deploy ]
 check "$?" 'the database still belongs to the deploy user'
@@ -232,7 +236,7 @@ out="$(remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 printf '%s\n' "$out" | grep -q 'миграция 0003'
 check "$?" 'the reason from the binary reaches the log'
 wait_http; check "$?" 'the old process served the site the whole time'
-remote rollback "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" \
+remote rollback "DEPLOY_PATH=$DEPLOY_PATH" \
   "RESTART_CMD=systemctl --user restart 9site" >/dev/null
 check "$?" 'the automatic rollback undoes the swap'
 wait_http; check "$?" 'the site is green again after the automatic rollback'
@@ -244,7 +248,7 @@ remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 printf 'snapshot:before\n' >"$DATA_DIR/site.db"
 chown deploy:deploy "$DATA_DIR/site.db"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-remote backup-db "STAMP=$stamp" "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
+remote backup-db "STAMP=$stamp" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'the snapshot is taken before the restart'
 printf 'new-schema!\n' >"$DATA_DIR/site.db"
 put_fatal_binary
@@ -254,11 +258,11 @@ remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'its check passes, the failure is only visible on start'
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null 2>&1
 sleep 6
-remote check-live "URLS=$URLS" BASE_URL=http://127.0.0.1:8080/ >/dev/null 2>&1
+remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null 2>&1
 [ "$?" != 0 ]; check "$?" 'check-live refuses a service that crashed on start'
 journal_has 'знает миграции дальше'
 check "$?" 'the log holds the reason of the crash'
-out="$(remote rollback "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" \
+out="$(remote rollback "DEPLOY_PATH=$DEPLOY_PATH" \
   "RESTART_CMD=systemctl --user restart 9site" 2>&1)"
 check "$?" 'the rollback runs'
 printf '%s\n' "$out" | grep -q 'rolled back, rejected binary'
@@ -268,7 +272,7 @@ check "$?" 'the database is back to the pre-deploy snapshot'
 [ ! -e "$DATA_DIR/site.db-wal" ] && [ ! -e "$DATA_DIR/site.db-shm" ]
 check "$?" 'a stale wal would have reopened the future schema'
 wait_http; check "$?" 'the site answers again with the rolled back binary'
-out="$(remote check-site "BASE_URL=http://127.0.0.1:8080/" 2>&1)"
+out="$(remote check-site "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 check "$?" 'check-site is green after the rollback'
 
 # --- scenario 7: a manual rollback after a good deploy ------------------
@@ -277,7 +281,7 @@ put_binary "$STUB"
 remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 printf 'snapshot:manual\n' >"$DATA_DIR/site.db"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-remote backup-db "STAMP=$stamp" "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
+remote backup-db "STAMP=$stamp" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null
 wait_http; check "$?" 'the good deploy serves the site'
 printf 'new-schema!\n' >"$DATA_DIR/site.db"
@@ -285,9 +289,9 @@ put_fatal_binary
 remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null 2>&1
 sleep 6
-remote check-live "URLS=$URLS" BASE_URL=http://127.0.0.1:8080/ >/dev/null 2>&1
+remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null 2>&1
 [ "$?" != 0 ]; check "$?" 'check-live refuses the crashed service before the manual rollback'
-out="$(remote rollback "DATA_DIR=$DATA_DIR" "DEPLOY_PATH=$DEPLOY_PATH" \
+out="$(remote rollback "DEPLOY_PATH=$DEPLOY_PATH" \
   "RESTART_CMD=systemctl --user restart 9site" 2>&1)"
 check "$?" 'the manual rollback runs the same script'
 printf '%s\n' "$out" | grep -q 'service restarted with the rolled back binary'
@@ -306,7 +310,7 @@ remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null 2>&1
 sleep 5
 journal_has 'unable to open database file'
 check "$?" 'the log holds the reason: the database cannot be opened'
-out="$(remote journal-report "DATA_DIR=$DATA_DIR" 2>&1)"
+out="$(remote journal-report 2>&1)"
 check "$?" 'the journal of a failed start reaches the report'
 printf '%s\n' "$out" | grep -q 'unable to open database file'
 check "$?" 'the report carries the reason to the job summary'

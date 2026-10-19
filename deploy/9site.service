@@ -18,15 +18,8 @@ ExecStart=/var/www/9site/site-server
 # (AGENTS.md), так что sandbox systemd был вторым эшелоном, а не самой защитой.
 
 # Данные лежат в var/ рабочего каталога (это дефолт DATA_DIR бинарника).
-Environment=DATA_DIR=/var/www/9site/var
-Environment=VISITS_FILE=/var/www/9site/var/visits.dat
-Environment=STATIC_ROOT=/var/www/9site/public
-Environment=BASE_URL=https://9swag.myftp.biz
-#Environment=SMTP_PROVIDER=gmail
-#Environment=SMTP_USER=you@gmail.com
-#Environment=SMTP_PASS=пароль-приложения
-#Environment=SMTP_HOST=smtp.example.com
-#Environment=SMTP_PORT=587
+# Один источник окружения: файл кладёт деплой, его же читают скрипты.
+EnvironmentFile=/var/www/9site/deploy.env
 
 Restart=on-failure
 RestartSec=3

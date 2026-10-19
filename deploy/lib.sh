@@ -9,11 +9,10 @@ export XDG_RUNTIME_DIR
 # Some values are used only by the scripts concatenated after this file.
 # shellcheck disable=SC2034
 parse_args() {
-  data_dir="" deploy_path="" base_url="http://127.0.0.1:8080"
+  deploy_path="" base_url="http://127.0.0.1:8080"
   restart_cmd="systemctl --user restart 9site" urls="" stamp=""
   for arg in "$@"; do
     case "$arg" in
-      DATA_DIR=*) data_dir="${arg#*=}" ;;
       DEPLOY_PATH=*) deploy_path="${arg#*=}" ;;
       BASE_URL=*) base_url="${arg#*=}" ;;
       RESTART_CMD=*) restart_cmd="${arg#*=}" ;;
@@ -22,6 +21,24 @@ parse_args() {
       *) echo "unknown argument: $arg" >&2; return 1 ;;
     esac
   done
+}
+
+# The unit takes its environment from one file under the deploy path; the
+# scripts read the same file the unit reads, so the two cannot disagree.
+load_env() {
+  local file="$1/deploy.env"
+  if [ ! -f "$file" ]; then
+    echo "no $file: no environment for the unit, run the setup first" >&2
+    return 1
+  fi
+  set -a
+  # shellcheck source=/dev/null
+  . "$file"
+  set +a
+  # The file spells it DATA_DIR, the scripts carry data_dir: one directory,
+  # one name each. base_url stays what parse_args gave it, the base url of
+  # the file is the public site, not the loopback the checks talk to.
+  data_dir="$DATA_DIR"
 }
 
 # A restart loop spends seconds in "activating".

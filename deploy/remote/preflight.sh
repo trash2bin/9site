@@ -2,6 +2,11 @@
 # Variables come from parse_args in lib.sh.
 # shellcheck disable=SC2154
 parse_args "$@"
+# The environment file arrives with the unit, so on the first deploy there is
+# none yet and the counter is simply not recorded.
+if [ -f "$deploy_path/deploy.env" ]; then
+  load_env "$deploy_path" || exit 1
+fi
 
 state="$(systemctl --user is-active 9site || true)"
 code="$(curl -s -o /dev/null -w '%{http_code}' "$base_url" || true)"

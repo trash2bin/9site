@@ -1,8 +1,9 @@
 name: Deploy environment
 description: >-
-  Install the ssh key and publish the env (SSH_*, DEPLOY_PATH, DATA_DIR,
-  RESTART_CMD, TARGET, SSH_OPTS) that every deploy step reads. One source of
-  truth for the deploy plumbing, shared by the deploy and rollback workflows.
+  Install the ssh key and publish the env (SSH_*, DEPLOY_PATH, RESTART_CMD,
+  TARGET, SSH_OPTS) that every deploy step reads. The app environment of the
+  unit lives in deploy/deploy.env on the server, not here, so the data
+  directory has exactly one source. Shared by deploy and rollback.
 
 inputs:
   ssh_host:
@@ -20,9 +21,6 @@ inputs:
   deploy_path:
     description: Where the binary and the static files live.
     default: /var/www/9site
-  data_dir:
-    description: State directory with the database. Must match the unit.
-    default: /var/www/9site/var
   restart_cmd:
     description: How to restart the service.
     default: systemctl --user restart 9site
@@ -43,7 +41,6 @@ runs:
           echo "SSH_PORT=${{ inputs.ssh_port }}"
           echo "SSH_USER=${{ inputs.ssh_user }}"
           echo "DEPLOY_PATH=${{ inputs.deploy_path }}"
-          echo "DATA_DIR=${{ inputs.data_dir }}"
           echo "RESTART_CMD=${{ inputs.restart_cmd }}"
           echo "TARGET=${{ inputs.ssh_user }}@${{ inputs.ssh_host }}"
           echo "SSH_OPTS=ssh -i $HOME/.ssh/deploy_key -p ${{ inputs.ssh_port }} -o StrictHostKeyChecking=yes"
