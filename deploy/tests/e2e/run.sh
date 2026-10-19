@@ -312,10 +312,7 @@ printf '  groups the deploy ssh session sees: %s\n' "$(u 'id -nG' 2>&1 | tr -d '
 printf '  journald is: %s\n' "$(systemctl is-active systemd-journald 2>&1 | tr -d '\r')"
 printf '  what root sees, _SYSTEMD_USER_UNIT=9site.service:\n'
 journalctl _SYSTEMD_USER_UNIT=9site.service -n 8 --no-pager 2>&1 | sed 's/^/    /'
-printf '  what the deploy session sees, journalctl --user -u 9site:\n'
-runuser -u deploy -- env XDG_RUNTIME_DIR=/run/user/"$DEPLOY_UID" \
-  journalctl --user -u 9site -n 8 --no-pager 2>&1 | sed 's/^/    /'
-printf '  what the deploy session sees, _SYSTEMD_USER_UNIT=9site.service:\n'
+printf '  what the deploy session sees, the same unit line:\n'
 runuser -u deploy -- env XDG_RUNTIME_DIR=/run/user/"$DEPLOY_UID" \
   journalctl _SYSTEMD_USER_UNIT=9site.service -n 8 --no-pager 2>&1 | sed 's/^/    /'
 
