@@ -24,8 +24,16 @@ if [ ! -x "$binary" ]; then
   exit 1
 fi
 
-# The release the site runs now, for the rollback below.
+# The release the site runs now, for the rollback below. The first deploy has
+# no current yet, so the binary the server still runs becomes the release to
+# go back to: the first deploy can be rolled back too.
 before="$(readlink "$current" 2>/dev/null || true)"
+if [ -z "$before" ] && [ -x "$deploy_path/site-server" ]; then
+  before="$deploy_path/releases/legacy"
+  mkdir -p "$before"
+  cp -f "$deploy_path/site-server" "$before/site-server"
+  chmod 755 "$before/site-server"
+fi
 
 # Snapshot before anything migrates the live database: VACUUM INTO copies the
 # schema as it stands, so the rollback gets back the database the previous

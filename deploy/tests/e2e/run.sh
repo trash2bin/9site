@@ -303,6 +303,23 @@ check "$?" 'current did not move'
 wait_http; check "$?" 'the site served the whole time'
 chown deploy:deploy "$DATA_DIR/site.db"
 
+# --- scenario 7: the first deploy on a server that still runs the old binary -
+say 'scenario 7: the first deploy can roll back to the binary it replaced'
+rm -f "$DEPLOY_PATH/current" "$DATA_DIR/release-before"
+# The server runs the binary the old unit started, straight under the deploy
+# path: no current yet, and it is what a failed first deploy must return to.
+cp "$STUB" "$DEPLOY_PATH/site-server"
+chmod 755 "$DEPLOY_PATH/site-server"
+chown deploy:deploy "$DEPLOY_PATH/site-server"
+put_fatal_release "$sha5"
+out="$(deploy_release "$sha5" 2>&1)"
+[ "$?" != 0 ]; check "$?" 'the first deploy of a fatal release fails'
+[ -d "$DEPLOY_PATH/releases/legacy" ]
+check "$?" 'the running binary became the release to roll back to'
+[ "$(current_release)" = "$(release legacy)" ]
+check "$?" 'current is back to the legacy release'
+wait_http; check "$?" 'the site answers with the binary it ran before'
+
 # Ground truth for a failing journal check. Root always reads the journal, so
 # compare what root and the deploy session each see for the same unit line:
 # root sees it, deploy does not, is journal access; root sees nothing is routing.
