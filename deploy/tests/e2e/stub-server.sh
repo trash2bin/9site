@@ -7,6 +7,7 @@
 
 import os
 import pathlib
+import socket
 import subprocess
 import sys
 import threading
@@ -81,6 +82,22 @@ class Handler(BaseHTTPRequestHandler):
     do_POST = do_GET
 
 
+def notify_ready():
+    # What the real binary does over sd_notify when the unit is Type=notify:
+    # both sockets are bound by now, so the manager may call it started.
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        sock.connect(addr)
+        sock.sendall(b"READY=1")
+    except OSError:
+        pass
+    finally:
+        sock.close()
+
+
 def check():
     # The startup checks of the real binary: the database must open for
     # writing, the static root must exist, the unit must name the state
@@ -121,8 +138,11 @@ if __name__ == "__main__":
     if code != 0:
         sys.exit(code)
 
-    # Port 80 is in the smoke list, so both listeners have to be up.
-    threading.Thread(
-        target=ThreadingHTTPServer(("127.0.0.1", 80), Handler).serve_forever, daemon=True
-    ).start()
-    ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+    # Port 80 is in the smoke list, so both listeners have to be up, and both
+    # have to be bound before the manager is told the service is ready.
+    srv80 = ThreadingHTTPServer(("127.0.0.1", 80), Handler)
+    srv8080 = ThreadingHTTPServer(("127.0.0.1", 8080), Handler)
+    threading.Thread(target=srv80.serve_forever, daemon=True).start()
+    threading.Thread(target=srv8080.serve_forever, daemon=True).start()
+    notify_ready()
+    threading.Event().wait()

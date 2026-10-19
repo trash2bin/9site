@@ -5,7 +5,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+# Бинарь сказывает о готовности (sd_notify), когда порт открыт: простого
+# active-сразу-после-exec не хватает, рестарт тогда ждёт слушатель, а не
+# процесс. Перезапуск с нерабочим бинарником падает сам.
+Type=notify
 WorkingDirectory=/var/www/9site
 ExecStart=/var/www/9site/site-server
 
