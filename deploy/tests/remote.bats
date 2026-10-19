@@ -235,7 +235,7 @@ STUB
   export ARGS_LOG="$BATS_TEST_TMPDIR/args.log"
   : >"$ARGS_LOG"
 
-  run remote check-live "URLS=$urls" "BASE_URL=http://127.0.0.1:8080/?counter=1" \
+  run remote check-live "URLS=$urls" "PROBE_URL=http://127.0.0.1:8080/?counter=1" \
     "DEPLOY_PATH=$www"
   [ "$status" -eq 0 ]
   [[ "$output" == *'service is active'* ]]

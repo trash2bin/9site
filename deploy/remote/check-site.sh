@@ -9,7 +9,7 @@ if ! wait_active; then
   exit 1
 fi
 
-code="$(curl -s -o /dev/null -w '%{http_code}' "$base_url" || true)"
+code="$(curl -s -o /dev/null -w '%{http_code}' "$probe_url" || true)"
 printf '  service: %s, GET / -> %s\n' active "${code:-no response}"
 if [ "$code" != 200 ]; then
   echo 'rollback did not help, the site is still down, status and log:'

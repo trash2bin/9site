@@ -182,7 +182,7 @@ http://x/ 200'
 }
 
 @test 'check_counter fails when the number goes down' {
-  base_url=http://stub/counter
+  probe_url=http://stub/counter
   cat >"$bin/curl" <<'STUB'
 #!/usr/bin/env bash
 n=$(cat "$BATS_TEST_TMPDIR/n" 2>/dev/null || echo 3)
@@ -196,7 +196,7 @@ STUB
 }
 
 @test 'check_counter passes when the number stays or grows' {
-  base_url=http://stub/counter
+  probe_url=http://stub/counter
   cat >"$bin/curl" <<'STUB'
 #!/usr/bin/env bash
 echo 'x class="counter" y <span>7</span> z'
@@ -208,7 +208,7 @@ STUB
 }
 
 @test 'check_counter refuses a counter reset by a recreated database' {
-  base_url=http://stub/counter
+  probe_url=http://stub/counter
   data_dir="$BATS_TEST_TMPDIR/data"
   mkdir -p "$data_dir"
   printf '4242\n' >"$data_dir/.counter-before"
@@ -223,7 +223,7 @@ STUB
 }
 
 @test 'check_counter measures the site against the recorded number' {
-  base_url=http://stub/counter
+  probe_url=http://stub/counter
   data_dir="$BATS_TEST_TMPDIR/data"
   mkdir -p "$data_dir"
   printf '7\n' >"$data_dir/.counter-before"

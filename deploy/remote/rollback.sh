@@ -11,7 +11,7 @@ if [ ! -f "$deploy_path/site-server.prev" ]; then
   exit 0
 fi
 
-if systemctl --user stop 9site; then
+if systemctl --user stop "$UNIT"; then
   echo 'service stopped for the restore'
 else
   echo 'warning: stop returned non-zero, the service may be down already' >&2
@@ -23,7 +23,7 @@ echo 'rolled back, rejected binary kept as site-server.failed'
 
 restore_db "$data_dir"
 
-systemctl --user reset-failed 9site || true
+systemctl --user reset-failed "$UNIT" 2>/dev/null || true
 # From the repository variable, splitting is intended.
 # shellcheck disable=SC2086
 $restart_cmd

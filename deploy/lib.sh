@@ -6,15 +6,19 @@
 XDG_RUNTIME_DIR="/run/user/$(id -u)"
 export XDG_RUNTIME_DIR
 
+# One name for the unit, everywhere: the user manager knows the service only
+# by it.
+UNIT=9site
+
 # Some values are used only by the scripts concatenated after this file.
 # shellcheck disable=SC2034
 parse_args() {
-  deploy_path="" base_url="http://127.0.0.1:8080"
-  restart_cmd="systemctl --user restart 9site" urls="" stamp=""
+  deploy_path="" probe_url="http://127.0.0.1:8080"
+  restart_cmd="systemctl --user restart $UNIT" urls="" stamp=""
   for arg in "$@"; do
     case "$arg" in
       DEPLOY_PATH=*) deploy_path="${arg#*=}" ;;
-      BASE_URL=*) base_url="${arg#*=}" ;;
+      PROBE_URL=*) probe_url="${arg#*=}" ;;
       RESTART_CMD=*) restart_cmd="${arg#*=}" ;;
       URLS=*) urls="${arg#*=}" ;;
       STAMP=*) stamp="${arg#*=}" ;;
@@ -36,8 +40,8 @@ load_env() {
   . "$file"
   set +a
   # The file spells it DATA_DIR, the scripts carry data_dir: one directory,
-  # one name each. base_url stays what parse_args gave it, the base url of
-  # the file is the public site, not the loopback the checks talk to.
+  # one name each. probe_url stays the loopback parse_args gave it; the
+  # BASE_URL of the file is the public site, not what the checks talk to.
   data_dir="$DATA_DIR"
 }
 
@@ -45,7 +49,7 @@ load_env() {
 wait_active() {
   local state
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    state="$(systemctl --user is-active 9site || true)"
+    state="$(systemctl --user is-active "$UNIT" || true)"
     if [ "$state" = active ]; then
       return 0
     fi
@@ -60,10 +64,10 @@ wait_active() {
 # in either layout.
 journal_lines() {
   local out
-  out="$(journalctl --user -u 9site -n "$1" --no-pager 2>/dev/null || true)"
+  out="$(journalctl --user -u "$UNIT" -n "$1" --no-pager 2>/dev/null || true)"
   case "$out" in
     '' | *'-- No entries --'*)
-      out="$(journalctl _SYSTEMD_USER_UNIT=9site.service -n "$1" --no-pager 2>/dev/null || true)"
+      out="$(journalctl _SYSTEMD_USER_UNIT=$UNIT.service -n "$1" --no-pager 2>/dev/null || true)"
       ;;
   esac
   printf '%s\n' "$out"
@@ -74,7 +78,7 @@ journal_report() {
   echo "### $title"
   echo
   echo '```'
-  systemctl --user status 9site --no-pager -l -n 20 || true
+  systemctl --user status "$UNIT" --no-pager -l -n 20 || true
   echo '--- journalctl ---'
   journal_lines "$lines"
   echo '```'
@@ -91,6 +95,12 @@ smoke() {
       --retry-connrefused --retry-all-errors \
       -o /dev/null -w '%{http_code}' "$url" || true)"
     printf '  %-36s %s\n' "$url" "${code:-no response}"
+    # 000 is a connection that never happened. Waiting it out on every url
+    # only stretches a dead deploy: one such url is the answer.
+    if [ "$code" = 000 ]; then
+      echo "no answer from $url, the service is not listening"
+      return 1
+    fi
     if [ "$code" != "$want" ]; then
       echo "Expected $want, got ${code:-no response}"
       rc=1
@@ -100,7 +110,7 @@ smoke() {
 }
 
 counter_value() {
-  curl -s "$base_url" \
+  curl -s "$probe_url" \
     | tr -d '\n' \
     | awk -F'class="counter"' '{print $2}' \
     | head -c 200 \

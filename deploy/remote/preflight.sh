@@ -8,8 +8,8 @@ if [ -f "$deploy_path/deploy.env" ]; then
   load_env "$deploy_path" || exit 1
 fi
 
-state="$(systemctl --user is-active 9site || true)"
-code="$(curl -s -o /dev/null -w '%{http_code}' "$base_url" || true)"
+state="$(systemctl --user is-active "$UNIT" || true)"
+code="$(curl -s -o /dev/null -w '%{http_code}' "$probe_url" || true)"
 printf '  service: %s, GET / -> %s\n' "$state" "${code:-no response}"
 
 # The number the site serves right now, for check-live to measure the site

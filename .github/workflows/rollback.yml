@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           urls="$(grep -v '^#' deploy/smoke-urls.txt)"
           bash deploy/remote/run.sh check-live "URLS=$urls" \
-            "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+            "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Summary
         run: echo "Rolled back to the previous binary on commit ${{ github.sha }} of this workflow"

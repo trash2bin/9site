@@ -3,7 +3,8 @@
 # shellcheck disable=SC2154
 parse_args "$@"
 
-systemctl --user reset-failed 9site || true
+# A unit that was never loaded has no failed state to clear.
+systemctl --user reset-failed "$UNIT" 2>/dev/null || true
 # From the repository variable, splitting is intended.
 # shellcheck disable=SC2086
 $restart_cmd

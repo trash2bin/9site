@@ -175,7 +175,7 @@ check "$?" 'backup-db snapshots the database'
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null
 check "$?" 'restart succeeds'
 wait_http; check "$?" 'the site answers after the restart'
-remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
+remote check-live "URLS=$URLS" "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'check-live verifies the whole site'
 
 # --- scenario 4: a second deploy over a working service ------------------
@@ -197,7 +197,7 @@ check "$?" 'backup-db runs again'
 check "$?" 'the snapshot holds the live database'
 remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'dry-run passes the startup checks'
-out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" \
+out="$(remote check-live "URLS=$URLS" "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" \
   2>&1)"
 check "$?" 'check-live verifies the site after the second deploy'
 printf '%s\n' "$out" | grep -q 'Counter holds the value'
@@ -207,7 +207,7 @@ check "$?" 'the counter is measured against the one from before the deploy'
 say 'scenario 4b: a recreated database resets the counter'
 printf '1\n' >"$DATA_DIR/visits.dat"
 chown deploy:deploy "$DATA_DIR/visits.dat"
-out="$(remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" \
+out="$(remote check-live "URLS=$URLS" "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" \
   2>&1)"
 [ "$?" != 0 ]; check "$?" 'check-live refuses a site whose counter was reset'
 printf '%s\n' "$out" | grep -q 'Counter went down'
@@ -258,7 +258,7 @@ remote dry-run "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 check "$?" 'its check passes, the failure is only visible on start'
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null 2>&1
 sleep 6
-remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null 2>&1
+remote check-live "URLS=$URLS" "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null 2>&1
 [ "$?" != 0 ]; check "$?" 'check-live refuses a service that crashed on start'
 journal_has 'знает миграции дальше'
 check "$?" 'the log holds the reason of the crash'
@@ -272,7 +272,7 @@ check "$?" 'the database is back to the pre-deploy snapshot'
 [ ! -e "$DATA_DIR/site.db-wal" ] && [ ! -e "$DATA_DIR/site.db-shm" ]
 check "$?" 'a stale wal would have reopened the future schema'
 wait_http; check "$?" 'the site answers again with the rolled back binary'
-out="$(remote check-site "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
+out="$(remote check-site "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 check "$?" 'check-site is green after the rollback'
 
 # --- scenario 7: a manual rollback after a good deploy ------------------
@@ -289,7 +289,7 @@ put_fatal_binary
 remote swap-binary "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null
 remote restart "RESTART_CMD=systemctl --user restart 9site" >/dev/null 2>&1
 sleep 6
-remote check-live "URLS=$URLS" "BASE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null 2>&1
+remote check-live "URLS=$URLS" "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" >/dev/null 2>&1
 [ "$?" != 0 ]; check "$?" 'check-live refuses the crashed service before the manual rollback'
 out="$(remote rollback "DEPLOY_PATH=$DEPLOY_PATH" \
   "RESTART_CMD=systemctl --user restart 9site" 2>&1)"
