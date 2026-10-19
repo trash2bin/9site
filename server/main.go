@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,12 +17,18 @@ import (
 	"time"
 
 	"github.com/ivan223/web1-personal-site/server/internal/auth"
+	"github.com/ivan223/web1-personal-site/server/internal/healthz"
 	"github.com/ivan223/web1-personal-site/server/internal/home"
 	"github.com/ivan223/web1-personal-site/server/internal/leads"
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
+	"github.com/ivan223/web1-personal-site/server/internal/sdnotify"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
+
+// version - сборка, которую видно в /healthz: CI подставляет её флагом
+// -ldflags "-X main.version=<sha>".
+var version = "dev"
 
 func main() {
 	// Отдельный run, а не os.Exit внутри main: defer обязан отработать
@@ -32,7 +40,12 @@ func main() {
 }
 
 func run() error {
-	dataDir := envOr("DATA_DIR", "var")
+	// Без переменной база молча создалась бы в рабочем каталоге: пустая база
+	// со счётчиком в нуле выглядит как рабочий сайт. Лучше не подняться.
+	dataDir := envOr("DATA_DIR", "")
+	if dataDir == "" {
+		return errors.New("DATA_DIR обязателен: без него база создалась бы в рабочем каталоге")
+	}
 
 	// Команда «снять копию базы» для деплоя: VACUUM INTO работает на живой
 	// базе, сервис останавливать не нужно.
@@ -143,6 +156,7 @@ func run() error {
 	authServer.Register(mux)
 	leadsServer.Register(mux)
 	homeServer.Register(mux)
+	mux.Handle("/healthz", healthz.Handler(version, store.Version()))
 
 	if checkOnly {
 		logger.Info("проверка старта пройдена: бинарник готов к рестарту")
@@ -161,7 +175,16 @@ func run() error {
 	}
 	// Слушаем только localhost (наружу nginx): прямой доступ к порту
 	// включал бы обход лимитеров подделкой X-Real-IP.
-	return srv.ListenAndServe()
+	// Слушатель отдельной строкой: менеджеру о готовности сказывают, когда порт
+	// открыт (sd_notify, Type=notify), а не когда процесс вызван.
+	ln, err := net.Listen("tcp", "127.0.0.1:8080")
+	if err != nil {
+		return fmt.Errorf("слушатель: %w", err)
+	}
+	if err := sdnotify.Ready(); err != nil {
+		logger.Warn("sd_notify не ушёл менеджеру", "err", err)
+	}
+	return srv.Serve(ln)
 }
 
 // --- окружение и адаптеры ---

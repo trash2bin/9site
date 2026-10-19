@@ -107,6 +107,28 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	return nil
 }
 
+// Version - номер последней миграции в сборке: схема, которую этот бинарник
+// умеет создать. Его отдаёт /healthz, чтобы деплой сверял поднятый бинарник с
+// тем, который собрал.
+func Version() int {
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		return 0
+	}
+	version := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
+			continue
+		}
+		v, err := migrationVersion(e.Name())
+		if err != nil || v <= version {
+			continue
+		}
+		version = v
+	}
+	return version
+}
+
 // appliedVersions уже накаченные в базу версии миграций.
 func (s *Store) appliedVersions() ([]int, error) {
 	rows, err := s.db.Query(`SELECT version FROM schema_migrations`)
