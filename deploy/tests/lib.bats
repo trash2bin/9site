@@ -139,21 +139,21 @@ http://x/ 200'
   echo old >"$data_dir/site.db"
   echo live >"$data_dir/site.db-wal"
   echo live >"$data_dir/site.db-shm"
-  echo snapshot >"$data_dir/site.db.pre-deploy"
+  echo snapshot >"$data_dir/site.db.pre-abc123"
 
-  run restore_db
+  run restore_db "$data_dir/site.db.pre-abc123"
   [ "$status" -eq 0 ]
   [ "$(cat "$data_dir/site.db")" = snapshot ]
   [ ! -e "$data_dir/site.db-wal" ]
   [ ! -e "$data_dir/site.db-shm" ]
   [ -f "$data_dir/site.db.new-schema" ]
-  [[ "$output" == *'database rolled back'* ]]
+  [[ "$output" == *'database rolled back to'* ]]
 }
 
-@test 'restore_db says so when there is no snapshot' {
+@test 'restore_db says so when the snapshot is missing' {
   data_dir="$BATS_TEST_TMPDIR/data"
   mkdir -p "$data_dir"
-  run restore_db
+  run restore_db "$data_dir/site.db.pre-nope"
   [ "$status" -eq 0 ]
   [[ "$output" == *'nothing to restore'* ]]
   [ ! -e "$data_dir/site.db.new-schema" ]

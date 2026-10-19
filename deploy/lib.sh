@@ -14,14 +14,13 @@ UNIT=9site
 # shellcheck disable=SC2034
 parse_args() {
   deploy_path="" probe_url="http://127.0.0.1:8080"
-  restart_cmd="systemctl --user restart $UNIT" urls="" stamp=""
+  sha="" urls=""
   for arg in "$@"; do
     case "$arg" in
       DEPLOY_PATH=*) deploy_path="${arg#*=}" ;;
       PROBE_URL=*) probe_url="${arg#*=}" ;;
-      RESTART_CMD=*) restart_cmd="${arg#*=}" ;;
+      SHA=*) sha="${arg#*=}" ;;
       URLS=*) urls="${arg#*=}" ;;
-      STAMP=*) stamp="${arg#*=}" ;;
       *) echo "unknown argument: $arg" >&2; return 1 ;;
     esac
   done
@@ -170,14 +169,30 @@ guard_db_location() {
   exit 1
 }
 
+# restore_db возвращает базу из снимка прошлого релиза. Снимок делал
+# VACUUM INTO, то есть в схеме того релиза, wal и shm этой схемы сносим:
+# иначе открылась бы будущая.
 restore_db() {
-  if [ ! -f "$data_dir/site.db.pre-deploy" ]; then
-    echo 'no site.db.pre-deploy: nothing to restore' >&2
+  local snapshot="$1"
+  if [ ! -f "$snapshot" ]; then
+    echo "no $snapshot: nothing to restore" >&2
     return 0
   fi
   cp -f "$data_dir/site.db" "$data_dir/site.db.new-schema"
-  cp -f "$data_dir/site.db.pre-deploy" "$data_dir/site.db"
+  cp -f "$snapshot" "$data_dir/site.db"
   rm -f "$data_dir/site.db-wal" "$data_dir/site.db-shm"
-  echo 'database rolled back to the pre-deploy snapshot'
+  echo "database rolled back to $snapshot"
+}
+
+# check_live - общая проверка после рестарта: сервис слушает, весь smoke
+# список отвечает, счётчик держит значение до деплоя.
+check_live() {
+  if ! wait_active; then
+    echo 'service is not active after the restart, status and log:'
+    journal_report 'the service is not active after the restart' 120
+    return 1
+  fi
+  smoke || return 1
+  check_counter || return 1
 }
 

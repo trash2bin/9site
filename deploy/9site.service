@@ -10,7 +10,9 @@ Wants=network-online.target
 # процесс. Перезапуск с нерабочим бинарником падает сам.
 Type=notify
 WorkingDirectory=/var/www/9site
-ExecStart=/var/www/9site/site-server
+# current - символик на релиз (releases/<sha>), который деплой переключил:
+# откат меняет ссылку, а не бинарник на месте.
+ExecStart=/var/www/9site/current/site-server
 
 # Пользовательский юнит, без root и sudo: работает от имени deploy.
 #

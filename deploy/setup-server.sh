@@ -199,7 +199,6 @@ cat <<INFO
 
 Переменные (вкладка Variables):
   DEPLOY_ENABLED      = true
-  DEPLOY_RESTART_CMD  = systemctl --user restart $SERVICE_NAME
 
 Секреты (вкладка Secrets):
   SSH_HOST            = IP этого сервера

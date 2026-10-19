@@ -12,8 +12,6 @@ inputs:
     default: ''
   probe_url:
     default: ''
-  restart_cmd:
-    default: ''
   stamp:
     default: ''
 
@@ -26,7 +24,6 @@ runs:
         args=()
         if [ -n "${{ inputs.deploy_path }}" ]; then args+=("DEPLOY_PATH=${{ inputs.deploy_path }}"); fi
         if [ -n "${{ inputs.probe_url }}" ]; then args+=("PROBE_URL=${{ inputs.probe_url }}"); fi
-        if [ -n "${{ inputs.restart_cmd }}" ]; then args+=("RESTART_CMD=${{ inputs.restart_cmd }}"); fi
         if [ -n "${{ inputs.stamp }}" ]; then args+=("STAMP=${{ inputs.stamp }}"); fi
         bash deploy/remote/run.sh "${{ inputs.name }}" "${args[@]}" \
           | tee -a "${SUMMARY:-/dev/null}"

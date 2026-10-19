@@ -13,15 +13,17 @@ setup() {
   data="$BATS_TEST_TMPDIR/data"
   www="$BATS_TEST_TMPDIR/www"
   mkdir -p "$data" "$www" "$BATS_TEST_TMPDIR/bin"
-  mkdir -p "$data/backups"
-  # The pipeline uploads the binary here first; the swap script only moves it.
-  printf '#!/usr/bin/env bash\n' >/tmp/site-server.new
-  chmod +x /tmp/site-server.new
+
   # One environment file for the unit and the scripts, the way the deploy ships it.
   printf 'unit\n' >/tmp/9site.service
   printf 'DATA_DIR=%s\nSTATIC_ROOT=%s/public\nBASE_URL=https://9swag.myftp.biz\n' \
     "$data" "$www" >/tmp/deploy.env
   cp /tmp/deploy.env "$www/deploy.env"
+
+  # The site that answers exactly what deploy/smoke-urls.txt expects; a url
+  # outside the list answers 500, which is how smoke failures look.
+  export SMOKE_MAP="$root/deploy/smoke-urls.txt"
+  urls="$(grep -v '^#' "$root/deploy/smoke-urls.txt")"
 }
 
 remote() {
@@ -33,60 +35,172 @@ stub() {
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
-@test 'a path with a space survives the stream unchanged' {
-  spaced="$BATS_TEST_TMPDIR/www with space"
-  mkdir -p "$spaced"
-  run remote swap-binary "DEPLOY_PATH=$spaced"
-  [ "$status" -eq 0 ]
-  [ -x "$spaced/site-server" ]
-  [ -f "$spaced/site-server.new" ] && false || true
+# A release directory the way CI leaves it: releases/<sha>/site-server.
+release() {
+  local dir="$www/releases/$1"
+  mkdir -p "$dir"
+  cat >"$dir/site-server"
+  chmod +x "$dir/site-server"
 }
 
-@test 'swap-binary keeps the previous binary for the rollback' {
-  echo first >"$www/site-server"
-  run remote swap-binary DEPLOY_PATH="$www"
-  [ "$status" -eq 0 ]
-  [ -x "$www/site-server" ]
-  [ -f "$www/site-server.prev" ]
-}
-
-@test 'swap-binary does not create prev on the very first deploy' {
-  run remote swap-binary DEPLOY_PATH="$www"
-  [ "$status" -eq 0 ]
-  [ ! -e "$www/site-server.prev" ]
-  [ -x "$www/site-server" ]
-}
-
-@test 'backup-db says first deploy when there is no database' {
-  run remote backup-db STAMP=20260101T000000Z \
-    DEPLOY_PATH="$www"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'no site.db yet: first deploy, snapshot skipped'* ]]
-}
-
-@test 'backup-db runs the new binary twice and keeps ten copies' {
-  echo db >"$data/site.db"
-  cat >"$www/site-server" <<'STUB'
+# The unit reports started, so a restart is instant and the service is active.
+stub_active_systemd() {
+  stub systemctl <<'STUB'
 #!/usr/bin/env bash
-echo "site-server $*" >>"$ARGS_LOG"
+case "$*" in *is-active*) echo active ;; esac
 exit 0
 STUB
-  chmod +x "$www/site-server"
-  i=0
-  while [ "$i" -lt 12 ]; do
-    echo old >"$data/backups/site-2025$i.db"
-    i=$((i + 1))
-  done
-  export ARGS_LOG="$BATS_TEST_TMPDIR/args.log"
-  : >"$ARGS_LOG"
+}
 
-  run remote backup-db STAMP=20260101T000000Z \
+# The smoke list answered correctly, and the counter page for the probe.
+stub_site_curl() {
+  stub curl <<'STUB'
+#!/usr/bin/env bash
+url=""
+for arg in "$@"; do case "$arg" in http*) url="$arg" ;; esac; done
+case "$url" in *counter*) echo 'x class="counter" y <span>7</span> z' ;; esac
+want="$(awk -v u="$url" '$1 == u {print $2}' "$SMOKE_MAP" 2>/dev/null | tail -n 1)"
+echo "${want:-500}"
+STUB
+}
+
+@test 'deploy refuses a release that was never uploaded' {
+  run remote deploy SHA=nosuch "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no $www/releases/nosuch/site-server"* ]]
+}
+
+@test 'deploy refuses a release without a sha' {
+  run remote deploy "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'SHA is required'* ]]
+}
+
+@test 'deploy runs the check in the environment of the unit, then flips' {
+  stub_active_systemd
+  stub_site_curl
+  echo db >"$data/site.db"
+  release good <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in
+  backup) cp "$DATA_DIR/site.db" "$2" ;;
+  check) echo "check saw $DATA_DIR and $BASE_URL" ;;
+esac
+exit 0
+BINARY
+
+  run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
     DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Backup: $data/backups/site-20260101T000000Z.db"* ]]
-  [[ "$output" == *'Pre-deploy copy kept for a paired rollback'* ]]
-  [ "$(grep -c 'site-server backup' "$ARGS_LOG")" -eq 2 ]
-  [ "$(ls -1 "$data/backups" | grep -c '^site-.*\.db$')" -eq 10 ]
+  [[ "$output" == *"check saw $data and https://9swag.myftp.biz"* ]]
+  [[ "$output" == *'flipped'* ]]
+  [ "$(readlink "$www/current")" = "$www/releases/good" ]
+  [ -f "$data/site.db.pre-good" ]
+  [[ "$output" == *'Counter is growing'* ]]
+}
+
+@test 'deploy stops before the flip when the check fails' {
+  echo db >"$data/site.db"
+  release dead <<'BINARY'
+#!/usr/bin/env bash
+if [ "$1" = check ]; then
+  echo 'стоп: миграция 0003 не применилась' >&2
+  exit 1
+fi
+exit 0
+BINARY
+
+  run remote deploy SHA=dead "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'миграция 0003'* ]]
+  [[ "$output" == *'the deploy stops before the flip'* ]]
+  [ ! -e "$www/current" ]
+  [ ! -e "$data/site.db.pre-dead" ]
+}
+
+@test 'deploy rolls back a release that dies on start' {
+  # The site serves the previous release; the new one passes its check, is
+  # flipped in, and never comes up.
+  release good <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in backup) cp "$DATA_DIR/site.db" "$2" ;; esac
+exit 0
+BINARY
+  ln -sfn "$www/releases/good" "$www/current"
+  printf 'snapshot:live\n' >"$data/site.db"
+  release fatal <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in
+  backup) cp "$DATA_DIR/site.db" "$2" ;;
+  check) exit 0 ;;
+esac
+exit 0
+BINARY
+
+  # Type=notify: the restart job only finishes when the service reports ready,
+  # and a restart loop never says active.
+  stub systemctl <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *is-active*) echo activating ;;
+  *restart*) exit 0 ;;
+esac
+exit 0
+STUB
+  stub sleep <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+
+  run remote deploy SHA=fatal "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [ "$(readlink "$www/current")" = "$www/releases/good" ]
+  [ "$(cat "$data/site.db")" = "$(cat "$data/site.db.pre-fatal")" ]
+  [ -d "$www/releases/fatal.rejected" ]
+  [ "$(cat "$data/release-before")" = "$www/releases/good" ]
+}
+
+@test 'the manual rollback returns to the release before it' {
+  stub_active_systemd
+  stub_site_curl
+  release good <<'BINARY'
+#!/usr/bin/env bash
+exit 0
+BINARY
+  ln -sfn "$www/releases/good" "$www/current"
+  printf '%s\n' "$www/releases/good" >"$data/release-before"
+  # The released database in the new schema, and the copy the deploy took
+  # before it flipped: the rollback owes the second one.
+  printf 'new-schema!\n' >"$data/site.db"
+  printf 'live-db\n' >"$data/site.db.pre-bad"
+  release bad <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in backup) cp "$DATA_DIR/site.db" "$2" ;; esac
+exit 0
+BINARY
+  ln -sfn "$www/releases/bad" "$www/current"
+
+  run remote rollback "URLS=$urls" "PROBE_URL=http://stub/counter" \
+    DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$www/current")" = "$www/releases/good" ]
+  [ -d "$www/releases/bad.rejected" ]
+  [ "$(cat "$data/site.db")" = live-db ]
+  [[ "$output" == *'database rolled back'* ]]
+}
+
+@test 'the rollback of a first release says so and leaves everything alone' {
+  release first <<'BINARY'
+#!/usr/bin/env bash
+exit 0
+BINARY
+  ln -sfn "$www/releases/first" "$www/current"
+
+  run remote rollback "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'no release recorded before'* ]]
+  [ -d "$www/releases/first" ]
+  [ ! -e "$www/releases/first.rejected" ]
 }
 
 @test 'preflight warns and prints the journal when the service is down' {
@@ -128,6 +242,7 @@ STUB
   mkdir -p "$HOME/.config/systemd/user"
   mkdir -p "$www/var"
   echo stale >"$www/var/site.db"
+  rm -f "$data/site.db"
 
   run remote install-unit DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
@@ -135,113 +250,20 @@ STUB
   [[ "$output" == *"$www/var/site.db"* ]]
 }
 
-@test 'dry-run passes the values of the environment file to the new binary' {
-  cat >"$www/site-server" <<'STUB'
-#!/usr/bin/env bash
-echo "check saw $BASE_URL and $DATA_DIR"
-exit 0
-STUB
-  chmod +x "$www/site-server"
-
-  run remote dry-run DEPLOY_PATH="$www"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"check saw https://9swag.myftp.biz and $data"* ]]
-}
-
-@test 'dry-run takes the deploy down before it damages the live service' {
-  cat >"$www/site-server" <<'STUB'
-#!/usr/bin/env bash
-echo 'стоп: миграция 0003 не применилась' >&2
-exit 1
-STUB
-  chmod +x "$www/site-server"
-
-  run remote dry-run DEPLOY_PATH="$www"
-  [ "$status" -ne 0 ]
-}
-
-@test 'rollback restores the binary and the database, wal and shm included' {
-  echo current >"$www/site-server"
-  echo previous >"$www/site-server.prev"
-  echo live >"$data/site.db"
-  echo live >"$data/site.db-wal"
-  echo live >"$data/site.db-shm"
-  echo snapshot >"$data/site.db.pre-deploy"
+@test 'install-unit installs the unit and the environment file' {
+  export HOME="$BATS_TEST_TMPDIR"
+  mkdir -p "$HOME/.config/systemd/user"
   stub systemctl <<'STUB'
 #!/usr/bin/env bash
-echo "systemctl $*"
 exit 0
 STUB
+  install -m 0644 /tmp/deploy.env "$www/deploy.env"
 
-  run remote rollback DEPLOY_PATH="$www"
+  run remote install-unit DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
-  [ ! -e "$www/site-server.prev" ]
-  [ "$(cat "$www/site-server")" = previous ]
-  [ "$(cat "$www/site-server.failed")" = current ]
-  [ "$(cat "$data/site.db")" = snapshot ]
-  [ ! -e "$data/site.db-wal" ]
-  [ ! -e "$data/site.db-shm" ]
-  [[ "$output" == *'service restarted with the rolled back binary and database'* ]]
-}
-
-@test 'rollback says so on the first deploy and leaves everything alone' {
-  echo first >"$www/site-server"
-  run remote rollback DEPLOY_PATH="$www"
-  [ "$status" -eq 0 ]
-  [ "$(cat "$www/site-server")" = first ]
-  [ ! -e "$www/site-server.failed" ]
-  [[ "$output" == *'no site-server.prev (first deploy)'* ]]
-}
-
-@test 'check-site reports the journal when the rollback did not help' {
-  stub systemctl <<'STUB'
-#!/usr/bin/env bash
-case "$*" in
-  *is-active*) echo failed ;;
-  *status*) echo 'Active: failed' ;;
-esac
-STUB
-  stub journalctl <<'STUB'
-#!/usr/bin/env bash
-echo 'стоп: база знает миграции дальше'
-STUB
-
-  run remote check-site DEPLOY_PATH="$www"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *'is not active after the rollback'* ]]
-  [[ "$output" == *'стоп: база знает миграции дальше'* ]]
-}
-
-@test 'check-live runs every url from the one shared list' {
-  urls="$(grep -v '^#' "$root/deploy/smoke-urls.txt")"
-  stub systemctl <<'STUB'
-#!/usr/bin/env bash
-echo active
-exit 0
-STUB
-  stub curl <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "curl $*" >>"$ARGS_LOG"
-url=""
-for arg in "$@"; do case "$arg" in http*) url="$arg" ;; esac; done
-if [[ "$url" == *counter* ]]; then
-  echo 'x class="counter" y <span>5</span> z'
-  exit 0
-fi
-want="$(awk -v u="$url" '$1 == u {print $2}' "$SMOKE_MAP")"
-echo "${want:-500}"
-STUB
-  export SMOKE_MAP="$root/deploy/smoke-urls.txt"
-  export ARGS_LOG="$BATS_TEST_TMPDIR/args.log"
-  : >"$ARGS_LOG"
-
-  run remote check-live "URLS=$urls" "PROBE_URL=http://127.0.0.1:8080/?counter=1" \
-    "DEPLOY_PATH=$www"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'service is active'* ]]
-  [[ "$output" == *'Counter is growing'* ]]
-  # 28 urls plus the two counter probes.
-  [ "$(grep -c '^curl' "$ARGS_LOG")" -ge 30 ]
+  [ -f "$HOME/.config/systemd/user/9site.service" ]
+  [ -f "$www/deploy.env" ]
+  [[ "$output" == *"unit installed, DATA_DIR=$data"* ]]
 }
 
 @test 'run.sh refuses a script that does not exist' {

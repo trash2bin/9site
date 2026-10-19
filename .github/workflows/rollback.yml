@@ -41,38 +41,24 @@ jobs:
           ssh_port: ${{ secrets.SSH_PORT || '22' }}
           ssh_user: ${{ secrets.SSH_USER || 'deploy' }}
           deploy_path: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-          restart_cmd: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
 
       # Diagnosis before the rollback: why the new binary failed ("стоп: ..."
       # from its stderr). Without it the rollback treats the symptom and the
       # cause stays invisible.
-      - name: Check the state of the server
-        uses: ./.github/actions/deploy-step
-        with:
-          name: preflight
-          deploy_path: ${{ env.DEPLOY_PATH }}
-
       - name: Capture the journal before the rollback
         uses: ./.github/actions/deploy-step
         with:
           name: journal-report
 
-      - name: Roll back binary and database
-        uses: ./.github/actions/deploy-step
-        with:
-          name: rollback
-          deploy_path: ${{ env.DEPLOY_PATH }}
-          restart_cmd: ${{ env.RESTART_CMD }}
-
-      # The same check the deploy runs, from the same list of urls: a
-      # rollback counts as done only when the whole site is back, not just
-      # a process.
-      - name: Check that the site answers
+      # The same script the deploy uses to undo its own failure, so the manual
+      # path and the automatic one cannot drift apart: the release before the
+      # last deploy, the database it ran on, the restart, the same smoke list.
+      - name: Roll back to the previous release
         run: |
           set -euo pipefail
           urls="$(grep -v '^#' deploy/smoke-urls.txt)"
-          bash deploy/remote/run.sh check-live "URLS=$urls" \
-            "PROBE_URL=http://127.0.0.1:8080/" "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
+          bash deploy/remote/run.sh rollback "URLS=$urls" \
+            "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Summary
         run: echo "Rolled back to the previous binary on commit ${{ github.sha }} of this workflow"

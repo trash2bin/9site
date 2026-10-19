@@ -5,6 +5,7 @@
 #
 # Enough to be real for the scenarios, small enough to read in one screen.
 
+import json
 import os
 import pathlib
 import socket
@@ -49,6 +50,8 @@ def visits():
 
 def code_for_path(path):
     path = path.lstrip("/")
+    if path == "healthz":
+        return 200
     if path == "":
         return 200
     if path.endswith("/"):
@@ -70,6 +73,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         code = code_for_path(self.path.split("?")[0])
+        if self.path.split("?")[0] == "/healthz":
+            body = json.dumps({"status": "ok", "schema": 1, "version": "stub"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         body = PAGE.format(digits=digits_of(visits())).encode() if code == 200 else b""
         self.send_response(code)
         self.send_header("Content-Length", str(len(body)))

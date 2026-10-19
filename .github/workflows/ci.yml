@@ -229,8 +229,12 @@ jobs:
 
       - name: Build Linux server binary
         run: |
+          set -euo pipefail
+          # main.version через ldflags: именно она отвечает в /healthz, и
+          # деплой сверяет поднятый бинарник с собранным.
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-            go build -trimpath -ldflags="-s -w" -o build/site-server ./server
+            go build -trimpath -ldflags="-s -w -X main.version=$GITHUB_SHA" \
+            -o build/site-server ./server
 
       - name: Deploy environment
         uses: ./.github/actions/deploy
@@ -240,7 +244,6 @@ jobs:
           ssh_port: ${{ secrets.SSH_PORT || '22' }}
           ssh_user: ${{ secrets.SSH_USER || 'deploy' }}
           deploy_path: ${{ secrets.DEPLOY_PATH || '/var/www/9site' }}
-          restart_cmd: ${{ vars.DEPLOY_RESTART_CMD || 'systemctl --user restart 9site' }}
 
       - name: Upload static files
         run: bash deploy/upload-static.sh
@@ -267,67 +270,30 @@ jobs:
           rsync -az -e "$SSH_OPTS" deploy/9site.service deploy/deploy.env "$TARGET:/tmp/"
           bash deploy/remote/run.sh install-unit "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
-      - name: Upload server binary
-        id: swap
+      - name: Upload the release
         run: |
           set -euo pipefail
-          rsync -az -e "$SSH_OPTS" build/site-server "$TARGET:/tmp/site-server.new"
-          bash deploy/remote/run.sh swap-binary "DEPLOY_PATH=$DEPLOY_PATH" \
-            | tee -a "$SUMMARY"
-          echo "swapped=true" >> "$GITHUB_OUTPUT"
+          $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/releases/$GITHUB_SHA'"
+          rsync -az -e "$SSH_OPTS" build/site-server \
+            "$TARGET:$DEPLOY_PATH/releases/$GITHUB_SHA/site-server"
+          echo "release $GITHUB_SHA uploaded"
 
-      - name: Backup database before restart
-        run: |
-          set -euo pipefail
-          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-          bash deploy/remote/run.sh backup-db "STAMP=$stamp" \
-            "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
-
-      - name: Dry-run new binary before restart
-        uses: ./.github/actions/deploy-step
-        with:
-          name: dry-run
-          deploy_path: ${{ env.DEPLOY_PATH }}
-
-      - name: Restart service
-        uses: ./.github/actions/deploy-step
-        with:
-          name: restart
-          restart_cmd: ${{ env.RESTART_CMD }}
-
-      - name: Check that the site answers
+      # One script on the server does the release end to end: snapshot the
+      # database, run the startup checks, flip the current symlink, restart,
+      # check the site. Whatever fails after the flip it undoes itself, so
+      # nothing of that is repeated here.
+      - name: Deploy the release
         run: |
           set -euo pipefail
           urls="$(grep -v '^#' deploy/smoke-urls.txt)"
-          bash deploy/remote/run.sh check-live "URLS=$urls" \
-            "PROBE_URL=http://127.0.0.1:8080/" | tee -a "$SUMMARY"
-
-      # --- automatic rollback -------------------------------------------
-      # Everything after the swap that failed should be undone: restore the
-      # previous binary, restore the database it may have migrated, restart.
-      # The rejected binary stays behind as site-server.failed so the commit
-      # can be reproduced locally.
+          bash deploy/remote/run.sh deploy "SHA=$GITHUB_SHA" "URLS=$urls" \
+            "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Capture the journal on failure
-        if: failure() && steps.swap.outputs.swapped == 'true'
+        if: failure()
         uses: ./.github/actions/deploy-step
         with:
           name: journal-report
-
-      - name: Roll back binary and database
-        if: failure() && steps.swap.outputs.swapped == 'true'
-        uses: ./.github/actions/deploy-step
-        with:
-          name: rollback
-          deploy_path: ${{ env.DEPLOY_PATH }}
-          restart_cmd: ${{ env.RESTART_CMD }}
-
-      - name: Check that the site answers after the rollback
-        if: failure() && steps.swap.outputs.swapped == 'true'
-        uses: ./.github/actions/deploy-step
-        with:
-          name: check-site
-          probe_url: http://127.0.0.1:8080/
 
       - name: Summary
         run: echo "Deployed commit ${{ github.sha }}"
