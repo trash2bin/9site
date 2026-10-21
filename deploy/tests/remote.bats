@@ -255,6 +255,25 @@ STUB
   [ "$(cat "$data/release-before")" = "$www/releases/good" ]
 }
 
+@test 'deploy stops at the first broken command instead of flipping anyway' {
+  stub_active_systemd
+  stub_site_curl
+  static_set
+  release good <<'BINARY'
+#!/usr/bin/env bash
+exit 0
+BINARY
+  # The swap cannot put the new set in place: something else owns the name.
+  : >"$www/public"
+
+  run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
+    DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  # Without errexit the run went on and reported a deploy that never happened.
+  [[ "$output" != *'flipped'* ]]
+  [ ! -e "$www/current" ]
+}
+
 @test 'the manual rollback returns to the release before it' {
   stub_active_systemd
   stub_site_curl
@@ -339,6 +358,10 @@ STUB
   echo stale >"$www/var/site.db"
   rm -f "$data/site.db"
   ship_unit
+  stub systemctl <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
 
   run remote install-unit DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]

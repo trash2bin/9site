@@ -9,6 +9,10 @@
 # holds the SMTP password once it is filled in, and /tmp is readable by every
 # user on the box.
 
+# On the server only the checks below decide, and a command that breaks must
+# not be skipped over: a flip that never happened used to look like a deploy.
+set -euo pipefail
+
 parse_args "$@"
 
 incoming="$deploy_path/.incoming"

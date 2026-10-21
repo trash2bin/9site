@@ -3,6 +3,10 @@
 # linger for the manager. No root: a user sets up its own user manager, so the
 # deploy self-prepares a fresh box without a human touch.
 
+# On the server only the checks below decide, and a command that breaks must
+# not be skipped over: a flip that never happened used to look like a deploy.
+set -euo pipefail
+
 parse_args "$@"
 
 install -d -m 755 "$HOME/.config/systemd/user"

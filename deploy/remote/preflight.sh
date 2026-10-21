@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Variables come from parse_args in lib.sh.
 # shellcheck disable=SC2154
+# On the server only the checks below decide, and a command that breaks must
+# not be skipped over: a flip that never happened used to look like a deploy.
+set -euo pipefail
+
 parse_args "$@"
 # The environment file arrives with the unit, so on the first deploy there is
 # none yet and the counter is simply not recorded.
@@ -15,7 +19,7 @@ printf '  service: %s, GET / -> %s\n' "$state" "${code:-no response}"
 # The number the site serves right now, for check-live to measure the site
 # after the restart against it.
 if [ "$state" = active ] && [ -n "$data_dir" ]; then
-  n="$(counter_value)"
+  n="$(counter_value || true)"
   if [ -n "$n" ]; then
     printf '%s\n' "$n" >"$data_dir/.counter-before"
     printf '  counter before the deploy: %s\n' "$n"

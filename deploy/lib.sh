@@ -15,6 +15,8 @@ UNIT=9site
 parse_args() {
   deploy_path="" probe_url="http://127.0.0.1:8080"
   sha="" urls=""
+  # Set here as well: preflight runs before there is an environment file.
+  data_dir=""
   for arg in "$@"; do
     case "$arg" in
       DEPLOY_PATH=*) deploy_path="${arg#*=}" ;;
@@ -127,7 +129,7 @@ check_counter() {
     recorded="$(cat "$data_dir/.counter-before")"
   fi
 
-  after="$(counter_value)"
+  after="$(counter_value || true)"
   if [ -z "$after" ]; then
     echo 'Counter not found in the response'
     return 1
@@ -144,7 +146,7 @@ check_counter() {
   fi
 
   # Nothing recorded, the first deploy: two reads of a live site.
-  second="$(counter_value)"
+  second="$(counter_value || true)"
   before=$((10#$after))
   if [ "$((10#$second))" -lt "$before" ]; then
     echo "Counter went down: $before -> $((10#$second))"
@@ -206,7 +208,9 @@ restore_db() {
     echo "no $snapshot: nothing to restore" >&2
     return 0
   fi
-  cp -f "$data_dir/site.db" "$data_dir/site.db.new-schema"
+  if [ -f "$data_dir/site.db" ]; then
+    cp -f "$data_dir/site.db" "$data_dir/site.db.new-schema"
+  fi
   cp -f "$snapshot" "$data_dir/site.db"
   rm -f "$data_dir/site.db-wal" "$data_dir/site.db-shm"
   echo "database rolled back to $snapshot"

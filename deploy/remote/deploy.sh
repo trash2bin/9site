@@ -7,6 +7,10 @@
 
 # Variables come from parse_args in lib.sh.
 # shellcheck disable=SC2154
+# On the server only the checks below decide, and a command that breaks must
+# not be skipped over: a flip that never happened used to look like a deploy.
+set -euo pipefail
+
 parse_args "$@"
 
 if [ -z "$sha" ]; then
@@ -62,8 +66,8 @@ if [ -f "$data_dir/site.db" ]; then
   # newest is five deploys of history, enough for the rollback and small
   # enough for the disk. The pre-deploy copies live next to the database, not
   # in backups/, so they need their own list.
-  ls -1t "$data_dir"/backups/site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
-  ls -1t "$data_dir"/site.db.pre-* 2>/dev/null | tail -n +11 | xargs -r rm -f
+  ls -1t "$data_dir"/backups/site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f || true
+  ls -1t "$data_dir"/site.db.pre-* 2>/dev/null | tail -n +11 | xargs -r rm -f || true
 else
   echo 'no site.db yet: first deploy, snapshot skipped'
 fi
@@ -96,7 +100,7 @@ if check_live; then
   echo 'the site answers the smoke list and holds the counter'
   # Releases accumulate one per commit. Five is enough history for a rollback
   # and small enough not to fill the disk.
-  ls -1dt "$deploy_path"/releases/*/ 2>/dev/null | tail -n +6 | xargs -r rm -rf
+  ls -1dt "$deploy_path"/releases/*/ 2>/dev/null | tail -n +6 | xargs -r rm -rf || true
   exit 0
 fi
 
