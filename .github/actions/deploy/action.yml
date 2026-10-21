@@ -14,7 +14,7 @@ inputs:
     required: true
   ssh_port:
     description: Ssh port.
-    default: '22'
+    default: "22"
   ssh_user:
     description: Deploy user on the server.
     default: deploy

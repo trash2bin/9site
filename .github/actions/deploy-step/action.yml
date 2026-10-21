@@ -9,11 +9,11 @@ inputs:
     description: Remote script name, without .sh.
     required: true
   deploy_path:
-    default: ''
+    default: ""
   probe_url:
-    default: ''
+    default: ""
   stamp:
-    default: ''
+    default: ""
 
 runs:
   using: composite
