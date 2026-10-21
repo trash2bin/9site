@@ -88,13 +88,12 @@ if ! STATIC_ROOT="$deploy_path/public.next" "$binary" check; then
 fi
 echo 'check passed'
 
-static_swap_in
-
 if [ -n "$before" ]; then
   printf '%s\n' "$before" >"$data_dir/release-before"
 else
   rm -f "$data_dir/release-before"
 fi
+static_swap_in
 ln -sfn "$release" "$current"
 echo "flipped $current to $release"
 
@@ -113,13 +112,13 @@ fi
 
 echo 'deploy failed, undoing it'
 journal_report 'the deploy failed' 200
+static_swap_back
 if [ -z "$before" ] || [ "$before" = "$release" ]; then
   echo 'nothing to roll back to: this was the first release'
   exit 1
 fi
 
 ln -sfn "$before" "$current"
-static_swap_back
 if mv -f "$release" "$release.rejected"; then
   echo "rolled back to $before, the rejected release is kept as $release.rejected"
 else

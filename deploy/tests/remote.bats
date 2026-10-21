@@ -297,6 +297,39 @@ BINARY
   [ ! -e "$www/current" ]
 }
 
+@test 'a failed re-deploy of the current release puts the static set back' {
+  release good <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in
+  backup) cp "$DATA_DIR/site.db" "$2" ;;
+  check) exit 0 ;;
+esac
+exit 0
+BINARY
+  ln -sfn "$www/releases/good" "$www/current"
+  mkdir -p "$www/public"
+  echo '<html>serving</html>' >"$www/public/index.html"
+  stub systemctl <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *is-active*) echo activating ;;
+  *restart*) exit 0 ;;
+esac
+exit 0
+STUB
+  stub sleep <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  static_set
+
+  run remote deploy SHA=good "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  # Nothing to flip back to, but the pages the site serves are the old ones.
+  [[ "$output" == *'nothing to roll back to'* ]]
+  [ "$(cat "$www/public/index.html")" = '<html>serving</html>' ]
+}
+
 @test 'the manual rollback returns to the release before it' {
   stub_active_systemd
   stub_site_curl
