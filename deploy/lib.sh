@@ -46,10 +46,12 @@ load_env() {
   data_dir="$DATA_DIR"
 }
 
-# A restart loop spends seconds in "activating".
+# A restart loop spends seconds in "activating". The unit gives a release 30s
+# to report ready (TimeoutStartSec), so a shorter wait would roll back a slow
+# start that was about to work.
 wait_active() {
   local state
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
+  for _ in {1..20}; do
     state="$(systemctl --user is-active "$UNIT" || true)"
     if [ "$state" = active ]; then
       return 0

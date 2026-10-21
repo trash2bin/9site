@@ -61,7 +61,7 @@ STUB
   grep -q 'systemctl --user is-active 9site' "$args"
 }
 
-@test 'wait_active gives a restart loop ten tries and then fails' {
+@test 'wait_active outlasts the start timeout of the unit' {
   cat >"$bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "systemctl $*" >>"$ARGS_LOG"
@@ -73,8 +73,9 @@ STUB
   export -f sleep
   run wait_active
   [ "$status" -ne 0 ]
-  # Ten attempts: the loop asks is-active each time, the stub logs each call.
-  [ "$(grep -c '^systemctl --user is-active 9site$' "$args")" -eq 10 ]
+  # Longer than TIMEOUT_START_SEC=30 in the unit, or a slow start is called
+  # a failure: twenty tries two seconds apart.
+  [ "$(grep -c '^systemctl --user is-active 9site$' "$args")" -eq 20 ]
 }
 
 @test 'journal_report prints status, journal and the summary frame' {
