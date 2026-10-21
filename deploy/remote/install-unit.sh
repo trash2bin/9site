@@ -23,6 +23,17 @@ for file in 9site.service deploy.env; do
   fi
 done
 
+# The unit spells the paths out, so a DEPLOY_PATH that differs from it
+# installs a unit that starts a binary which is not there.
+for line in "ExecStart=$deploy_path/current/site-server" \
+  "EnvironmentFile=$deploy_path/deploy.env"; do
+  if ! grep -qxF "$line" "$incoming/9site.service"; then
+    echo "the unit in the repository does not say $line" >&2
+    echo 'fix deploy/9site.service or the DEPLOY_PATH of the pipeline' >&2
+    exit 1
+  fi
+done
+
 install -d -m 755 "$deploy_path"
 install -d -m 755 "$HOME/.config/systemd/user"
 install -m 0644 "$incoming/9site.service" "$HOME/.config/systemd/user/9site.service"

@@ -18,7 +18,8 @@ setup() {
   # file the unit and the scripts share.
   ship="$BATS_TEST_TMPDIR/ship"
   mkdir -p "$ship"
-  printf 'unit\n' >"$ship/9site.service"
+  printf 'ExecStart=%s/current/site-server\nEnvironmentFile=%s/deploy.env\n' \
+    "$www" "$www" >"$ship/9site.service"
   printf 'DATA_DIR=%s\nSTATIC_ROOT=%s/public\nBASE_URL=https://9swag.myftp.biz\n' \
     "$data" "$www" >"$ship/deploy.env"
   cp "$ship/deploy.env" "$www/deploy.env"
@@ -428,6 +429,19 @@ STUB
 SMTP_PASS=hand-set" ]
   [[ "$output" == *'differs from the repository, the server keeps its own'* ]]
   [[ "$output" == *'SMTP_PASS=hand-set'* ]]
+}
+
+@test 'install-unit refuses a deploy path the unit is not written for' {
+  export HOME="$BATS_TEST_TMPDIR"
+  mkdir -p "$HOME/.config/systemd/user"
+  ship_unit
+  printf 'ExecStart=/srv/elsewhere/current/site-server\n' >"$ship/9site.service"
+  cp "$ship/9site.service" "$www/.incoming/9site.service"
+
+  run remote install-unit DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"does not say ExecStart=$www/current/site-server"* ]]
+  [ ! -f "$HOME/.config/systemd/user/9site.service" ]
 }
 
 @test 'install-unit refuses to run without the files the pipeline ships' {

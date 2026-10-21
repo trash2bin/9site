@@ -1,9 +1,9 @@
 name: Rollback
 
-# Manual rollback of the production server to the previous binary
-# (site-server.prev). It is needed when the deploy failed after the binary
-# swap and there is no direct ssh to the server: GitHub Actions is then the
-# same access the deploy had.
+# Manual rollback of the production server to the release before the last
+# deploy, with the database and the static set that release ran on. It is
+# needed when a deploy failed after the flip and the automatic rollback did
+# not help: GitHub Actions is then the same access the deploy had.
 #
 # The order matters: journal first (the diagnosis of why the new binary
 # fails, which stays in the run log), then the rollback, then the checks.
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   rollback:
-    name: Rollback to previous binary
+    name: Rollback to the previous release
     runs-on: ubuntu-latest
     environment: production
     # The same group as the deploy: a rollback must not run next to a
@@ -52,7 +52,8 @@ jobs:
 
       # The same script the deploy uses to undo its own failure, so the manual
       # path and the automatic one cannot drift apart: the release before the
-      # last deploy, the database it ran on, the restart, the same smoke list.
+      # last deploy, the database and the static set it ran on, the restart,
+      # the same smoke list.
       - name: Roll back to the previous release
         run: |
           set -euo pipefail
@@ -61,4 +62,4 @@ jobs:
             "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Summary
-        run: echo "Rolled back to the previous binary on commit ${{ github.sha }} of this workflow"
+        run: echo "Rolled back to the previous release from workflow commit ${{ github.sha }}"

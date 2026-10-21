@@ -19,7 +19,10 @@ inputs:
     description: Deploy user on the server.
     default: deploy
   deploy_path:
-    description: Where the binary and the static files live.
+    description: >-
+      Where the release and the static files live. The unit in the repository
+      spells the same path out, and install-unit refuses a path that does not
+      match it.
     default: /var/www/9site
 
 runs:
