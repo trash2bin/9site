@@ -49,10 +49,12 @@ if [ -f "$data_dir/site.db" ]; then
     exit 1
   fi
   echo "Snapshot: $data_dir/backups/site-$sha.db, pre-deploy copy kept for the rollback"
-  (
-    cd "$data_dir/backups" || exit 0
-    ls -1t site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
-  )
+  # One file of each kind per deploy, no delete anywhere else: ten of the
+  # newest is five deploys of history, enough for the rollback and small
+  # enough for the disk. The pre-deploy copies live next to the database, not
+  # in backups/, so they need their own list.
+  ls -1t "$data_dir"/backups/site-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
+  ls -1t "$data_dir"/site.db.pre-* 2>/dev/null | tail -n +11 | xargs -r rm -f
 else
   echo 'no site.db yet: first deploy, snapshot skipped'
 fi

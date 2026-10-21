@@ -128,6 +128,30 @@ BINARY
   [ -f "$data/site.db.pre-good" ]
 }
 
+@test 'deploy keeps ten snapshots and ten pre-deploy copies' {
+  stub_active_systemd
+  stub_site_curl
+  echo db >"$data/site.db"
+  mkdir -p "$data/backups"
+  # Fifteen deploys of history, one file of each kind per deploy.
+  for n in $(seq 1 15); do
+    touch -t "20200101$(printf '%02d' "$n")00" \
+      "$data/backups/site-old$n.db" "$data/site.db.pre-old$n"
+  done
+  release good <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in backup) cp "$DATA_DIR/site.db" "$2" ;; esac
+exit 0
+BINARY
+
+  run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
+    DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  [ "$(ls -1 "$data"/backups/site-*.db | wc -l)" -eq 10 ]
+  [ "$(ls -1 "$data"/site.db.pre-* | wc -l)" -eq 10 ]
+  [ -f "$data/site.db.pre-good" ]
+}
+
 @test 'deploy stops before the flip when the check fails' {
   echo db >"$data/site.db"
   release dead <<'BINARY'
