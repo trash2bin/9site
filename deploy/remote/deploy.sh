@@ -19,6 +19,13 @@ if [ -z "$sha" ]; then
 fi
 load_env "$deploy_path" || exit 1
 
+# An empty list makes every check below pass without asking a single url, and
+# the deploy would call that a working site.
+if [ -z "$urls" ]; then
+  echo 'URLS is required: the smoke list is the only proof the site answers' >&2
+  exit 1
+fi
+
 release="$deploy_path/releases/$sha"
 current="$deploy_path/current"
 binary="$release/site-server"

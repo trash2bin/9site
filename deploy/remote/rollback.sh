@@ -14,6 +14,11 @@ parse_args "$@"
 
 load_env "$deploy_path" || exit 1
 
+if [ -z "$urls" ]; then
+  echo 'URLS is required: the smoke list is the only proof the site answers' >&2
+  exit 1
+fi
+
 current="$deploy_path/current"
 running="$(readlink "$current" 2>/dev/null || true)"
 if [ -z "$running" ]; then

@@ -87,6 +87,28 @@ STUB
   [[ "$output" == *"no $www/releases/nosuch/site-server"* ]]
 }
 
+@test 'deploy refuses to run without a smoke list' {
+  release good <<'BINARY'
+#!/usr/bin/env bash
+exit 0
+BINARY
+  run remote deploy SHA=good DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'URLS is required'* ]]
+  [ ! -e "$www/current" ]
+}
+
+@test 'the manual rollback refuses to run without a smoke list' {
+  release good <<'BINARY'
+#!/usr/bin/env bash
+exit 0
+BINARY
+  ln -sfn "$www/releases/good" "$www/current"
+  run remote rollback DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'URLS is required'* ]]
+}
+
 @test 'deploy refuses a release without its static set' {
   release good <<'BINARY'
 #!/usr/bin/env bash
