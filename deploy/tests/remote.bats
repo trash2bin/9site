@@ -14,11 +14,14 @@ setup() {
   www="$BATS_TEST_TMPDIR/www"
   mkdir -p "$data" "$www" "$BATS_TEST_TMPDIR/bin"
 
-  # One environment file for the unit and the scripts, the way the deploy ships it.
-  printf 'unit\n' >/tmp/9site.service
+  # The files the pipeline ships before install-unit, and the environment
+  # file the unit and the scripts share.
+  ship="$BATS_TEST_TMPDIR/ship"
+  mkdir -p "$ship"
+  printf 'unit\n' >"$ship/9site.service"
   printf 'DATA_DIR=%s\nSTATIC_ROOT=%s/public\nBASE_URL=https://9swag.myftp.biz\n' \
-    "$data" "$www" >/tmp/deploy.env
-  cp /tmp/deploy.env "$www/deploy.env"
+    "$data" "$www" >"$ship/deploy.env"
+  cp "$ship/deploy.env" "$www/deploy.env"
 
   # The site that answers exactly what deploy/smoke-urls.txt expects; a url
   # outside the list answers 500, which is how smoke failures look.
@@ -41,6 +44,13 @@ release() {
   mkdir -p "$dir"
   cat >"$dir/site-server"
   chmod +x "$dir/site-server"
+}
+
+# What the pipeline does before install-unit: the unit and the environment
+# land in a private directory under the deploy path.
+ship_unit() {
+  mkdir -p "$www/.incoming"
+  cp "$ship/9site.service" "$ship/deploy.env" "$www/.incoming/"
 }
 
 # The static set CI uploads before the deploy: the deploy swaps it in.
@@ -328,6 +338,7 @@ STUB
   mkdir -p "$www/var"
   echo stale >"$www/var/site.db"
   rm -f "$data/site.db"
+  ship_unit
 
   run remote install-unit DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
@@ -335,20 +346,52 @@ STUB
   [[ "$output" == *"$www/var/site.db"* ]]
 }
 
-@test 'install-unit installs the unit and the environment file' {
+@test 'install-unit installs the unit and seeds the environment file' {
   export HOME="$BATS_TEST_TMPDIR"
   mkdir -p "$HOME/.config/systemd/user"
   stub systemctl <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
-  install -m 0644 /tmp/deploy.env "$www/deploy.env"
+  rm -f "$www/deploy.env"
+  ship_unit
 
   run remote install-unit DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
   [ -f "$HOME/.config/systemd/user/9site.service" ]
   [ -f "$www/deploy.env" ]
+  # The file carries the SMTP password once it is filled in.
+  [ "$(ls -l "$www/deploy.env" | cut -c1-10)" = '-rw-------' ]
+  [ ! -e "$www/.incoming" ]
   [[ "$output" == *"unit installed, DATA_DIR=$data"* ]]
+}
+
+@test 'install-unit keeps the environment file the server already has' {
+  export HOME="$BATS_TEST_TMPDIR"
+  mkdir -p "$HOME/.config/systemd/user"
+  stub systemctl <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  printf 'DATA_DIR=%s\nSMTP_PASS=hand-set\n' "$data" >"$www/deploy.env"
+  ship_unit
+
+  run remote install-unit DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  # A deploy that overwrote it would take the password and every hand edit away.
+  [ "$(cat "$www/deploy.env")" = "DATA_DIR=$data
+SMTP_PASS=hand-set" ]
+  [[ "$output" == *'differs from the repository, the server keeps its own'* ]]
+  [[ "$output" == *'SMTP_PASS=hand-set'* ]]
+}
+
+@test 'install-unit refuses to run without the files the pipeline ships' {
+  export HOME="$BATS_TEST_TMPDIR"
+  mkdir -p "$HOME/.config/systemd/user"
+
+  run remote install-unit DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no $www/.incoming/9site.service"* ]]
 }
 
 @test 'run.sh refuses a script that does not exist' {

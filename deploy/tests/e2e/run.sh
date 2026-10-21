@@ -186,7 +186,6 @@ new_database() {
 reset_state() {
   u 'systemctl --user stop 9site' 2>/dev/null
   rm -rf "$DEPLOY_PATH" "$DATA_DIR" "$USER_UNIT_DIR"
-  rm -f /tmp/9site.service /tmp/deploy.env
 }
 
 say 'sandbox'
@@ -200,16 +199,34 @@ say 'scenario 1: the first deploy'
 out="$(remote preflight "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 [ "$?" = 0 ]; check "$?" 'preflight passes on a server with no binary yet'
 [ ! -f "$UNIT" ]; check "$?" 'no unit before the first deploy'
-rsync -az -e "$SSH" "$REPO/deploy/9site.service" \
-  "$REPO/deploy/deploy.env" deploy@localhost:/tmp/
-chown deploy:deploy /tmp/9site.service /tmp/deploy.env
+ship_unit() {
+  u "rm -rf '$DEPLOY_PATH/.incoming' && mkdir -p '$DEPLOY_PATH/.incoming' && \
+    chmod 700 '$DEPLOY_PATH/.incoming'"
+  rsync -az -e "$SSH" "$REPO/deploy/9site.service" \
+    "$REPO/deploy/deploy.env" deploy@localhost:"$DEPLOY_PATH/.incoming/"
+}
+ship_unit
 out="$(remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
 [ "$?" = 0 ]; check "$?" 'install-unit writes the unit as the deploy user'
 [ -f "$UNIT" ]; check "$?" 'the unit landed in the user directory'
 [ "$(unit_envfile)" = "$DEPLOY_PATH/deploy.env" ]
 check "$?" 'the unit takes its environment from one file'
 [ "$(unit_env DATA_DIR)" = "$DATA_DIR" ]; check "$?" 'the file names the data directory'
+[ "$(stat -c %a "$DEPLOY_PATH/deploy.env")" = 600 ]
+check "$?" 'the environment file is not readable by everyone'
+[ ! -e "$DEPLOY_PATH/.incoming" ]; check "$?" 'the incoming directory does not stay behind'
 [ ! -e "$DEPLOY_PATH/current" ]; check "$?" 'nothing serves before the first release'
+
+# The environment file belongs to the server: a hand edit survives the next
+# install of the unit, and what differs is printed.
+printf 'SMTP_PASS=hand-set\n' >>"$DEPLOY_PATH/deploy.env"
+ship_unit
+out="$(remote install-unit "DEPLOY_PATH=$DEPLOY_PATH" 2>&1)"
+check "$?" 'a second install-unit over a configured server works'
+grep -q 'SMTP_PASS=hand-set' "$DEPLOY_PATH/deploy.env"
+check "$?" 'the server keeps its own environment file'
+printf '%s\n' "$out" | grep -q 'differs from the repository'
+check "$?" 'the difference is reported instead of silently dropped'
 
 put_release "$sha1" "$STUB"
 out="$(deploy_release "$sha1" 2>&1)"

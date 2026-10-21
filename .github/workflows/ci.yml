@@ -267,7 +267,12 @@ jobs:
       - name: Install service unit
         run: |
           set -euo pipefail
-          rsync -az -e "$SSH_OPTS" deploy/9site.service deploy/deploy.env "$TARGET:/tmp/"
+          # Private directory under the deploy path, not /tmp: deploy.env holds
+          # the SMTP password once it is filled in.
+          $SSH_OPTS "$TARGET" "rm -rf '$DEPLOY_PATH/.incoming' && \
+            mkdir -p '$DEPLOY_PATH/.incoming' && chmod 700 '$DEPLOY_PATH/.incoming'"
+          rsync -az -e "$SSH_OPTS" deploy/9site.service deploy/deploy.env \
+            "$TARGET:$DEPLOY_PATH/.incoming/"
           bash deploy/remote/run.sh install-unit "DEPLOY_PATH=$DEPLOY_PATH" | tee -a "$SUMMARY"
 
       - name: Upload the release
