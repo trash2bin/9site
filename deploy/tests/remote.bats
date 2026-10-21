@@ -99,6 +99,35 @@ BINARY
   [[ "$output" == *'Counter is growing'* ]]
 }
 
+@test 'deploy of the same commit twice takes a fresh snapshot' {
+  stub_active_systemd
+  stub_site_curl
+  echo db >"$data/site.db"
+  # backup behaves like the real one: VACUUM INTO refuses an existing file.
+  release good <<'BINARY'
+#!/usr/bin/env bash
+case "$1" in
+  backup)
+    if [ -e "$2" ]; then echo 'output file already exists' >&2; exit 1; fi
+    cp "$DATA_DIR/site.db" "$2"
+    ;;
+esac
+exit 0
+BINARY
+
+  run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
+    DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+
+  # The retry of a failed attempt is the normal path: the snapshot of the
+  # first attempt is still there and must not be an error.
+  run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
+    DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Snapshot: $data/backups/site-good.db"* ]]
+  [ -f "$data/site.db.pre-good" ]
+}
+
 @test 'deploy stops before the flip when the check fails' {
   echo db >"$data/site.db"
   release dead <<'BINARY'

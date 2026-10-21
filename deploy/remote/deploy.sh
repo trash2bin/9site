@@ -37,9 +37,12 @@ fi
 
 # Snapshot before anything migrates the live database: VACUUM INTO copies the
 # schema as it stands, so the rollback gets back the database the previous
-# release ran on.
+# release ran on. The copies of an earlier attempt at the same commit go
+# first: VACUUM INTO refuses an existing file, and re-running a failed deploy
+# is the normal way to retry it.
 if [ -f "$data_dir/site.db" ]; then
   mkdir -p "$data_dir/backups"
+  rm -f "$data_dir/backups/site-$sha.db" "$data_dir/site.db.pre-$sha"
   if ! "$binary" backup "$data_dir/backups/site-$sha.db" \
     || ! "$binary" backup "$data_dir/site.db.pre-$sha"; then
     echo 'snapshot failed: the release cannot read the live database'
