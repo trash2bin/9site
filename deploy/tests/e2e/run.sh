@@ -51,8 +51,18 @@ remote() {
     bash deploy/remote/run.sh "$name" "$@")
 }
 
+# The static set the pipeline uploads before the deploy. The deploy swaps it
+# in after the checks and swaps the previous one back on a rollback.
+put_static() {
+  rm -rf "$DEPLOY_PATH/public.next"
+  install -d -o deploy -g deploy -m 755 "$DEPLOY_PATH/public.next"
+  printf '<html>static %s</html>\n' "$1" >"$DEPLOY_PATH/public.next/index.html"
+  chown -R deploy:deploy "$DEPLOY_PATH/public.next"
+}
+
 # The deploy of one release, the way the pipeline calls it.
 deploy_release() {
+  put_static "$1"
   remote deploy "SHA=$1" "URLS=$URLS" "DEPLOY_PATH=$DEPLOY_PATH"
 }
 
@@ -207,6 +217,8 @@ check "$?" 'the deploy of the first release succeeds'
 printf '%s\n' "$out" | grep -q 'flipped.*releases/'"$sha1"
 check "$?" 'the current symlink points at the release'
 [ -f "$DATA_DIR/site.db.pre-$sha1" ]; check "$?" 'the pre-deploy copy is named by the release'
+[ "$(cat "$DEPLOY_PATH/public/index.html")" = "<html>static $sha1</html>" ]
+check "$?" 'the static set of the release replaced the one on the server'
 wait_http; check "$?" 'the site answers after the restart'
 out="$(curl -s http://127.0.0.1:8080/healthz || true)"
 printf '%s\n' "$out" | grep -q '"schema"'
@@ -258,6 +270,8 @@ check "$?" 'current is back to the release that served'
 check "$?" 'the database is back to the pre-deploy copy'
 [ -d "$DEPLOY_PATH/releases/$sha4.rejected" ]
 check "$?" 'the rejected release is kept out of the flip'
+[ "$(cat "$DEPLOY_PATH/public/index.html")" = "<html>static $sha2</html>" ]
+check "$?" 'the rollback put the static set of the serving release back'
 wait_http; check "$?" 'the site answers again with the rolled back release'
 journal_has 'знает миграции дальше'
 check "$?" 'the log holds the reason of the crash'
@@ -281,6 +295,8 @@ printf '%s\n' "$out" | grep -q 'rolled back to'
 check "$?" 'the rollback says which release it went back to'
 printf '%s\n' "$out" | grep -q 'database rolled back'
 check "$?" 'the rollback restores the database as well'
+[ "$(cat "$DEPLOY_PATH/public/index.html")" = "<html>static $sha2</html>" ]
+check "$?" 'the rollback restores the static set of that release as well'
 wait_http; check "$?" 'the site is back after the manual rollback'
 out="$(rollback_release 2>&1)"
 [ "$?" = 0 ]; check "$?" 'the rollback of an already rolled back site is a no-op'

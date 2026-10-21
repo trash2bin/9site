@@ -24,6 +24,15 @@ if [ ! -x "$binary" ]; then
   exit 1
 fi
 
+# The static files the release is written against. They sit next to the live
+# set until the new binary proves itself against them: uploading them over the
+# serving tree first would leave new pages in place under a binary that never
+# passed its checks, and a rollback would not give the old pages back.
+if [ ! -d "$deploy_path/public.next" ]; then
+  echo "no $deploy_path/public.next: upload the static files before the deploy" >&2
+  exit 1
+fi
+
 # The release the site runs now, for the rollback below. The first deploy has
 # no current yet, so the binary the server still runs becomes the release to
 # go back to: the first deploy can be rolled back too.
@@ -59,13 +68,16 @@ else
   echo 'no site.db yet: first deploy, snapshot skipped'
 fi
 
-# Startup checks in the environment of the unit. A binary that cannot run
-# never reaches the flip, and the site keeps serving what it serves.
-if ! "$binary" check; then
+# Startup checks in the environment of the unit, but against the static set
+# this release travels with. A binary that cannot run never reaches the flip,
+# and the site keeps serving what it serves.
+if ! STATIC_ROOT="$deploy_path/public.next" "$binary" check; then
   echo 'check failed, the deploy stops before the flip'
   exit 1
 fi
 echo 'check passed'
+
+static_swap_in
 
 if [ -n "$before" ]; then
   printf '%s\n' "$before" >"$data_dir/release-before"
@@ -96,6 +108,7 @@ if [ -z "$before" ] || [ "$before" = "$release" ]; then
 fi
 
 ln -sfn "$before" "$current"
+static_swap_back
 if mv -f "$release" "$release.rejected"; then
   echo "rolled back to $before, the rejected release is kept as $release.rejected"
 else

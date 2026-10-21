@@ -39,6 +39,7 @@ systemctl --user stop "$UNIT" || true
 mv -f "$running" "$running.rejected"
 ln -sfn "$before" "$current"
 echo "rolled back to $before, the rejected release is kept as $running.rejected"
+static_swap_back
 restore_db "$data_dir/site.db.pre-$sha"
 
 systemctl --user reset-failed "$UNIT" 2>/dev/null || true

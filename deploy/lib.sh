@@ -153,6 +153,34 @@ check_counter() {
   echo 'Counter is growing'
 }
 
+# The static set travels with the release: CI uploads it to public.next, the
+# deploy swaps it in only after the new binary passed its checks, and a
+# rollback swaps the previous set back. Both are renames on one filesystem,
+# so the window where public/ is missing is one rename long.
+static_swap_in() {
+  rm -rf "$deploy_path/public.old"
+  if [ -d "$deploy_path/public" ]; then
+    mv "$deploy_path/public" "$deploy_path/public.old"
+  fi
+  mv "$deploy_path/public.next" "$deploy_path/public"
+  echo "static swapped in from $deploy_path/public.next"
+}
+
+# The set the site served before the deploy, back in place; the rejected one
+# stays next to it, the way a rejected release does.
+static_swap_back() {
+  if [ ! -d "$deploy_path/public.old" ]; then
+    echo 'no static set from before the deploy, the files stay as they are'
+    return 0
+  fi
+  rm -rf "$deploy_path/public.rejected"
+  if [ -d "$deploy_path/public" ]; then
+    mv "$deploy_path/public" "$deploy_path/public.rejected"
+  fi
+  mv "$deploy_path/public.old" "$deploy_path/public"
+  echo "static rolled back to the set from before the deploy, the rejected one is $deploy_path/public.rejected"
+}
+
 # No data_dir check here would silently create an empty database and reset
 # the counter to zero.
 guard_db_location() {

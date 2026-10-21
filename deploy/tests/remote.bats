@@ -43,6 +43,13 @@ release() {
   chmod +x "$dir/site-server"
 }
 
+# The static set CI uploads before the deploy: the deploy swaps it in.
+static_set() {
+  rm -rf "$www/public.next"
+  mkdir -p "$www/public.next"
+  echo '<html>static</html>' >"$www/public.next/index.html"
+}
+
 # The unit reports started, so a restart is instant and the service is active.
 stub_active_systemd() {
   stub systemctl <<'STUB'
@@ -70,6 +77,17 @@ STUB
   [[ "$output" == *"no $www/releases/nosuch/site-server"* ]]
 }
 
+@test 'deploy refuses a release without its static set' {
+  release good <<'BINARY'
+#!/usr/bin/env bash
+exit 0
+BINARY
+  run remote deploy SHA=good "URLS=http://x/ 200" DEPLOY_PATH="$www"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no $www/public.next"* ]]
+  [ ! -e "$www/current" ]
+}
+
 @test 'deploy refuses a release without a sha' {
   run remote deploy "URLS=http://x/ 200" DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
@@ -79,12 +97,13 @@ STUB
 @test 'deploy runs the check in the environment of the unit, then flips' {
   stub_active_systemd
   stub_site_curl
+  static_set
   echo db >"$data/site.db"
   release good <<'BINARY'
 #!/usr/bin/env bash
 case "$1" in
   backup) cp "$DATA_DIR/site.db" "$2" ;;
-  check) echo "check saw $DATA_DIR and $BASE_URL" ;;
+  check) echo "check saw $DATA_DIR and $BASE_URL and $STATIC_ROOT" ;;
 esac
 exit 0
 BINARY
@@ -92,9 +111,11 @@ BINARY
   run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
     DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"check saw $data and https://9swag.myftp.biz"* ]]
+  [[ "$output" == *"check saw $data and https://9swag.myftp.biz and $www/public.next"* ]]
   [[ "$output" == *'flipped'* ]]
   [ "$(readlink "$www/current")" = "$www/releases/good" ]
+  [ -f "$www/public/index.html" ]
+  [ ! -e "$www/public.next" ]
   [ -f "$data/site.db.pre-good" ]
   [[ "$output" == *'Counter is growing'* ]]
 }
@@ -115,12 +136,14 @@ esac
 exit 0
 BINARY
 
+  static_set
   run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
     DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
 
   # The retry of a failed attempt is the normal path: the snapshot of the
   # first attempt is still there and must not be an error.
+  static_set
   run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
     DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
@@ -144,6 +167,7 @@ case "$1" in backup) cp "$DATA_DIR/site.db" "$2" ;; esac
 exit 0
 BINARY
 
+  static_set
   run remote deploy SHA=good "URLS=$urls" "PROBE_URL=http://stub/counter" \
     DEPLOY_PATH="$www"
   [ "$status" -eq 0 ]
@@ -153,6 +177,7 @@ BINARY
 }
 
 @test 'deploy stops before the flip when the check fails' {
+  static_set
   echo db >"$data/site.db"
   release dead <<'BINARY'
 #!/usr/bin/env bash
@@ -169,6 +194,8 @@ BINARY
   [[ "$output" == *'the deploy stops before the flip'* ]]
   [ ! -e "$www/current" ]
   [ ! -e "$data/site.db.pre-dead" ]
+  [ ! -e "$www/public" ]
+  [ -d "$www/public.next" ]
 }
 
 @test 'deploy rolls back a release that dies on start' {
@@ -180,6 +207,8 @@ case "$1" in backup) cp "$DATA_DIR/site.db" "$2" ;; esac
 exit 0
 BINARY
   ln -sfn "$www/releases/good" "$www/current"
+  mkdir -p "$www/public"
+  echo '<html>serving</html>' >"$www/public/index.html"
   printf 'snapshot:live\n' >"$data/site.db"
   release fatal <<'BINARY'
 #!/usr/bin/env bash
@@ -205,9 +234,12 @@ STUB
 exit 0
 STUB
 
+  static_set
   run remote deploy SHA=fatal "URLS=http://x/ 200" DEPLOY_PATH="$www"
   [ "$status" -ne 0 ]
   [ "$(readlink "$www/current")" = "$www/releases/good" ]
+  [ "$(cat "$www/public/index.html")" = '<html>serving</html>' ]
+  [ -d "$www/public.rejected" ]
   [ "$(cat "$data/site.db")" = "$(cat "$data/site.db.pre-fatal")" ]
   [ -d "$www/releases/fatal.rejected" ]
   [ "$(cat "$data/release-before")" = "$www/releases/good" ]
