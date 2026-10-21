@@ -5,8 +5,13 @@
 # only it answers whether readiness is really reported and /healthz names this
 # build. Run it after a change to main.go, the unit or deploy.env.
 #
-#   GOOS=linux go build -o /tmp/site-server-linux ./server
+#   GOOS=linux go build -trimpath -ldflags="-X main.version=$sha" \
+#     -o /tmp/site-server-linux ./server
 #   bash deploy/tests/e2e/real-unit.sh
+#
+# The build has to carry the sha below: the deploy reads the version of the
+# running binary from /healthz, and a check that only asks whether the field
+# exists would pass on a build nobody stamped.
 #
 # Needs docker with a systemd container; the container is removed afterwards.
 set -uo pipefail
@@ -76,8 +81,8 @@ expect "$rc" 'the service is active, which for notify means it is listening'
 
 say 'healthz answers with the version of this build'
 hz="$(as_deploy 'for i in $(seq 20); do curl -sf http://127.0.0.1:8080/healthz && break; sleep 0.3; done')"
-printf '%s\n' "$hz" | grep -q '"version":"'
-expect "$?" "healthz reports a version: $hz"
+printf '%s\n' "$hz" | grep -q "\"version\":\"$sha\""
+expect "$?" "healthz reports the build the deploy shipped: $hz"
 
 say 'restart the same release'
 rc=0
