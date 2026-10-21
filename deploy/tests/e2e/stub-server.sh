@@ -56,11 +56,11 @@ def code_for_path(path):
         return 200
     if path.endswith("/"):
         return 404
-    if path.startswith(("var/", "avatars/")):
+    if path.startswith(("var/", "avatars/", "photos/")):
         return 404
     if path in ("auth/register", "auth/login", "signup", "main.go", "visits.dat"):
         return 404
-    if path in ("vault", "reset"):
+    if path == "reset" or path == "vault" or path.startswith("vault/"):
         return 303
     return 200
 

@@ -1,0 +1,119 @@
+// Package album фотоальбом: снимки из базы, отдача файлов загрузок и
+// закрытая страница /vault/album.
+package album
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
+	"github.com/ivan223/web1-personal-site/server/internal/store"
+)
+
+// BudgetUpload имя бюджета ограничителя загрузок: контракт с main.go,
+// порог поднимается переменной LIMIT_ALBUM_UPLOAD.
+const BudgetUpload = "album.upload"
+
+// Photo алиас записи хранилища: срез работает с ней как со своей.
+type Photo = store.Photo
+
+// Store минимум, что срезу нужно от хранилища; интерфейс объявлен у потребителя.
+type Store interface {
+	ListPhotos(ctx context.Context) ([]Photo, error)
+	CreatePhoto(ctx context.Context, p Photo) (*Photo, error)
+	DeletePhoto(ctx context.Context, id int64) (*Photo, error)
+	Albums(ctx context.Context) ([]string, error)
+}
+
+// Access закрытый раздел из среза auth: сессия и подпись формы.
+type Access interface {
+	// Require пускает дальше только с живой сессией, гостя уводит на вход.
+	Require(next http.Handler) http.Handler
+	// Login логин авторизованного, пусто без сессии.
+	Login(r *http.Request) string
+	// CSRFToken подпись формы для страницы альбома.
+	CSRFToken(w http.ResponseWriter, r *http.Request) string
+	// CSRFOK сверяет присланную подпись.
+	CSRFOK(r *http.Request) bool
+}
+
+// Throttle ограничение частоты; реализация *webutil.Limits, собирается в main.
+type Throttle interface {
+	Middleware(name string, over, next http.Handler) http.Handler
+}
+
+// Config настройки среза.
+type Config struct {
+	Store Store
+	// PhotosDir каталог файлов загрузок: картинки на диске, не в базе.
+	PhotosDir string
+	Access    Access
+	Throttle  Throttle
+	Log       *logging.Logger
+}
+
+// Server состояние среза.
+type Server struct {
+	store     Store
+	photosDir string
+	access    Access
+	throttle  Throttle
+	log       *logging.Logger
+}
+
+// New собирает срез и создаёт каталог загрузок.
+func New(cfg Config) (*Server, error) {
+	if cfg.Store == nil {
+		return nil, errors.New("album: нужно хранилище (Store)")
+	}
+	if cfg.Access == nil {
+		return nil, errors.New("album: нужен закрытый раздел (Access)")
+	}
+	if cfg.Throttle == nil {
+		return nil, errors.New("album: нужен ограничитель частоты (Throttle)")
+	}
+	if cfg.Log == nil {
+		return nil, errors.New("album: нужен логгер (Log)")
+	}
+	if cfg.PhotosDir == "" {
+		return nil, errors.New("album: PhotosDir обязателен")
+	}
+	if err := os.MkdirAll(cfg.PhotosDir, 0o755); err != nil {
+		return nil, fmt.Errorf("%s: %w", cfg.PhotosDir, err)
+	}
+
+	return &Server{
+		store:     cfg.Store,
+		photosDir: cfg.PhotosDir,
+		access:    cfg.Access,
+		throttle:  cfg.Throttle,
+		log:       cfg.Log,
+	}, nil
+}
+
+// Register подключает маршруты альбома; лимит и проверка сессии вешаются
+// здесь, при регистрации, а не внутри обработчиков.
+func (s *Server) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/photos", s.handlePhotos)
+	mux.HandleFunc("GET /photos/{name}", s.handlePhotoFile)
+
+	mux.Handle("GET /vault/album", s.access.Require(http.HandlerFunc(s.handleAdmin)))
+
+	// Бюджет внутри Require: иначе исчерпанный лимит рисовал бы страницу
+	// загрузки гостю, ещё до проверки сессии.
+	over := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.renderAdmin(w, r, adminData{Error: "слишком много загрузок: подождите несколько минут"})
+	})
+	mux.Handle("POST /vault/album", s.access.Require(s.throttle.Middleware(BudgetUpload,
+		over, http.HandlerFunc(s.handleUpload))))
+	mux.Handle("POST /vault/album/delete", s.access.Require(http.HandlerFunc(s.handleDelete)))
+}
+
+// photosFile путь файла загрузки внутри каталога.
+func (s *Server) photosFile(name string) string {
+	return filepath.Join(s.photosDir, name)
+}

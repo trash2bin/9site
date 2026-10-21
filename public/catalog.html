@@ -30,7 +30,7 @@
         <h1>MY PHOTO ALBUM</h1>
         <p class="tagline">все картинки, что лежат на сайте // фильтруй как хочешь</p>
         <div class="ticker" aria-label="Приветствие">
-          <span>★ 37 СНИМКОВ ★ 5 РАЗДЕЛОВ ★ 3 ТИПА ★ 3 ОРИЕНТАЦИИ ★</span>
+          <span data-album-stats>★ ЗАГРУЖАЕМ СПИСОК ★</span>
         </div>
       </header>
 
@@ -58,10 +58,12 @@
             <span class="filter-count" id="filter-count" aria-live="polite"></span>
           </div>
 
-          <!-- Обе колонки пустые: разметку целиком собирает JS из src/render.ts. -->
+          <!-- Обе колонки заполняет JS из src/render.ts, данные приходят из GET /api/photos. -->
           <div class="catalog-layout">
             <aside class="filters-panel" id="filters" aria-label="Фильтр фотоальбома"></aside>
-            <div class="parts-grid album-grid" id="elements"></div>
+            <div class="parts-grid album-grid" id="elements">
+              <p class="catalog-empty">[ данные грузятся ]</p>
+            </div>
           </div>
 
           <div class="garage-signs">
@@ -72,7 +74,7 @@
             <a href="#album">[ all ]</a> <a href="#album">[ film ]</a> <a href="#album">[ digital ]</a>
             <a href="mailto:hello@example.com">[ ask photographer ]</a>
           </p>
-          <p class="catalog-note">[ альбом работает в демо-режиме // данные лежат в JS-массиве ]</p>
+          <p class="catalog-note">[ альбом работает на базе // новые кадры грузятся через закрытый раздел ]</p>
         </section>
       </main>
 

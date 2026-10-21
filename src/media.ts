@@ -3,7 +3,7 @@
 import type { FileType, Orientation, Photo } from "./model.js";
 
 export function fileTypeOf(photo: Photo): FileType {
-  const extension = photo.src.split(".").pop()?.toLowerCase();
+  const extension = photo.url.split(".").pop()?.toLowerCase();
   if (extension === "gif") return "gif";
   if (extension === "svg") return "vector";
   return "photo";

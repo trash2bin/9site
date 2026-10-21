@@ -31,6 +31,7 @@ type testEnv struct {
 	ts     *httptest.Server
 	st     *store.Store
 	outbox string
+	srv    *auth.Server
 }
 
 func testServer(t *testing.T) *testEnv {
@@ -91,7 +92,7 @@ func startEnv(t *testing.T, extra func(*auth.Config, *store.Store)) *testEnv {
 	ts.Start()
 	t.Cleanup(ts.Close)
 
-	return &testEnv{ts: ts, st: st, outbox: outbox}
+	return &testEnv{ts: ts, st: st, outbox: outbox, srv: srv}
 }
 
 func openTestStore(t *testing.T, dir string) *store.Store {

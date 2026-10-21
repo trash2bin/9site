@@ -1,6 +1,6 @@
 /** Рендер карточек фотоальбома и контролов фильтра. */
 
-import { CRITERIA, isCriterionKey, type Availability, type FilterState } from "./criteria.js";
+import { isCriterionKey, type Availability, type CriterionDefinition, type FilterState } from "./criteria.js";
 import type { Photo } from "./model.js";
 
 function escapeHtml(value: string): string {
@@ -19,8 +19,8 @@ function escapeHtml(value: string): string {
 /** Карточка снимка: фильтруемые значения читаются из Photo, не из DOM. */
 function photoCard(photo: Photo): string {
   return `<figure class="part-card photo-card">
-      <img src="/assets/img/${escapeHtml(photo.src)}" alt="${escapeHtml(photo.name)}" loading="lazy" decoding="async" />
-      <figcaption data-file="${escapeHtml(photo.src)}">${escapeHtml(photo.name)}</figcaption>
+      <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.name)}" loading="lazy" decoding="async" />
+      <figcaption data-file="${escapeHtml(photo.url)}">${escapeHtml(photo.name)}</figcaption>
     </figure>`;
 }
 
@@ -33,12 +33,13 @@ export function renderPhotos(photos: Photo[], selector: string): void {
     : `<p class="catalog-empty">[ под такие критерии ничего не нашлось // сбрось фильтр ]</p>`;
 }
 
-export function renderFilters(selector: string): void {
+export function renderFilters(criteria: readonly CriterionDefinition[], selector: string): void {
   const host = document.querySelector(selector);
   if (!host) return;
 
-  host.innerHTML = CRITERIA.map(
-    ({ key, title, options }) => `<fieldset class="filter-group">
+  host.innerHTML = criteria
+    .map(
+      ({ key, title, options }) => `<fieldset class="filter-group">
         <legend>${escapeHtml(title)}</legend>
         ${options
           .map(
@@ -49,7 +50,8 @@ export function renderFilters(selector: string): void {
           )
           .join("\n")}
       </fieldset>`
-  ).join("\n");
+    )
+    .join("\n");
 }
 
 export function updateFilters(state: FilterState, available: Availability, selector: string): void {

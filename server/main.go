@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivan223/web1-personal-site/server/internal/album"
 	"github.com/ivan223/web1-personal-site/server/internal/auth"
 	"github.com/ivan223/web1-personal-site/server/internal/healthz"
 	"github.com/ivan223/web1-personal-site/server/internal/home"
@@ -93,6 +94,7 @@ func run() error {
 		auth.BudgetRegister: {Limit: 20, Window: 10 * time.Minute},
 		auth.BudgetForgot:   {Limit: 20, Window: 10 * time.Minute},
 		leads.BudgetSignup:  {Limit: 5, Window: 10 * time.Minute},
+		album.BudgetUpload:  {Limit: 20, Window: 10 * time.Minute},
 	}
 	for name, b := range budgets {
 		budgets[name] = limitBudget(logger, name, b)
@@ -152,10 +154,24 @@ func run() error {
 		return err
 	}
 
+	// Закрытую страницу загрузки охраняет authServer: срез альбома про сессии
+	// ничего не знает, ему передаётся готовый шов Access.
+	albumServer, err := album.New(album.Config{
+		Store:     st,
+		PhotosDir: filepath.Join(dataDir, "photos"),
+		Access:    authServer,
+		Throttle:  limits,
+		Log:       logger,
+	})
+	if err != nil {
+		return err
+	}
+
 	mux := http.NewServeMux()
 	authServer.Register(mux)
 	leadsServer.Register(mux)
 	homeServer.Register(mux)
+	albumServer.Register(mux)
 	mux.Handle("/healthz", healthz.Handler(version, store.Version()))
 
 	if checkOnly {

@@ -1,0 +1,102 @@
+/* Страница /vault/album: форма загрузки и список кадров.
+
+   Лежит в css/catalog/ и в бюджет размера не входит (scripts/check-size.sh
+   смотрит только верхний уровень css/). Палитра из css/base.css. */
+
+.admin-form {
+  display: grid;
+  gap: 10px;
+  max-width: 460px;
+  margin: 10px 0 4px;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--bone);
+}
+
+.admin-form input[type="text"],
+.admin-form input[type="file"] {
+  padding: 6px 8px;
+  border: 2px inset var(--bevel);
+  background: var(--deep);
+  color: var(--ink);
+  font: inherit;
+}
+
+.admin-form .tool-btn {
+  justify-self: start;
+}
+
+.catalog-hint {
+  margin: 0;
+  color: var(--ash);
+  font-size: 12px;
+}
+
+.admin-flash {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 3px ridge var(--bevel);
+  background: var(--slab);
+  color: var(--yellow);
+}
+
+.admin-flash-error {
+  border-color: var(--blood);
+  color: #ff7a7a;
+}
+
+.admin-flash-ok {
+  border-color: var(--teal);
+  color: var(--matrix);
+}
+
+/* Список кадров: миниатюра слева, метаданные и кнопка справа. */
+.admin-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+
+.admin-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 8px;
+  border: 2px outset var(--bevel);
+  background: var(--coal);
+}
+
+.admin-thumb {
+  flex: 0 0 96px;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border: 2px inset var(--bevel);
+  background: var(--void);
+}
+
+.admin-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ash);
+  font-size: 12px;
+}
+
+.admin-meta p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-name {
+  color: var(--yellow);
+  font-size: 14px;
+}
+
+.admin-meta .tool-btn {
+  margin-top: 4px;
+}

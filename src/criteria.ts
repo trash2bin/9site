@@ -1,8 +1,7 @@
 /** Единое описание критериев: его обходят фильтр и интерфейс. */
 
 import { fileTypeOf, orientationOf } from "./media.js";
-import type { Photo } from "./model.js";
-import { ALBUM_OPTIONS, ORIENTATION_OPTIONS, TYPE_OPTIONS } from "./model.js";
+import { albumLabel, ORIENTATION_OPTIONS, TYPE_OPTIONS, type Photo } from "./model.js";
 
 export interface CriterionDefinition {
   key: string;
@@ -11,16 +10,26 @@ export interface CriterionDefinition {
   valueOf: (photo: Photo) => string;
 }
 
-export const CRITERIA = [
-  { key: "album", title: "Раздел", options: ALBUM_OPTIONS, valueOf: (photo: Photo) => photo.album },
-  { key: "type", title: "Тип файла", options: TYPE_OPTIONS, valueOf: fileTypeOf },
-  { key: "orientation", title: "Ориентация", options: ORIENTATION_OPTIONS, valueOf: orientationOf },
-] as const satisfies readonly CriterionDefinition[];
+/** Разделы приходят из базы: фильтр строится по ним, а не по константе. */
+export function criteriaFor(albums: string[]): readonly CriterionDefinition[] {
+  return [
+    {
+      key: "album",
+      title: "Раздел",
+      options: albums.map((slug) => ({ value: slug, label: albumLabel(slug) })),
+      valueOf: (photo: Photo) => photo.album,
+    },
+    { key: "type", title: "Тип файла", options: TYPE_OPTIONS, valueOf: fileTypeOf },
+    { key: "orientation", title: "Ориентация", options: ORIENTATION_OPTIONS, valueOf: orientationOf },
+  ];
+}
 
-export type CriterionKey = (typeof CRITERIA)[number]["key"];
+export type CriterionKey = "album" | "type" | "orientation";
 export type FilterState = Partial<Record<CriterionKey, string[]>>;
 export type Availability = Partial<Record<CriterionKey, Set<string>>>;
 
+const CRITERION_KEYS: readonly string[] = ["album", "type", "orientation"];
+
 export function isCriterionKey(value: string): value is CriterionKey {
-  return CRITERIA.some(({ key }) => key === value);
+  return CRITERION_KEYS.includes(value);
 }

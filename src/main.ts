@@ -1,25 +1,52 @@
-/** Связывает данные, фильтр, интерфейс и режим печати страницы альбома. */
+/** Связывает данные из базы, фильтр, интерфейс и режим печати страницы альбома. */
 
+import { loadPhotos } from "./api.js";
+import { criteriaFor, type CriterionDefinition } from "./criteria.js";
 import { getAvailability, applyFilters } from "./filter.js";
-import { PHOTOS } from "./photos.js";
+import type { Photo } from "./model.js";
 import { initPrintMode } from "./print.js";
 import { readState, renderCount, renderFilters, renderPhotos, updateFilters } from "./render.js";
 
 const FILTERS = "#filters";
 const PHOTOS_GRID = "#elements";
 const RESULT_COUNT = "#filter-count";
+const ALBUM_STATS = "[data-album-stats]";
 
-function refresh(): void {
-  const state = readState(FILTERS);
-  const matchingPhotos = applyFilters(PHOTOS, state);
-  renderPhotos(matchingPhotos, PHOTOS_GRID);
-  renderCount(matchingPhotos.length, PHOTOS.length, RESULT_COUNT);
-  updateFilters(state, getAvailability(PHOTOS, state), FILTERS);
+function placeholder(text: string): void {
+  const host = document.querySelector(PHOTOS_GRID);
+  if (host) host.innerHTML = `<p class="catalog-empty">${text}</p>`;
 }
 
-function init(): void {
+async function init(): Promise<void> {
   initPrintMode();
-  renderFilters(FILTERS);
+
+  let photos: Photo[];
+  let criteria: readonly CriterionDefinition[];
+  try {
+    const data = await loadPhotos();
+    photos = data.photos;
+    criteria = criteriaFor(data.albums);
+  } catch (error) {
+    // Пустая сетка выглядела бы как «ничего не нашлось», поэтому текст другой.
+    console.error(error);
+    placeholder("[ база не ответила // обнови страницу ]");
+    return;
+  }
+
+  const stats = document.querySelector(ALBUM_STATS);
+  if (stats) {
+    stats.textContent = `★ ${photos.length} СНИМКОВ ★ ${criteria[0].options.length} РАЗДЕЛОВ ★ 3 ТИПА ★ 3 ОРИЕНТАЦИИ ★`;
+  }
+
+  function refresh(): void {
+    const state = readState(FILTERS);
+    const matchingPhotos = applyFilters(photos, state, criteria);
+    renderPhotos(matchingPhotos, PHOTOS_GRID);
+    renderCount(matchingPhotos.length, photos.length, RESULT_COUNT);
+    updateFilters(state, getAvailability(photos, state, criteria), FILTERS);
+  }
+
+  renderFilters(criteria, FILTERS);
   refresh();
 
   document.querySelector(FILTERS)?.addEventListener("change", refresh);
@@ -32,7 +59,7 @@ function init(): void {
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", () => void init());
 } else {
-  init();
+  void init();
 }

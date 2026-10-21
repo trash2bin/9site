@@ -1,11 +1,4 @@
-/** Запись фотоальбома: только хранимые данные, без вычисляемых признаков. */
-export const ALBUM_OPTIONS = [
-  { value: "gadgets", label: "техника" },
-  { value: "garage", label: "гараж" },
-  { value: "mascots", label: "tux" },
-  { value: "music", label: "музыка" },
-  { value: "misc", label: "прочее" },
-] as const;
+/** Запись фотоальбома: сервер отдаёт готовый путь к файлу в поле url. */
 
 export const TYPE_OPTIONS = [
   { value: "photo", label: "фото" },
@@ -19,15 +12,28 @@ export const ORIENTATION_OPTIONS = [
   { value: "tall", label: "высокое" },
 ] as const;
 
-export type Album = (typeof ALBUM_OPTIONS)[number]["value"];
+/** Подписи разделов: список разделов приходит из базы, подписи живут здесь. */
+const ALBUM_LABELS: Record<string, string> = {
+  gadgets: "техника",
+  garage: "гараж",
+  mascots: "tux",
+  music: "музыка",
+  misc: "прочее",
+};
+
+/** Новый раздел без подписи показывается своим слагом, а не пропадает. */
+export function albumLabel(slug: string): string {
+  return ALBUM_LABELS[slug] ?? slug;
+}
+
 export type FileType = (typeof TYPE_OPTIONS)[number]["value"];
 export type Orientation = (typeof ORIENTATION_OPTIONS)[number]["value"];
 
 export interface Photo {
   name: string;
-  /** Имя файла внутри public/assets/img/. */
-  src: string;
-  album: Album;
+  /** Путь от корня сайта: /assets/img/x.jpg или /photos/p...webp. */
+  url: string;
+  album: string;
   width: number;
   height: number;
 }

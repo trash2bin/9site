@@ -4,10 +4,12 @@ http://127.0.0.1:8080/css/base.css 200
 http://127.0.0.1:8080/design.css 200
 http://127.0.0.1:8080/maket 200
 http://127.0.0.1:8080/catalog 200
+http://127.0.0.1:8080/api/photos 200
 http://127.0.0.1:8080/catalog.css 200
 http://127.0.0.1:8080/print.css 200
 http://127.0.0.1:8080/js/main.js 200
 http://127.0.0.1:8080/studio 200
+http://127.0.0.1:8080/vault/album 303
 http://127.0.0.1:8080/studio?auth=login 200
 http://127.0.0.1:8080/vault 303
 http://127.0.0.1:8080/css/auth/auth.css 200
@@ -21,6 +23,7 @@ http://127.0.0.1:8080/js/ 404
 http://127.0.0.1:8080/var/site.db 404
 http://127.0.0.1:8080/var/auth.db 404
 http://127.0.0.1:8080/avatars/u0-0.png 404
+http://127.0.0.1:8080/photos/p0000000000000000.webp 404
 http://127.0.0.1:8080/main.go 404
 http://127.0.0.1:8080/visits.dat 404
 http://127.0.0.1/ 200
