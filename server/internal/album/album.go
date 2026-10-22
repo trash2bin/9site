@@ -127,7 +127,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.Handle("POST /vault/album", s.access.Require(s.throttle.Middleware(BudgetUpload,
 		over, http.HandlerFunc(s.handleUpload))))
 	// Свой кадр автор убирает сам, чужой только админ: роль проверяет обработчик.
-	mux.Handle("POST /vault/album/delete", s.access.Require(http.HandlerFunc(s.handleDelete)))
+	mux.Handle("POST "+api.DeletePhotoPath, s.access.Require(http.HandlerFunc(s.handleDelete)))
 }
 
 // photosFile путь файла загрузки внутри каталога.

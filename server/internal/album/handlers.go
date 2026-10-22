@@ -46,6 +46,9 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 		Albums: make([]api.Section, 0, len(Sections)),
 		Tags:   tags,
 	}
+	if s.access.IsAdmin(r) {
+		out.Viewer = api.Viewer{Admin: true, CSRF: s.access.CSRFToken(w, r)}
+	}
 	for _, section := range Sections {
 		out.Albums = append(out.Albums, api.Section{Slug: section.Slug, Label: section.Label})
 	}
@@ -58,7 +61,7 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 			photoTags = []string{}
 		}
 		out.Photos = append(out.Photos, api.Photo{
-			Name: p.Name, URL: p.URL, Album: p.Album, Width: p.Width, Height: p.Height,
+			ID: p.ID, Name: p.Name, URL: p.URL, Album: p.Album, Width: p.Width, Height: p.Height,
 			Author: authorOf(p), Tags: photoTags,
 		})
 	}

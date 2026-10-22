@@ -22,3 +22,5 @@ export type Orientation = (typeof ORIENTATION_OPTIONS)[number]["value"];
 
 /** Запись альбома: url это путь от корня сайта, author у засева system. */
 export type Photo = components["schemas"]["Photo"];
+
+export type Viewer = components["schemas"]["Viewer"];

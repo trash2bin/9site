@@ -27,6 +27,35 @@
   text-shadow: 1px 1px 0 #000;
 }
 
+.album-grid .photo-card {
+  position: relative;
+}
+
+.album-grid .photo-delete {
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  right: 5px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #d78383;
+  color: #fff;
+  background: #8d2525;
+  font: bold 20px/1 "Courier New", monospace;
+  cursor: pointer;
+}
+
+.album-grid .photo-delete:hover,
+.album-grid .photo-delete:focus-visible {
+  background: #c13232;
+}
+
+.album-grid .photo-delete:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 /* Автор на карточке: тише подписи, чтобы имя кадра оставалось главным. */
 .album-grid .photo-author {
   color: #8b8578;

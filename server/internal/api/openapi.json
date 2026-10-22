@@ -3,7 +3,7 @@
   "info": {
     "title": "Ivan's Little Web API",
     "version": "1",
-    "description": "JSON API витрины: единственный вызов фронта, весь альбом одним ответом."
+    "description": "JSON API витрины и действие удаления для сессии администратора."
   },
   "paths": {
     "/api/photos": {
@@ -34,12 +34,56 @@
           }
         }
       }
+    },
+    "/vault/album/delete": {
+      "post": {
+        "operationId": "deletePhoto",
+        "summary": "Удалить кадр",
+        "description": "Доступно администратору; нужен CSRF-токен из photos.viewer.csrf. Чужой кадр обычному пользователю запрещён.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "csrf": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "csrf",
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "303": {
+            "description": "Кадр удалён, переход на страницу альбома"
+          },
+          "403": {
+            "description": "Недостаточно прав или неверный CSRF-токен"
+          },
+          "404": {
+            "description": "Кадр не найден"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
       "Photo": {
         "properties": {
+          "id": {
+            "type": "integer",
+            "description": "идентификатор записи для действий владельца"
+          },
           "name": {
             "type": "string",
             "description": "подпись кадра"
@@ -75,6 +119,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "name",
           "url",
           "album",
@@ -103,6 +148,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "viewer": {
+            "$ref": "#/components/schemas/Viewer"
           }
         },
         "additionalProperties": false,
@@ -110,7 +158,8 @@
         "required": [
           "photos",
           "albums",
-          "tags"
+          "tags",
+          "viewer"
         ]
       },
       "Section": {
@@ -129,6 +178,22 @@
         "required": [
           "slug",
           "label"
+        ]
+      },
+      "Viewer": {
+        "properties": {
+          "admin": {
+            "type": "boolean"
+          },
+          "csrf": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "admin",
+          "csrf"
         ]
       }
     }

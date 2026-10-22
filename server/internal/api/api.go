@@ -18,12 +18,15 @@ const (
 	PhotosPath = "/api/photos"
 	// SpecPath сама спека, отдаётся за логином.
 	SpecPath = "/vault/openapi.json"
+	// DeletePhotoPath POST удаления кадра, защищён сессией и CSRF.
+	DeletePhotoPath = "/vault/album/delete"
 	// FilesPath префикс файлов загрузок: он же в url записей.
 	FilesPath = "/photos/"
 )
 
 // Photo снимок в JSON: карточке и фильтру нужны только эти поля.
 type Photo struct {
+	ID     int64    `json:"id" jsonschema:"description=идентификатор записи для действий владельца"`
 	Name   string   `json:"name" jsonschema:"description=подпись кадра"`
 	URL    string   `json:"url" jsonschema:"description=путь файла от корня сайта"`
 	Album  string   `json:"album" jsonschema:"description=слаг раздела"`
@@ -39,11 +42,18 @@ type Section struct {
 	Label string `json:"label" jsonschema:"description=подпись для интерфейса"`
 }
 
-// PhotosResponse ответ витрины: снимки, разделы и теги одним куском.
+// Viewer текущий пользователь: административные действия доступны только администратору.
+type Viewer struct {
+	Admin bool   `json:"admin"`
+	CSRF  string `json:"csrf"`
+}
+
+// PhotosResponse ответ витрины: снимки, разделы, теги и права текущей сессии.
 type PhotosResponse struct {
 	Photos []Photo   `json:"photos"`
 	Albums []Section `json:"albums"`
 	Tags   []string  `json:"tags"`
+	Viewer Viewer    `json:"viewer"`
 }
 
 // Спека: каркас объявлен типами, схемы приходят из структур выше.
@@ -62,14 +72,35 @@ type info struct {
 }
 
 type pathItem struct {
-	Get operation `json:"get"`
+	Get  *operation `json:"get,omitempty"`
+	Post *operation `json:"post,omitempty"`
 }
 
 type operation struct {
 	OperationID string              `json:"operationId"`
 	Summary     string              `json:"summary"`
 	Description string              `json:"description"`
+	RequestBody *requestBody        `json:"requestBody,omitempty"`
 	Responses   map[string]response `json:"responses"`
+}
+
+type requestBody struct {
+	Required bool                     `json:"required"`
+	Content  map[string]formMediaType `json:"content"`
+}
+
+type formMediaType struct {
+	Schema formSchema `json:"schema"`
+}
+
+type formSchema struct {
+	Type       string               `json:"type"`
+	Properties map[string]formField `json:"properties"`
+	Required   []string             `json:"required"`
+}
+
+type formField struct {
+	Type string `json:"type"`
 }
 
 type response struct {
@@ -101,10 +132,10 @@ func BuildSpec() ([]byte, error) {
 		Info: info{
 			Title:       "Ivan's Little Web API",
 			Version:     "1",
-			Description: "JSON API витрины: единственный вызов фронта, весь альбом одним ответом.",
+			Description: "JSON API витрины и действие удаления для сессии администратора.",
 		},
 		Paths: map[string]pathItem{
-			PhotosPath: {Get: operation{
+			PhotosPath: {Get: &operation{
 				OperationID: "photos",
 				Summary:     "Снимки, разделы и теги витрины",
 				Description: "Открыт всем, ответ не кэшируется (Cache-Control: no-store).",
@@ -119,7 +150,24 @@ func BuildSpec() ([]byte, error) {
 					},
 				},
 			}},
+			DeletePhotoPath: {Post: &operation{
+				OperationID: "deletePhoto",
+				Summary:     "Удалить кадр",
+				Description: "Доступно администратору; нужен CSRF-токен из photos.viewer.csrf. Чужой кадр обычному пользователю запрещён.",
+				RequestBody: &requestBody{
+					Required: true,
+					Content: map[string]formMediaType{"application/x-www-form-urlencoded": {Schema: formSchema{
+						Type: "object", Properties: map[string]formField{"csrf": {Type: "string"}, "id": {Type: "integer"}}, Required: []string{"csrf", "id"},
+					}}},
+				},
+				Responses: map[string]response{
+					"303": {Description: "Кадр удалён, переход на страницу альбома"},
+					"403": {Description: "Недостаточно прав или неверный CSRF-токен"},
+					"404": {Description: "Кадр не найден"},
+				},
+			}},
 		},
+
 		Components: components{Schemas: schemas()},
 	}
 

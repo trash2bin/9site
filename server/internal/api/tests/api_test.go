@@ -58,7 +58,7 @@ func TestSpecDescribesResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("нет схемы PhotosResponse: %v", doc.Components.Schemas)
 	}
-	for _, field := range []string{"photos", "albums", "tags"} {
+	for _, field := range []string{"photos", "albums", "tags", "viewer"} {
 		if !contains(response.Required, field) {
 			t.Fatalf("поле %q не обязательное: %v", field, response.Required)
 		}
@@ -68,7 +68,7 @@ func TestSpecDescribesResponse(t *testing.T) {
 	if !ok {
 		t.Fatal("нет схемы Photo")
 	}
-	for _, field := range []string{"name", "url", "album", "width", "height", "author", "tags"} {
+	for _, field := range []string{"id", "name", "url", "album", "width", "height", "author", "tags"} {
 		if _, ok := photo.Properties[field]; !ok {
 			t.Fatalf("в Photo нет поля %q", field)
 		}

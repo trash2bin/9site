@@ -1,6 +1,7 @@
 /** Связывает данные из базы, фильтр, интерфейс и режим печати страницы альбома. */
 
 import { loadPhotos } from "./api.js";
+import { paths } from "./api-types.js";
 import { criteriaFor, type CriterionDefinition } from "./criteria.js";
 import { getAvailability, applyFilters } from "./filter.js";
 import type { Photo } from "./model.js";
@@ -22,10 +23,14 @@ async function init(): Promise<void> {
 
   let photos: Photo[];
   let criteria: readonly CriterionDefinition[];
+  let admin = false;
+  let csrf = "";
   try {
     const data = await loadPhotos();
     photos = data.photos;
     criteria = criteriaFor(data.albums, data.tags);
+    admin = data.viewer.admin;
+    csrf = data.viewer.csrf;
   } catch (error) {
     // Пустая сетка выглядела бы как «ничего не нашлось», поэтому текст другой.
     console.error(error);
@@ -43,13 +48,52 @@ async function init(): Promise<void> {
   function refresh(): void {
     const state = readState(FILTERS);
     const matchingPhotos = applyFilters(photos, state, criteria);
-    renderPhotos(matchingPhotos, PHOTOS_GRID);
+    renderPhotos(matchingPhotos, PHOTOS_GRID, admin);
     renderCount(matchingPhotos.length, photos.length, RESULT_COUNT);
     updateFilters(state, getAvailability(photos, state, criteria), FILTERS);
   }
 
   renderFilters(criteria, FILTERS);
   refresh();
+
+  document.querySelector(PHOTOS_GRID)?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest<HTMLButtonElement>("[data-photo-delete]");
+    if (!button) return;
+
+    const name = button.dataset.photoName ?? "этот кадр";
+    if (!window.confirm(`Удалить «${name}» из альбома?`)) return;
+
+    button.disabled = true;
+    try {
+      const response = await fetch(paths.deletePhoto, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: new URLSearchParams({ id: button.dataset.photoDelete ?? "", csrf }),
+      });
+      const destination = new URL(response.url, window.location.href);
+      if (
+        response.ok &&
+        response.redirected &&
+        destination.pathname === "/vault/album" &&
+        destination.searchParams.get("deleted") === "1"
+      ) {
+        window.location.reload();
+        return;
+      }
+      if (destination.pathname === "/studio") {
+        window.location.assign(destination.href);
+        return;
+      }
+      throw new Error(`delete failed: ${response.status}`);
+    } catch (error) {
+      console.error(error);
+      button.disabled = false;
+      window.alert("Не удалось удалить кадр. Обнови страницу и попробуй снова.");
+    }
+  });
 
   document.querySelector(FILTERS)?.addEventListener("change", refresh);
   document.querySelector("[data-filter-reset]")?.addEventListener("click", () => {

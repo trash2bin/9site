@@ -18,6 +18,7 @@ function isPhoto(value: unknown): value is Photo {
   return (
     typeof photo === "object" &&
     photo !== null &&
+    typeof photo.id === "number" &&
     typeof photo.name === "string" &&
     typeof photo.url === "string" &&
     typeof photo.album === "string" &&
@@ -41,7 +42,11 @@ export async function loadPhotos(): Promise<AlbumData> {
     !Array.isArray(data.photos) ||
     !data.photos.every(isPhoto) ||
     !Array.isArray(data.albums) ||
-    !data.albums.every(isAlbum)
+    !data.albums.every(isAlbum) ||
+    typeof data.viewer !== "object" ||
+    data.viewer === null ||
+    typeof data.viewer.admin !== "boolean" ||
+    typeof data.viewer.csrf !== "string"
   ) {
     throw new Error(`${paths.photos}: неожиданный ответ`);
   }
@@ -50,5 +55,6 @@ export async function loadPhotos(): Promise<AlbumData> {
     photos: data.photos,
     albums: data.albums,
     tags: (Array.isArray(data.tags) ? data.tags : []).filter((tag) => typeof tag === "string"),
+    viewer: data.viewer,
   };
 }

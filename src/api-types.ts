@@ -4,6 +4,8 @@
  */
 
 export interface Photo {
+  /** идентификатор записи для действий владельца */
+  id: number;
   /** подпись кадра */
   name: string;
   /** путь файла от корня сайта */
@@ -24,6 +26,7 @@ export interface PhotosResponse {
   photos: Photo[];
   albums: Section[];
   tags: string[];
+  viewer: Viewer;
 }
 
 export interface Section {
@@ -33,8 +36,14 @@ export interface Section {
   label: string;
 }
 
+export interface Viewer {
+  admin: boolean;
+  csrf: string;
+}
+
 /** Пути API из спеки: смена адреса на сервере приезжает сюда. */
 export const paths = {
+  deletePhoto: "/vault/album/delete",
   photos: "/api/photos",
 } as const;
 
@@ -43,5 +52,6 @@ export interface components {
     Photo: Photo;
     PhotosResponse: PhotosResponse;
     Section: Section;
+    Viewer: Viewer;
   };
 }

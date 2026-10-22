@@ -15,6 +15,7 @@ import (
 // apiResponse форма ответа витрины.
 type apiResponse struct {
 	Photos []struct {
+		ID     int64    `json:"id"`
 		Name   string   `json:"name"`
 		URL    string   `json:"url"`
 		Album  string   `json:"album"`
@@ -27,7 +28,11 @@ type apiResponse struct {
 		Slug  string `json:"slug"`
 		Label string `json:"label"`
 	} `json:"albums"`
-	Tags []string `json:"tags"`
+	Tags   []string `json:"tags"`
+	Viewer struct {
+		Admin bool   `json:"admin"`
+		CSRF  string `json:"csrf"`
+	} `json:"viewer"`
 }
 
 // TestPhotosAPI: витрина получает засев из базы и не кэшируется браузером.
@@ -54,7 +59,7 @@ func TestPhotosAPI(t *testing.T) {
 	}
 
 	first := data.Photos[0]
-	if first.Name != "Nintendo 3DS" || first.URL != "/assets/img/console-3ds.jpg" ||
+	if first.ID == 0 || first.Name != "Nintendo 3DS" || first.URL != "/assets/img/console-3ds.jpg" ||
 		first.Album != "gadgets" || first.Width != 1600 || first.Height != 1200 {
 		t.Fatalf("первый снимок %+v", first)
 	}
@@ -64,6 +69,9 @@ func TestPhotosAPI(t *testing.T) {
 	if first.Author != "system" {
 		t.Fatalf("автор засева %q, ожидался system", first.Author)
 	}
+	if !data.Viewer.Admin || data.Viewer.CSRF != "test-csrf" {
+		t.Fatalf("права администратора %+v", data.Viewer)
+	}
 	if len(data.Albums) != 5 || data.Albums[0].Slug != "gadgets" || data.Albums[0].Label != "техника" {
 		t.Fatalf("разделы %v", data.Albums)
 	}
@@ -71,6 +79,19 @@ func TestPhotosAPI(t *testing.T) {
 
 // TestPhotosAPIAfterUpload: новая запись сразу видна витрине, включая
 // раздел, которого раньше не было.
+func TestPhotosAPIUserHasNoAdminControls(t *testing.T) {
+	env := testServerWith(t, fakeAccess{csrf: true, login: "reader"})
+
+	_, body := get(t, env.ts.URL+api.PhotosPath)
+	var data apiResponse
+	if err := json.Unmarshal(body, &data); err != nil {
+		t.Fatalf("ответ не JSON: %v", err)
+	}
+	if data.Viewer.Admin || data.Viewer.CSRF != "" {
+		t.Fatalf("обычному пользователю выданы права администратора: %+v", data.Viewer)
+	}
+}
+
 func TestPhotosAPIAfterUpload(t *testing.T) {
 	env := testServer(t)
 

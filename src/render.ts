@@ -17,8 +17,9 @@ function escapeHtml(value: string): string {
 }
 
 /** Карточка снимка: фильтруемые значения читаются из Photo, не из DOM. */
-function photoCard(photo: Photo): string {
+function photoCard(photo: Photo, admin: boolean): string {
   return `<figure class="part-card photo-card">
+      ${admin ? `<button type="button" class="photo-delete" data-photo-delete="${photo.id}" data-photo-name="${escapeHtml(photo.name)}" aria-label="Удалить: ${escapeHtml(photo.name)}">×</button>` : ""}
       <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.name)}" loading="lazy" decoding="async" />
       <figcaption data-file="${escapeHtml(photo.url)}">
         ${escapeHtml(photo.name)}
@@ -28,12 +29,12 @@ function photoCard(photo: Photo): string {
     </figure>`;
 }
 
-export function renderPhotos(photos: Photo[], selector: string): void {
+export function renderPhotos(photos: Photo[], selector: string, admin: boolean): void {
   const host = document.querySelector(selector);
   if (!host) return;
 
   host.innerHTML = photos.length
-    ? photos.map(photoCard).join("\n")
+    ? photos.map((photo) => photoCard(photo, admin)).join("\n")
     : `<p class="catalog-empty">[ под такие критерии ничего не нашлось // сбрось фильтр ]</p>`;
 }
 
