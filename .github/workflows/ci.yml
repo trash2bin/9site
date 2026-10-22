@@ -77,6 +77,16 @@ jobs:
       - name: Typecheck
         run: npm run lint:ts
 
+      - name: API types check
+        run: |
+          npm run api:types
+          if [ -n "$(git status --porcelain src/api-types.ts)" ]; then
+            echo "Generated API types do not match openapi.json: run npm run api:types"
+            git --no-pager diff -- src/api-types.ts
+            exit 1
+          fi
+          echo "OK"
+
       - name: Rebuild check
         run: |
           npm run build:ts

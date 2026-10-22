@@ -46,6 +46,12 @@ func (s *Store) ListPhotos(ctx context.Context) ([]Photo, error) {
 	return out, rows.Err()
 }
 
+// PhotoByID ищет кадр по номеру: по нему проверяется, чей он.
+func (s *Store) PhotoByID(ctx context.Context, id int64) (*Photo, error) {
+	return scanPhoto(s.db.QueryRowContext(ctx,
+		`SELECT `+photoColumns+` FROM photos WHERE id = $1`, id))
+}
+
 // CreatePhoto добавляет запись и возвращает её с id и датой.
 func (s *Store) CreatePhoto(ctx context.Context, p Photo) (*Photo, error) {
 	return scanPhoto(s.db.QueryRowContext(ctx,
@@ -60,24 +66,4 @@ func (s *Store) CreatePhoto(ctx context.Context, p Photo) (*Photo, error) {
 func (s *Store) DeletePhoto(ctx context.Context, id int64) (*Photo, error) {
 	return scanPhoto(s.db.QueryRowContext(ctx,
 		`DELETE FROM photos WHERE id = $1 RETURNING `+photoColumns, id))
-}
-
-// Albums отдаёт разделы, которые есть в базе: из них собирается фильтр.
-func (s *Store) Albums(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT album FROM photos GROUP BY album ORDER BY album`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []string
-	for rows.Next() {
-		var album string
-		if err := rows.Scan(&album); err != nil {
-			return nil, err
-		}
-		out = append(out, album)
-	}
-	return out, rows.Err()
 }

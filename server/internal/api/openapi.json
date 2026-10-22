@@ -1,0 +1,136 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ivan's Little Web API",
+    "version": "1",
+    "description": "JSON API витрины: единственный вызов фронта, весь альбом одним ответом."
+  },
+  "paths": {
+    "/api/photos": {
+      "get": {
+        "operationId": "photos",
+        "summary": "Снимки, разделы и теги витрины",
+        "description": "Открыт всем, ответ не кэшируется (Cache-Control: no-store).",
+        "responses": {
+          "200": {
+            "description": "Весь альбом",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotosResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "База не читается",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Photo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "подпись кадра"
+          },
+          "url": {
+            "type": "string",
+            "description": "путь файла от корня сайта"
+          },
+          "album": {
+            "type": "string",
+            "description": "слаг раздела"
+          },
+          "width": {
+            "type": "integer",
+            "description": "ширина файла в px"
+          },
+          "height": {
+            "type": "integer",
+            "description": "высота файла в px"
+          },
+          "author": {
+            "type": "string",
+            "description": "логин загрузившего или system для засева"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "description": "теги кадра по алфавиту"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "url",
+          "album",
+          "width",
+          "height",
+          "author",
+          "tags"
+        ]
+      },
+      "PhotosResponse": {
+        "properties": {
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/Photo"
+            },
+            "type": "array"
+          },
+          "albums": {
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            },
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "photos",
+          "albums",
+          "tags"
+        ]
+      },
+      "Section": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "слаг раздела из album.Sections"
+          },
+          "label": {
+            "type": "string",
+            "description": "подпись для интерфейса"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slug",
+          "label"
+        ]
+      }
+    }
+  }
+}

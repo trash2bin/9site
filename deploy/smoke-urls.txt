@@ -10,6 +10,8 @@ http://127.0.0.1:8080/print.css 200
 http://127.0.0.1:8080/js/main.js 200
 http://127.0.0.1:8080/studio 200
 http://127.0.0.1:8080/vault/album 303
+http://127.0.0.1:8080/vault/users 303
+http://127.0.0.1:8080/vault/openapi.json 303
 http://127.0.0.1:8080/studio?auth=login 200
 http://127.0.0.1:8080/vault 303
 http://127.0.0.1:8080/css/auth/auth.css 200

@@ -32,12 +32,17 @@ func TestPhotoSeed(t *testing.T) {
 		t.Fatalf("у засева не должно быть автора: %q", first.UploadedBy)
 	}
 
-	albums, err := s.Albums(ctx)
-	if err != nil {
-		t.Fatalf("Albums: %v", err)
+	seen := make(map[string]bool)
+	for _, photo := range photos {
+		seen[photo.Album] = true
 	}
+	albums := make([]string, 0, len(seen))
+	for slug := range seen {
+		albums = append(albums, slug)
+	}
+	slices.Sort(albums)
 	if want := []string{"gadgets", "garage", "mascots", "misc", "music"}; !slices.Equal(albums, want) {
-		t.Fatalf("разделы %v, ожидались %v", albums, want)
+		t.Fatalf("разделы засева %v, ожидались %v", albums, want)
 	}
 }
 
@@ -95,5 +100,31 @@ func TestDeletePhoto(t *testing.T) {
 
 	if _, err := s.DeletePhoto(ctx, created.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("повторное удаление: %v, ожидался ErrNotFound", err)
+	}
+}
+
+// TestPhotoByID: чужой номер это ErrNotFound, свой отдаётся с автором.
+func TestPhotoByID(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	created, err := s.CreatePhoto(ctx, store.Photo{
+		Name: "Свой кадр", URL: "/photos/p0000000000000001.webp", Album: "misc",
+		Width: 10, Height: 10, UploadedBy: "reader",
+	})
+	if err != nil {
+		t.Fatalf("CreatePhoto: %v", err)
+	}
+
+	got, err := s.PhotoByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("PhotoByID: %v", err)
+	}
+	if got.UploadedBy != "reader" || got.URL != created.URL {
+		t.Fatalf("запись %+v", got)
+	}
+
+	if _, err := s.PhotoByID(ctx, created.ID+1000); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("неизвестный номер: %v, ожидался ErrNotFound", err)
 	}
 }

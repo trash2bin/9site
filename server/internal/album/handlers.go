@@ -11,27 +11,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ivan223/web1-personal-site/server/internal/api"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
 
 // photoFile допустимое имя файла загрузки: генерируется сервером, снаружи
 // ничего другого не отдаётся.
 var photoFile = regexp.MustCompile(`^p[0-9a-f]{16}\.(gif|webp)$`)
-
-// photosResponse ответ витрины: снимки и разделы, которые есть в базе.
-type photosResponse struct {
-	Photos []photoPayload `json:"photos"`
-	Albums []string       `json:"albums"`
-}
-
-// photoPayload снимок в JSON: карточке и фильтру нужны только эти поля.
-type photoPayload struct {
-	Name   string `json:"name"`
-	URL    string `json:"url"`
-	Album  string `json:"album"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-}
 
 // handlePhotos отдаёт список снимков для витрины и админки.
 func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
@@ -41,20 +27,39 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "список снимков не читается", http.StatusInternalServerError)
 		return
 	}
-	albums, err := s.store.Albums(r.Context())
+
+	tags, err := s.store.Tags(r.Context())
 	if err != nil {
-		s.log.Error("альбом: список разделов не читается", "err", err)
-		http.Error(w, "список разделов не читается", http.StatusInternalServerError)
+		s.log.Error("альбом: список тегов не читается", "err", err)
+		http.Error(w, "список тегов не читается", http.StatusInternalServerError)
+		return
+	}
+	byPhoto, err := s.store.TagsByPhoto(r.Context())
+	if err != nil {
+		s.log.Error("альбом: теги кадров не читаются", "err", err)
+		http.Error(w, "теги кадров не читаются", http.StatusInternalServerError)
 		return
 	}
 
-	out := photosResponse{Photos: make([]photoPayload, 0, len(photos)), Albums: albums}
-	if out.Albums == nil {
-		out.Albums = []string{}
+	out := api.PhotosResponse{
+		Photos: make([]api.Photo, 0, len(photos)),
+		Albums: make([]api.Section, 0, len(Sections)),
+		Tags:   tags,
+	}
+	for _, section := range Sections {
+		out.Albums = append(out.Albums, api.Section{Slug: section.Slug, Label: section.Label})
+	}
+	if out.Tags == nil {
+		out.Tags = []string{}
 	}
 	for _, p := range photos {
-		out.Photos = append(out.Photos, photoPayload{
+		photoTags := byPhoto[p.ID]
+		if photoTags == nil {
+			photoTags = []string{}
+		}
+		out.Photos = append(out.Photos, api.Photo{
 			Name: p.Name, URL: p.URL, Album: p.Album, Width: p.Width, Height: p.Height,
+			Author: authorOf(p), Tags: photoTags,
 		})
 	}
 
@@ -63,6 +68,14 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(out); err != nil {
 		s.log.Error("альбом: ответ не ушёл", "err", err)
 	}
+}
+
+// authorOf подпись автора для витрины: у засева автора нет, он помечен system.
+func authorOf(p store.Photo) string {
+	if p.UploadedBy == "" {
+		return "system"
+	}
+	return p.UploadedBy
 }
 
 // handlePhotoFile отдаёт файл загрузки. Имя проверено регулярным выражением,
@@ -97,16 +110,19 @@ type adminPhoto struct {
 	Photo
 	// Uploaded файл лежит в каталоге загрузок, а не в статике засева.
 	Uploaded bool
+	Tags     []string
 }
 
 // adminData данные страницы загрузки.
 type adminData struct {
-	Photos  []adminPhoto
-	Albums  []string
-	Login   string
-	CSRF    string
-	Error   string
-	Message string
+	Photos   []adminPhoto
+	Sections []Section
+	Tags     []string
+	Login    string
+	Admin    bool
+	CSRF     string
+	Error    string
+	Message  string
 }
 
 func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +151,12 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.acquireDecode(r.Context()); err != nil {
+		s.renderAdmin(w, r, adminData{Error: "слишком много одновременных загрузок: повтори через минуту"})
+		return
+	}
+	defer s.releaseDecode()
+
 	img, err := readImage(r)
 	if err != nil {
 		s.renderAdmin(w, r, adminData{Error: err.Error()})
@@ -147,8 +169,23 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.PostFormValue("album")
-	if !albumSlug.MatchString(slug) {
-		s.renderAdmin(w, r, adminData{Error: "раздел: строчная латиница, цифры и дефис"})
+	if !validSection(slug) {
+		s.renderAdmin(w, r, adminData{Error: "раздел: выбери из списка"})
+		return
+	}
+
+	// Галочки дают готовые теги из базы, поле «новые теги» есть только у админа.
+	spec := r.PostFormValue("tags")
+	if chosen := r.PostForm["tag"]; len(chosen) > 0 {
+		spec = strings.Join(append(chosen, spec), ",")
+	}
+	tags, err := s.parseTags(r.Context(), spec, s.access.IsAdmin(r))
+	switch {
+	case errors.Is(err, errBadTag), errors.Is(err, errManyTags), errors.Is(err, errNewTag):
+		s.renderAdmin(w, r, adminData{Error: err.Error()})
+		return
+	case err != nil:
+		s.internalError(w, err)
 		return
 	}
 
@@ -160,7 +197,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	photo, err := s.store.CreatePhoto(r.Context(), store.Photo{
 		Name:       caption,
-		URL:        "/photos/" + name,
+		URL:        api.FilesPath + name,
 		Album:      slug,
 		Width:      img.width,
 		Height:     img.height,
@@ -168,7 +205,14 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		UploadedBy: s.access.Login(r),
 	})
 	if err != nil {
-		s.removeImageFile("/photos/" + name)
+		s.removeImageFile(api.FilesPath + name)
+		s.internalError(w, err)
+		return
+	}
+
+	if err := s.attachTags(r.Context(), photo.ID, tags); err != nil {
+		s.removeImageFile(photo.URL)
+		_, _ = s.store.DeletePhoto(r.Context(), photo.ID)
 		s.internalError(w, err)
 		return
 	}
@@ -178,7 +222,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/vault/album?ok=1", http.StatusSeeOther)
 }
 
-// handleDelete убирает запись и файл загрузки; засев остаётся в статике.
+// handleDelete убирает запись и файл загрузки: свой кадр может убрать автор,
+// чужой только админ. Засев из статики правит только админ.
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	if err := r.ParseForm(); err != nil {
@@ -193,6 +238,20 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PostFormValue("id"), 10, 64)
 	if err != nil {
 		s.renderAdmin(w, r, adminData{Error: "непонятный номер кадра"})
+		return
+	}
+
+	existing, err := s.store.PhotoByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		s.renderAdmin(w, r, adminData{Error: "кадр уже удалён"})
+		return
+	}
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	if !s.access.IsAdmin(r) && existing.UploadedBy != s.access.Login(r) {
+		s.renderAdminCode(w, r, adminData{Error: "это чужой кадр: удаляет автор или админ"}, http.StatusForbidden)
 		return
 	}
 
@@ -212,29 +271,48 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, data adminData) {
+	s.renderAdminCode(w, r, data, http.StatusOK)
+}
+
+// renderAdminCode рисует страницу загрузки с нужным статусом: отказ по
+// правам отдаётся как 403, а не как успешная страница с текстом.
+func (s *Server) renderAdminCode(w http.ResponseWriter, r *http.Request, data adminData, code int) {
 	photos, err := s.store.ListPhotos(r.Context())
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
-	albums, err := s.store.Albums(r.Context())
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
 
 	data.Login = s.access.Login(r)
+	data.Admin = s.access.IsAdmin(r)
 	data.CSRF = s.access.CSRFToken(w, r)
-	data.Albums = albums
+	data.Sections = Sections
+
+	tags, err := s.store.Tags(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	byPhoto, err := s.store.TagsByPhoto(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	data.Tags = tags
 	data.Photos = make([]adminPhoto, 0, len(photos))
 	// Новые сверху: только что загруженный кадр видно без прокрутки.
 	for i := len(photos) - 1; i >= 0; i-- {
 		p := photos[i]
-		data.Photos = append(data.Photos, adminPhoto{Photo: p, Uploaded: strings.HasPrefix(p.URL, "/photos/")})
+		data.Photos = append(data.Photos, adminPhoto{
+			Photo:    p,
+			Uploaded: strings.HasPrefix(p.URL, api.FilesPath),
+			Tags:     byPhoto[p.ID],
+		})
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(code)
 	if err := adminTemplate.Execute(w, data); err != nil {
 		s.log.Error("альбом: шаблон не отрисован", "err", err)
 	}

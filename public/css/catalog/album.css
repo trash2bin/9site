@@ -26,3 +26,15 @@
     monospace;
   text-shadow: 1px 1px 0 #000;
 }
+
+/* Автор на карточке: тише подписи, чтобы имя кадра оставалось главным. */
+.album-grid .photo-author {
+  color: #8b8578;
+}
+
+/* Теги карточки: отдельной строкой, чтобы не спорить с подписью. */
+.album-grid .photo-tags {
+  display: block;
+  color: #7d776b;
+  font-size: 11px;
+}

@@ -461,7 +461,25 @@ STUB
   [ "$(cat "$www/deploy.env")" = "DATA_DIR=$data
 SMTP_PASS=hand-set" ]
   [[ "$output" == *'differs from the repository, the server keeps its own'* ]]
-  [[ "$output" == *'SMTP_PASS=hand-set'* ]]
+  [[ "$output" == *'only on the server: SMTP_PASS'* ]]
+  # Values are secrets: the report names keys, never what they hold.
+  [[ "$output" != *'hand-set'* ]]
+}
+
+@test 'install-unit never prints the values of the environment file' {
+  export HOME="$BATS_TEST_TMPDIR"
+  mkdir -p "$HOME/.config/systemd/user"
+  stub systemctl <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  printf 'DATA_DIR=%s\nADMIN_LOGIN=owner\nADMIN_PASSWORD=s3cret-value\n' "$data" >"$www/deploy.env"
+  ship_unit
+
+  run remote install-unit DEPLOY_PATH="$www"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'only on the server: ADMIN_LOGIN ADMIN_PASSWORD'* ]]
+  [[ "$output" != *'s3cret-value'* ]]
 }
 
 @test 'install-unit refuses a deploy path the unit is not written for' {

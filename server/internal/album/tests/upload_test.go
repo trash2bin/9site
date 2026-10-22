@@ -3,6 +3,7 @@ package album_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
@@ -13,7 +14,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
 
 // countPhotos сколько снимков сейчас в базе.
@@ -140,10 +144,88 @@ func TestAdminPageListsPhotos(t *testing.T) {
 		t.Fatalf("статус %d", res.StatusCode)
 	}
 	page := string(body)
-	for _, want := range []string{"Nintendo 3DS", "в альбоме: 37", `name="csrf" value="test-csrf"`, "ALBUM UPLOAD"} {
+	// У админа кнопка есть и у засева: запись убирается, файл в статике остаётся.
+	if got := strings.Count(page, "/vault/album/delete"); got != 37 {
+		t.Fatalf("форм удаления %d, ожидалось 37 (засев)", got)
+	}
+	for _, want := range []string{"Nintendo 3DS", "в альбоме: 37", `name="csrf" value="test-csrf"`, "ALBUM UPLOAD",
+		"return confirm(", "system", "убрать запись"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("на странице нет %q", want)
 		}
+	}
+}
+
+// TestUserDeletesOwnButNotForeign: свой кадр автор убирает сам, чужой не
+// трогает: маршрут отвечает 403, запись и файл остаются.
+func TestUserDeletesOwnButNotForeign(t *testing.T) {
+	env := testServerWith(t, fakeAccess{csrf: true, login: "reader"})
+
+	res, page := upload(t, env, map[string]string{
+		"csrf": "test-csrf", "name": "Кадр читателя", "album": "misc",
+	}, "reader.png", pngFile(t, 300, 200))
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("загрузка: статус %d, ожидался 303:\n%s", res.StatusCode, page)
+	}
+
+	photos, err := env.st.ListPhotos(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	own := photos[len(photos)-1]
+	if own.UploadedBy != "reader" {
+		t.Fatalf("автор %q, ожидался reader", own.UploadedBy)
+	}
+
+	// Чужой кадр: запись другого автора, файла для проверки прав не нужно.
+	foreign, err := env.st.CreatePhoto(context.Background(), store.Photo{
+		Name: "Чужой кадр", URL: "/photos/p0123456789abcdef.webp", Album: "misc",
+		Width: 100, Height: 100, UploadedBy: "someone",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	remove := func(id int64) *http.Response {
+		res, err := noRedirect.PostForm(env.ts.URL+"/vault/album/delete", map[string][]string{
+			"csrf": {"test-csrf"}, "id": {itoa(id)},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		return res
+	}
+
+	if res := remove(foreign.ID); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("чужой кадр: статус %d, ожидался 403", res.StatusCode)
+	}
+	if _, err := env.st.PhotoByID(context.Background(), foreign.ID); err != nil {
+		t.Fatalf("чужой кадр пропал из базы: %v", err)
+	}
+
+	// Страница: кнопка только у своего кадра, у чужого подсказка.
+	res, body := get(t, env.ts.URL+"/vault/album")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("страница альбома: статус %d", res.StatusCode)
+	}
+	if got := strings.Count(string(body), "/vault/album/delete"); got != 1 {
+		t.Fatalf("форм удаления %d, ожидалась одна (свой кадр)", got)
+	}
+	if !strings.Contains(string(body), "чужой кадр: удаляет автор или админ") {
+		t.Fatal("нет подсказки про чужой кадр")
+	}
+
+	// Свой кадр убираем: запись и файл.
+	path := filepath.Join(env.photosDir, filepath.Base(own.URL))
+	if res := remove(own.ID); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("свой кадр: статус %d, ожидался 303", res.StatusCode)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("файл своего кадра остался: %v", err)
+	}
+	if got := countPhotos(t, env); got != 38 {
+		t.Fatalf("снимков %d, ожидалось 38 (засев 37 + чужой)", got)
 	}
 }
 
@@ -205,7 +287,7 @@ func TestUploadResizesToWebP(t *testing.T) {
 	env := testServer(t)
 
 	res, page := upload(t, env, map[string]string{
-		"csrf": "test-csrf", "name": "Широкий кадр", "album": "travel",
+		"csrf": "test-csrf", "name": "Широкий кадр", "album": "music",
 	}, "wide.png", pngFile(t, 2400, 1200))
 	if res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("статус %d, ожидался 303:\n%s", res.StatusCode, page)
@@ -217,7 +299,7 @@ func TestUploadResizesToWebP(t *testing.T) {
 	}
 	photo := photos[len(photos)-1]
 
-	if photo.Name != "Широкий кадр" || photo.Album != "travel" || photo.UploadedBy != "tester" {
+	if photo.Name != "Широкий кадр" || photo.Album != "music" || photo.UploadedBy != "tester" {
 		t.Fatalf("запись %+v", photo)
 	}
 	if photo.Width != 1600 || photo.Height != 800 {
@@ -278,17 +360,20 @@ func TestUploadKeepsGIF(t *testing.T) {
 	}
 }
 
-// TestUploadRejectsBadAlbum: раздел проверяется по слагу.
-func TestUploadRejectsBadAlbum(t *testing.T) {
+// TestUploadRejectsUnknownSection: раздел только из фиксированного списка,
+// придумать свой нельзя, даже если слаг по форме правильный.
+func TestUploadRejectsUnknownSection(t *testing.T) {
 	env := testServer(t)
 	before := countPhotos(t, env)
 
-	_, page := upload(t, env, map[string]string{
-		"csrf": "test-csrf", "name": "Кадр", "album": "Мой Раздел!",
-	}, "pic.png", pngFile(t, 20, 20))
+	for _, album := range []string{"Мой Раздел!", "travel"} {
+		_, page := upload(t, env, map[string]string{
+			"csrf": "test-csrf", "name": "Кадр", "album": album,
+		}, "pic.png", pngFile(t, 20, 20))
 
-	if !strings.Contains(string(page), "раздел") {
-		t.Fatalf("нет сообщения про раздел:\n%s", page)
+		if !strings.Contains(string(page), "раздел: выбери из списка") {
+			t.Fatalf("%q: нет сообщения про раздел:\n%s", album, page)
+		}
 	}
 	if got := countPhotos(t, env); got != before {
 		t.Fatalf("снимков стало %d, было %d", got, before)
@@ -383,4 +468,136 @@ func itoa(n int64) string {
 		n /= 10
 	}
 	return string(digits)
+}
+
+// gifFile однотонный GIF заданного размера: проверяем потолок стороны.
+func gifFile(t *testing.T, w, h int) []byte {
+	t.Helper()
+
+	img := image.NewPaletted(image.Rect(0, 0, w, h), color.Palette{color.Black, color.White})
+	var buf bytes.Buffer
+	if err := gif.Encode(&buf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestUploadRejectsBigGIF: анимацию не ужать, поэтому слишком широкий GIF
+// не принимается, а не тихо ложится на диск.
+func TestUploadRejectsBigGIF(t *testing.T) {
+	env := testServer(t)
+
+	res, page := upload(t, env, map[string]string{
+		"csrf": "test-csrf", "name": "Широкая анимация", "album": "mascots",
+	}, "wide.gif", gifFile(t, 1800, 100))
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("статус %d, ожидалась страница с ошибкой:\n%s", res.StatusCode, page)
+	}
+	if !strings.Contains(string(page), "GIF не ужимается") {
+		t.Fatalf("нет объяснения про GIF:\n%s", page)
+	}
+	if got := countPhotos(t, env); got != 37 {
+		t.Fatalf("снимков %d, ожидалось 37", got)
+	}
+	if entries, err := os.ReadDir(env.photosDir); err != nil || len(entries) != 0 {
+		t.Fatalf("в каталоге загрузок мусор: %v, %v", entries, err)
+	}
+}
+
+// TestUploadRejectsHugeSide: сторона проверяется по заголовку до декодирования,
+// поэтому заведомо гигантский PNG отсекается, не съедая память.
+func TestUploadRejectsHugeSide(t *testing.T) {
+	env := testServer(t)
+
+	res, page := upload(t, env, map[string]string{
+		"csrf": "test-csrf", "name": "Панорама", "album": "misc",
+	}, "wide.png", pngFile(t, 13000, 10))
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("статус %d, ожидалась страница с ошибкой:\n%s", res.StatusCode, page)
+	}
+	if !strings.Contains(string(page), "картинка слишком большая") {
+		t.Fatalf("нет объяснения про размер:\n%s", page)
+	}
+	if got := countPhotos(t, env); got != 37 {
+		t.Fatalf("снимков %d, ожидалось 37", got)
+	}
+}
+
+// TestUploadsInParallel: одновременные загрузки проходят все, семафор не
+// теряет слоты и не залипает, файлы и записи не мешают друг другу.
+func TestUploadsInParallel(t *testing.T) {
+	env := testServer(t)
+	const workers = 4
+
+	png := pngFile(t, 600, 400)
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			var body bytes.Buffer
+			w := multipart.NewWriter(&body)
+			fields := map[string]string{
+				"csrf": "test-csrf", "name": "Параллельный " + itoa(int64(i)), "album": "misc",
+			}
+			for name, value := range fields {
+				if err := w.WriteField(name, value); err != nil {
+					errs <- err
+					return
+				}
+			}
+			part, err := w.CreateFormFile("photo", "par.png")
+			if err != nil {
+				errs <- err
+				return
+			}
+			if _, err := part.Write(png); err != nil {
+				errs <- err
+				return
+			}
+			if err := w.Close(); err != nil {
+				errs <- err
+				return
+			}
+
+			req, err := http.NewRequest("POST", env.ts.URL+"/vault/album", &body)
+			if err != nil {
+				errs <- err
+				return
+			}
+			req.Header.Set("Content-Type", w.FormDataContentType())
+
+			res, err := noRedirect.Do(req)
+			if err != nil {
+				errs <- err
+				return
+			}
+			page, _ := io.ReadAll(res.Body)
+			_ = res.Body.Close()
+			if res.StatusCode != http.StatusSeeOther {
+				errs <- fmt.Errorf("загрузка %d: статус %d\n%s", i, res.StatusCode, page)
+				return
+			}
+			errs <- nil
+		}(i)
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got := countPhotos(t, env); got != 37+workers {
+		t.Fatalf("снимков %d, ожидалось %d", got, 37+workers)
+	}
+	// Файлов ровно столько же, сколько записей: слоты освободились, мусора нет.
+	if entries, err := os.ReadDir(env.photosDir); err != nil || len(entries) != workers {
+		t.Fatalf("файлов на диске %d (%v), ожидалось %d", len(entries), err, workers)
+	}
 }

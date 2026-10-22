@@ -114,13 +114,15 @@ func run() error {
 	}
 
 	authServer, err := auth.New(auth.Config{
-		Users:      st,
-		Sessions:   st,
-		AvatarsDir: filepath.Join(dataDir, "avatars"),
-		OutboxDir:  filepath.Join(dataDir, "outbox"),
-		BaseURL:    baseURL,
-		Log:        logger,
-		Throttle:   limits,
+		Users:         st,
+		Sessions:      st,
+		AvatarsDir:    filepath.Join(dataDir, "avatars"),
+		OutboxDir:     filepath.Join(dataDir, "outbox"),
+		BaseURL:       baseURL,
+		Log:           logger,
+		Throttle:      limits,
+		AdminLogin:    os.Getenv("ADMIN_LOGIN"),
+		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 		SMTP: auth.SMTPConfig{
 			Provider: os.Getenv("SMTP_PROVIDER"),
 			Host:     os.Getenv("SMTP_HOST"),

@@ -2,9 +2,12 @@ import type { Availability, CriterionDefinition, FilterState } from "./criteria.
 import type { Photo } from "./model.js";
 
 function matches(photo: Photo, state: FilterState, criteria: readonly CriterionDefinition[]): boolean {
-  return criteria.every(({ key, valueOf }) => {
+  return criteria.every(({ key, valuesOf }) => {
     const selected = state[key as keyof FilterState] ?? [];
-    return selected.length === 0 || selected.includes(valueOf(photo));
+    if (selected.length === 0) return true;
+
+    const values = valuesOf(photo);
+    return selected.some((value) => values.includes(value));
   });
 }
 

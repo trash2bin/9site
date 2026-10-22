@@ -100,3 +100,24 @@
 .admin-meta .tool-btn {
   margin-top: 4px;
 }
+
+/* Теги в форме: галочки списком из базы, без свободного ввода для юзера. */
+.admin-tag-pick {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--bevel-d);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.admin-tag-pick legend {
+  padding: 0 0.3rem;
+}
+
+.admin-tag {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+}

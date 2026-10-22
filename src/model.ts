@@ -1,4 +1,6 @@
-/** Запись фотоальбома: сервер отдаёт готовый путь к файлу в поле url. */
+/** Форма кадра и раздела приходит из OpenAPI: src/api-types.d.ts, npm run api:gen. */
+
+import type { components } from "./api-types.js";
 
 export const TYPE_OPTIONS = [
   { value: "photo", label: "фото" },
@@ -12,28 +14,11 @@ export const ORIENTATION_OPTIONS = [
   { value: "tall", label: "высокое" },
 ] as const;
 
-/** Подписи разделов: список разделов приходит из базы, подписи живут здесь. */
-const ALBUM_LABELS: Record<string, string> = {
-  gadgets: "техника",
-  garage: "гараж",
-  mascots: "tux",
-  music: "музыка",
-  misc: "прочее",
-};
-
-/** Новый раздел без подписи показывается своим слагом, а не пропадает. */
-export function albumLabel(slug: string): string {
-  return ALBUM_LABELS[slug] ?? slug;
-}
+/** Раздел альбома: слаг и подпись. Список фиксирован в album.Sections на сервере. */
+export type Album = components["schemas"]["Section"];
 
 export type FileType = (typeof TYPE_OPTIONS)[number]["value"];
 export type Orientation = (typeof ORIENTATION_OPTIONS)[number]["value"];
 
-export interface Photo {
-  name: string;
-  /** Путь от корня сайта: /assets/img/x.jpg или /photos/p...webp. */
-  url: string;
-  album: string;
-  width: number;
-  height: number;
-}
+/** Запись альбома: url это путь от корня сайта, author у засева system. */
+export type Photo = components["schemas"]["Photo"];

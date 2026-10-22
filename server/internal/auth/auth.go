@@ -55,6 +55,11 @@ type Users interface {
 	UpdateProfile(ctx context.Context, id int64, fullName, email string) error
 	UpdatePassword(ctx context.Context, id int64, passHash string) error
 	UpdateAvatar(ctx context.Context, id int64, name string) error
+	EnsureAdmin(ctx context.Context, login, passHash string) (bool, error)
+	SetUserRole(ctx context.Context, login, role string) error
+	ListUsers(ctx context.Context, limit, offset int) ([]User, error)
+	CountUsers(ctx context.Context) (int, error)
+	AdminCount(ctx context.Context) (int, error)
 }
 
 // Sessions шов подмены хранилища: ConsumeResetToken атомарен, DeleteUserSessions гасит все cookie при смене пароля.
@@ -103,6 +108,11 @@ type Config struct {
 	BaseURL string
 	Log     *logging.Logger
 	SMTP    SMTPConfig
+	// AdminLogin и AdminPassword секретный админ из окружения: на каждом
+	// старте аккаунт создаётся или ему обновляются роль и пароль. Пусто
+	// в обоих полях означает «админа из env нет».
+	AdminLogin    string
+	AdminPassword string
 }
 
 // Server всё состояние модуля авторизации.
@@ -160,6 +170,10 @@ func New(cfg Config) (*Server, error) {
 	}
 	s.mailer = s.buildMailer()
 
+	if err := s.bootstrapAdmin(); err != nil {
+		return nil, err
+	}
+
 	if s.cfg.SMTP.Configured() {
 		provider := s.cfg.SMTP.Provider
 		if provider == "" {
@@ -184,6 +198,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /studio", s.handleStudio)
 	mux.HandleFunc("GET /studio/{$}", s.handleStudio)
 	mux.HandleFunc("GET /vault", s.handleVault)
+	mux.Handle("GET /vault/users", s.RequireAdmin(http.HandlerFunc(s.handleUsers)))
+	mux.Handle("POST /vault/users/role", s.RequireAdmin(http.HandlerFunc(s.handleUserRole)))
 	mux.Handle("POST /auth/register", s.throttled(BudgetRegister, "register",
 		"слишком много попыток регистрации: подождите несколько минут", s.handleRegister))
 	mux.Handle("POST /auth/login", s.throttled(BudgetLogin, "login",

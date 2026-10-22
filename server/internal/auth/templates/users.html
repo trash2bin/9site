@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Ivan's Little Web - пользователи</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <img class="header-tux" src="/assets/img/tux-winflag.gif" width="88" height="83" alt="Tux держит стражу" />
+        <p class="eyebrow">~ закрытый раздел // права пользователей ~</p>
+        <h1>USERS</h1>
+        <p class="tagline">привет, {{.Login}} // админов в базе: {{.Admins}}</p>
+      </header>
+
+      <nav class="site-nav" aria-label="Основная навигация">
+        <strong>MENU:</strong>
+        <a href="/vault">vault</a><span class="sep">|</span> <a href="/vault/album">альбом</a><span class="sep">|</span>
+        <a href="/studio">studio</a><span class="sep">|</span> <a href="/">главная</a>
+      </nav>
+
+      <main id="content">
+        <section class="panel">
+          <h2>★ кто есть в базе</h2>
+
+          {{if .Error}}<p class="auth-flash auth-flash-error" role="alert">{{.Error}}</p>{{end}}
+          {{if .Message}}<p class="auth-flash auth-flash-ok" role="status">{{.Message}}</p>{{end}}
+
+          <p class="catalog-intro">
+            user грузит кадры в общий альбом и удаляет свои, admin удаляет любые. Снять админа с последнего аккаунта
+            нельзя.
+          </p>
+
+          {{if not .Users}}<p class="catalog-empty">[ пусто ]</p>{{end}}
+
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th scope="col">логин</th>
+                <th scope="col">имя</th>
+                <th scope="col">почта</th>
+                <th scope="col">роль</th>
+                <th scope="col">действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Users}}
+              <tr>
+                <td>{{.Login}}</td>
+                <td>{{if .FullName}}{{.FullName}}{{else}}[ нет ]{{end}}</td>
+                <td>{{if .Email}}{{.Email}}{{else}}[ нет ]{{end}}</td>
+                <td class="users-role users-role-{{.Role}}">{{.Role}}</td>
+                <td>
+                  <form method="post" action="/vault/users/role">
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}" />
+                    <input type="hidden" name="login" value="{{.Login}}" />
+                    <input type="hidden" name="page" value="{{$.Page}}" />
+                    {{if .IsAdmin}}
+                    <input type="hidden" name="role" value="user" />
+                    <button type="submit" class="tool-btn">снять админа</button>
+                    {{else}}
+                    <input type="hidden" name="role" value="admin" />
+                    <button type="submit" class="tool-btn">сделать админом</button>
+                    {{end}}
+                  </form>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+          <nav class="users-pager" aria-label="Страницы списка">
+            {{if .Prev}}<a class="tool-btn" href="/vault/users?page={{.Prev}}">← назад</a>{{end}}
+            <span>страница {{.Page}} из {{.Pages}} · всего аккаунтов: {{.Total}}</span>
+            {{if .Next}}<a class="tool-btn" href="/vault/users?page={{.Next}}">вперёд →</a>{{end}}
+          </nav>
+        </section>
+
+        <p class="auth-actions">
+          <a class="tool-btn" href="/vault">← в vault</a>
+        </p>
+      </main>
+
+      <footer class="site-footer">
+        <p>© 2077 Ivan223 · <a href="/">на главную</a></p>
+      </footer>
+    </div>
+  </body>
+</html>

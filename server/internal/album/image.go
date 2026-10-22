@@ -3,6 +3,7 @@ package album
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/gif"
 	_ "image/jpeg"
@@ -17,8 +18,23 @@ import (
 // maxSide длинная сторона сохраняемого кадра: больше не нужно ни экрану, ни трафику.
 const maxSide = 1600
 
+// Пределы присланной картинки, проверяются по заголовку до декодирования:
+// иначе 5 МБ PNG-бомбы развернулись бы в гигабайты памяти ещё до ресайза.
+const (
+	maxUploadSide   = 12000
+	maxUploadPixels = 60_000_000
+)
+
 // errNotImage файл не подходит по содержимому: текст уходит в форму.
 var errNotImage = errors.New("нужен файл png, jpeg или gif")
+
+// errTooBig картинка больше предела декодирования.
+var errTooBig = fmt.Errorf("картинка слишком большая: до %d px по стороне и %d Мпикс",
+	maxUploadSide, maxUploadPixels/1_000_000)
+
+// errGifTooBig анимацию не ужать, поэтому большой GIF просто не принимается.
+var errGifTooBig = fmt.Errorf("GIF не ужимается: длинная сторона до %d px, ужми кадр перед загрузкой",
+	maxSide)
 
 // encoded готовый к записи файл: байты, расширение и размеры итогового кадра.
 type encoded struct {
@@ -31,13 +47,30 @@ type encoded struct {
 // prepareImage проверяет картинку по содержимому и готовит файл для диска:
 // GIF остаётся собой (иначе умрёт анимация), PNG и JPEG ужимаются в WebP.
 func prepareImage(raw []byte) (*encoded, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return nil, errNotImage
+	}
+	if cfg.Width > maxUploadSide || cfg.Height > maxUploadSide ||
+		int64(cfg.Width)*int64(cfg.Height) > maxUploadPixels {
+		return nil, errTooBig
+	}
+
 	switch http.DetectContentType(raw) {
 	case "image/gif":
-		cfg, err := gif.DecodeConfig(bytes.NewReader(raw))
+		// Анимация уходит на диск байт в байт, поэтому кадр проверяется
+		// тем же потолком, что и ужатые: иначе браузер декодировал бы
+		// полотно в разы больше экрана.
+		if max(cfg.Width, cfg.Height) > maxSide {
+			return nil, errGifTooBig
+		}
+		// Заголовок валиден ещё не значит, что кадры читаются: битая
+		// анимация иначе доедет до витрины целиком.
+		frames, err := gif.DecodeAll(bytes.NewReader(raw))
 		if err != nil {
 			return nil, errNotImage
 		}
-		return &encoded{data: raw, ext: "gif", width: cfg.Width, height: cfg.Height}, nil
+		return &encoded{data: raw, ext: "gif", width: frames.Config.Width, height: frames.Config.Height}, nil
 
 	case "image/png", "image/jpeg":
 		img, _, err := image.Decode(bytes.NewReader(raw))

@@ -29,6 +29,7 @@ type User struct {
 	FullName string
 	Email    string
 	Avatar   string
+	Role     string // RoleAdmin или RoleUser
 }
 
 // Session - активная сессия: кто вошёл, чем подписаны формы и до какого

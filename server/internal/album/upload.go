@@ -1,6 +1,7 @@
 package album
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -12,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ivan223/web1-personal-site/server/internal/api"
 )
 
 const (
@@ -21,10 +24,90 @@ const (
 	maxBody = maxPhoto + 1<<20
 	// maxName длина подписи кадра.
 	maxName = 100
+	// maxTags сколько тегов вешается на кадр.
+	maxTags = 5
 )
 
-// albumSlug вид раздела: строчная латиница, цифры и дефис.
-var albumSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{1,29}$`)
+// tagSlug вид тега: короче раздела, чтобы метка влезала в карточку.
+var tagSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{1,19}$`)
+
+// Ошибки поля «теги»: показываются в форме, наружу не уходят.
+var (
+	errBadTag   = errors.New("тег: строчная латиница, цифры и дефис, 2-20 символов")
+	errManyTags = fmt.Errorf("тегов не больше %d", maxTags)
+	errNewTag   = errors.New("новый тег заводит админ: выбери из списка")
+)
+
+// parseTags разбирает поле «теги» и проверяет права на новые: строки в tags
+// пишет attachTags, уже после успешной записи кадра, иначе отказ файла
+// оставлял бы в базе тег, которого нет ни на одной карточке.
+func (s *Server) parseTags(ctx context.Context, spec string, admin bool) ([]string, error) {
+	slugs, err := splitTags(spec)
+	if err != nil || len(slugs) == 0 {
+		return nil, err
+	}
+
+	known, err := s.store.Tags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	knownSet := make(map[string]bool, len(known))
+	for _, slug := range known {
+		knownSet[slug] = true
+	}
+
+	for _, slug := range slugs {
+		if !knownSet[slug] && !admin {
+			return nil, errNewTag
+		}
+	}
+	return slugs, nil
+}
+
+// attachTags заводит недостающие теги и вешает их на кадр: к этому моменту
+// права проверены, файл и запись уже есть.
+func (s *Server) attachTags(ctx context.Context, photoID int64, slugs []string) error {
+	for _, slug := range slugs {
+		if _, err := s.store.EnsureTag(ctx, slug); err != nil {
+			return err
+		}
+	}
+	return s.store.AttachTags(ctx, photoID, slugs)
+}
+
+// splitTags разбирает список через запятую: пустые и повторы пропускаются.
+func splitTags(spec string) ([]string, error) {
+	var out []string
+	seen := make(map[string]bool)
+	for _, raw := range strings.Split(spec, ",") {
+		slug := strings.ToLower(strings.TrimSpace(raw))
+		if slug == "" || seen[slug] {
+			continue
+		}
+		if !tagSlug.MatchString(slug) {
+			return nil, errBadTag
+		}
+		if len(out) == maxTags {
+			return nil, errManyTags
+		}
+		seen[slug] = true
+		out = append(out, slug)
+	}
+	return out, nil
+}
+
+// acquireDecode занимает слот подготовки кадра; отмена запроса отпускает ожидание.
+func (s *Server) acquireDecode(ctx context.Context) error {
+	select {
+	case s.decode <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// releaseDecode освобождает слот: вызывается через defer сразу после acquire.
+func (s *Server) releaseDecode() { <-s.decode }
 
 // readImage берёт файл из формы и готовит его к записи.
 func readImage(r *http.Request) (*encoded, error) {
@@ -67,7 +150,7 @@ func (s *Server) saveImage(img *encoded) (string, error) {
 
 // removeImageFile убирает файл загрузки; засев лежит в статике, его не трогаем.
 func (s *Server) removeImageFile(url string) {
-	if !strings.HasPrefix(url, "/photos/") {
+	if !strings.HasPrefix(url, api.FilesPath) {
 		return
 	}
 	name := filepath.Base(url)

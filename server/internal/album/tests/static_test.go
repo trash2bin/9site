@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ivan223/web1-personal-site/server/internal/api"
 )
 
 // writePhoto кладёт файл в каталог загрузок, как это делает обработчик.
@@ -23,7 +25,7 @@ func TestPhotoFile(t *testing.T) {
 	const webp = "p0123456789abcdef.webp"
 	writePhoto(t, env.photosDir, webp, []byte("RIFFxxxxWEBPVP8 "))
 
-	res, body := get(t, env.ts.URL+"/photos/"+webp)
+	res, body := get(t, env.ts.URL+api.FilesPath+webp)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("статус %d", res.StatusCode)
 	}
@@ -42,7 +44,7 @@ func TestPhotoFile(t *testing.T) {
 
 	const gif = "p0000000000000001.gif"
 	writePhoto(t, env.photosDir, gif, []byte("GIF89a"))
-	if res, _ := get(t, env.ts.URL+"/photos/"+gif); res.StatusCode != http.StatusOK {
+	if res, _ := get(t, env.ts.URL+api.FilesPath+gif); res.StatusCode != http.StatusOK {
 		t.Fatalf("gif: статус %d", res.StatusCode)
 	} else if got := res.Header.Get("Content-Type"); got != "image/gif" {
 		t.Fatalf("gif: Content-Type %q", got)
@@ -61,12 +63,12 @@ func TestPhotoFileRejectsForeignNames(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"/photos/",
-		"/photos/site.db",
-		"/photos/p0123456789abcdef.png",
-		"/photos/p0123456789abcde.webp",
-		"/photos/..%2Fsite.db",
-		"/photos/p0123456789abcdef.webp/",
+		api.FilesPath,
+		api.FilesPath + "site.db",
+		api.FilesPath + "p0123456789abcdef.png",
+		api.FilesPath + "p0123456789abcde.webp",
+		api.FilesPath + "..%2Fsite.db",
+		api.FilesPath + "p0123456789abcdef.webp/",
 	} {
 		if res, _ := get(t, env.ts.URL+path); res.StatusCode != http.StatusNotFound {
 			t.Fatalf("%s: статус %d, ожидался 404", path, res.StatusCode)

@@ -24,6 +24,7 @@ type testEnv struct {
 type fakeAccess struct {
 	guest bool // Require уводит на вход
 	csrf  bool // CSRFOK отвергает подпись
+	admin bool // IsAdmin: чужие кадры удаляет только админ
 	login string
 }
 
@@ -39,6 +40,8 @@ func (a fakeAccess) Require(next http.Handler) http.Handler {
 
 func (a fakeAccess) Login(*http.Request) string { return a.login }
 
+func (a fakeAccess) IsAdmin(*http.Request) bool { return a.admin }
+
 func (a fakeAccess) CSRFToken(http.ResponseWriter, *http.Request) string { return "test-csrf" }
 
 func (a fakeAccess) CSRFOK(*http.Request) bool { return a.csrf }
@@ -50,7 +53,7 @@ func (fakeThrottle) Middleware(_ string, _, next http.Handler) http.Handler { re
 
 func testServer(t *testing.T) *testEnv {
 	t.Helper()
-	return testServerWith(t, fakeAccess{csrf: true, login: "tester"})
+	return testServerWith(t, fakeAccess{csrf: true, admin: true, login: "tester"})
 }
 
 func testServerWith(t *testing.T, access album.Access) *testEnv {

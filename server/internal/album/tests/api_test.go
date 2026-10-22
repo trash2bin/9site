@@ -4,28 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/ivan223/web1-personal-site/server/internal/store"
+
+	"github.com/ivan223/web1-personal-site/server/internal/api"
 )
 
 // apiResponse форма ответа витрины.
 type apiResponse struct {
 	Photos []struct {
-		Name   string `json:"name"`
-		URL    string `json:"url"`
-		Album  string `json:"album"`
-		Width  int    `json:"width"`
-		Height int    `json:"height"`
+		Name   string   `json:"name"`
+		URL    string   `json:"url"`
+		Album  string   `json:"album"`
+		Width  int      `json:"width"`
+		Height int      `json:"height"`
+		Author string   `json:"author"`
+		Tags   []string `json:"tags"`
 	} `json:"photos"`
-	Albums []string `json:"albums"`
+	Albums []struct {
+		Slug  string `json:"slug"`
+		Label string `json:"label"`
+	} `json:"albums"`
+	Tags []string `json:"tags"`
 }
 
 // TestPhotosAPI: витрина получает засев из базы и не кэшируется браузером.
 func TestPhotosAPI(t *testing.T) {
 	env := testServer(t)
 
-	res, body := get(t, env.ts.URL+"/api/photos")
+	res, body := get(t, env.ts.URL+api.PhotosPath)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("статус %d\n%s", res.StatusCode, body)
 	}
@@ -49,7 +58,13 @@ func TestPhotosAPI(t *testing.T) {
 		first.Album != "gadgets" || first.Width != 1600 || first.Height != 1200 {
 		t.Fatalf("первый снимок %+v", first)
 	}
-	if len(data.Albums) != 5 || data.Albums[0] != "gadgets" {
+	if len(first.Tags) != 0 || len(data.Tags) != 0 {
+		t.Fatalf("у засева не должно быть тегов: кадр %v, список %v", first.Tags, data.Tags)
+	}
+	if first.Author != "system" {
+		t.Fatalf("автор засева %q, ожидался system", first.Author)
+	}
+	if len(data.Albums) != 5 || data.Albums[0].Slug != "gadgets" || data.Albums[0].Label != "техника" {
 		t.Fatalf("разделы %v", data.Albums)
 	}
 }
@@ -60,30 +75,32 @@ func TestPhotosAPIAfterUpload(t *testing.T) {
 	env := testServer(t)
 
 	if _, err := env.st.CreatePhoto(context.Background(), store.Photo{
-		Name: "Свежий кадр", URL: "/photos/p0123456789abcdef.webp",
-		Album: "travel", Width: 1200, Height: 1600, UploadedBy: "tester",
+		Name: "Свежий кадр", URL: api.FilesPath + "p0123456789abcdef.webp",
+		Album: "music", Width: 1200, Height: 1600, UploadedBy: "tester",
 	}); err != nil {
 		t.Fatalf("CreatePhoto: %v", err)
 	}
 
-	_, body := get(t, env.ts.URL+"/api/photos")
+	_, body := get(t, env.ts.URL+api.PhotosPath)
 	var data apiResponse
 	if err := json.Unmarshal(body, &data); err != nil {
 		t.Fatalf("ответ не JSON: %v", err)
 	}
 
 	last := data.Photos[len(data.Photos)-1]
-	if last.Name != "Свежий кадр" || last.URL != "/photos/p0123456789abcdef.webp" || last.Album != "travel" {
+	if last.Name != "Свежий кадр" || last.URL != "/photos/p0123456789abcdef.webp" || last.Album != "music" {
 		t.Fatalf("последний снимок %+v", last)
 	}
-
-	var found bool
-	for _, slug := range data.Albums {
-		if slug == "travel" {
-			found = true
-		}
+	if last.Author != "tester" {
+		t.Fatalf("автор загрузки %q, ожидался tester", last.Author)
 	}
-	if !found {
-		t.Fatalf("раздел travel не попал в список: %v", data.Albums)
+
+	// Разделы фиксированы: новая загрузка список не расширяет.
+	slugs := make([]string, 0, len(data.Albums))
+	for _, section := range data.Albums {
+		slugs = append(slugs, section.Slug)
+	}
+	if want := []string{"gadgets", "garage", "mascots", "music", "misc"}; !slices.Equal(slugs, want) {
+		t.Fatalf("разделы %v, ожидались %v", slugs, want)
 	}
 }

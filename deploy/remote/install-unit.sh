@@ -41,11 +41,28 @@ install -m 0644 "$incoming/9site.service" "$HOME/.config/systemd/user/9site.serv
 # The environment file belongs to the server: it carries the SMTP password and
 # whatever was set by hand, and a deploy that overwrote it would take both
 # away. The shipped file only seeds a server that has none; a difference is
-# printed, so a new key here is not silently missing there.
+# reported by key name, so a new key here is not silently missing there while
+# ADMIN_PASSWORD or SMTP_PASS stays out of the deploy log.
+env_keys() {
+  sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$1" | sort
+}
+
 if [ -f "$deploy_path/deploy.env" ]; then
   if ! diff -q "$incoming/deploy.env" "$deploy_path/deploy.env" >/dev/null; then
     echo "  $deploy_path/deploy.env differs from the repository, the server keeps its own:"
-    diff "$incoming/deploy.env" "$deploy_path/deploy.env" | sed 's/^/    /' || true
+    repo_keys="$(env_keys "$incoming/deploy.env")"
+    server_keys="$(env_keys "$deploy_path/deploy.env")"
+    repo_only="$(comm -23 <(printf '%s\n' "$repo_keys") <(printf '%s\n' "$server_keys") | tr '\n' ' ')"
+    server_only="$(comm -13 <(printf '%s\n' "$repo_keys") <(printf '%s\n' "$server_keys") | tr '\n' ' ')"
+    if [ -n "${repo_only// /}" ]; then
+      echo "    only in the repository: ${repo_only% }"
+    fi
+    if [ -n "${server_only// /}" ]; then
+      echo "    only on the server: ${server_only% }"
+    fi
+    if [ -z "${repo_only// /}" ] && [ -z "${server_only// /}" ]; then
+      echo "    same keys, different values: the values are not printed"
+    fi
   fi
 else
   install -m 0600 "$incoming/deploy.env" "$deploy_path/deploy.env"

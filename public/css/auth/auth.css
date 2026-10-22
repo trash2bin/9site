@@ -213,3 +213,49 @@ a.tool-btn {
     min-width: 0;
   }
 }
+
+/* Таблица прав: на узком экране прокручивается сама, страница не едет. */
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.users-table th,
+.users-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid #3a3a3a;
+  white-space: nowrap;
+}
+
+.users-table th {
+  color: #b9b9b9;
+  font-weight: 600;
+}
+
+.users-table form {
+  margin: 0;
+}
+
+.users-role-admin {
+  color: #ffd166;
+}
+
+.users-role-user {
+  color: #9fd3a3;
+}
+
+/* Пейджер списка: ссылки по краям, счётчик по центру. */
+.users-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.8rem 0 0;
+  font-size: 0.85rem;
+  color: #b9b9b9;
+}

@@ -25,7 +25,7 @@ async function init(): Promise<void> {
   try {
     const data = await loadPhotos();
     photos = data.photos;
-    criteria = criteriaFor(data.albums);
+    criteria = criteriaFor(data.albums, data.tags);
   } catch (error) {
     // Пустая сетка выглядела бы как «ничего не нашлось», поэтому текст другой.
     console.error(error);
@@ -35,7 +35,9 @@ async function init(): Promise<void> {
 
   const stats = document.querySelector(ALBUM_STATS);
   if (stats) {
-    stats.textContent = `★ ${photos.length} СНИМКОВ ★ ${criteria[0].options.length} РАЗДЕЛОВ ★ 3 ТИПА ★ 3 ОРИЕНТАЦИИ ★`;
+    const tags = criteria.find((criterion) => criterion.key === "tag")?.options.length ?? 0;
+    const tagStats = tags > 0 ? ` ★ ${tags} ТЕГОВ` : "";
+    stats.textContent = `★ ${photos.length} СНИМКОВ ★ ${criteria[0].options.length} РАЗДЕЛОВ${tagStats} ★ 3 ТИПА ★ 3 ОРИЕНТАЦИИ ★`;
   }
 
   function refresh(): void {

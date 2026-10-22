@@ -11,30 +11,54 @@
   <body>
     <div class="site-shell">
       <header class="site-header">
-        <img class="header-tux" src="/assets/img/tux-sudorm.gif" width="150" height="135" alt="Tux удаляет всё" />
+        <img
+          class="header-tux"
+          src="/assets/img/tux-sudorm.gif"
+          width="150"
+          height="135"
+          alt="Tux удаляет всё"
+        />
         <p class="eyebrow">~ закрытый раздел // загрузка в фотоальбом ~</p>
         <h1>ALBUM UPLOAD</h1>
-        <p class="tagline">привет, {{.Login}} // сюда падают кадры с диска</p>
+        <p class="tagline">
+          привет, {{.Login}} // сюда падают кадры с диска{{if .Admin}} // права
+          админа{{end}}
+        </p>
       </header>
 
       <nav class="site-nav" aria-label="Основная навигация">
         <strong>MENU:</strong>
-        <a href="/catalog">альбом</a><span class="sep">|</span> <a href="/vault">vault</a><span class="sep">|</span>
-        <a href="/studio">studio</a><span class="sep">|</span> <a href="/">главная</a>
+        <a href="/catalog">альбом</a><span class="sep">|</span>
+        <a href="/vault">vault</a><span class="sep">|</span>
+        <a href="/studio">studio</a><span class="sep">|</span>
+        <a href="/">главная</a>
       </nav>
 
       <main id="content">
         <section class="panel">
           <h2>✿ новый кадр</h2>
 
-          {{if .Error}}<p class="admin-flash admin-flash-error" role="alert">{{.Error}}</p>{{end}}
-          {{if .Message}}<p class="admin-flash admin-flash-ok" role="status">{{.Message}}</p>{{end}}
+          {{if .Error}}
+          <p class="admin-flash admin-flash-error" role="alert">{{.Error}}</p>
+          {{end}} {{if .Message}}
+          <p class="admin-flash admin-flash-ok" role="status">{{.Message}}</p>
+          {{end}}
 
-          <form class="admin-form" method="post" action="/vault/album" enctype="multipart/form-data">
+          <form
+            class="admin-form"
+            method="post"
+            action="/vault/album"
+            enctype="multipart/form-data"
+          >
             <input type="hidden" name="csrf" value="{{.CSRF}}" />
             <label>
               файл
-              <input type="file" name="photo" accept="image/png,image/jpeg,image/gif" required />
+              <input
+                type="file"
+                name="photo"
+                accept="image/png,image/jpeg,image/gif"
+                required
+              />
             </label>
             <label>
               подпись
@@ -42,13 +66,37 @@
             </label>
             <label>
               раздел
-              <input type="text" name="album" list="albums" pattern="[a-z][a-z0-9\-]{1,29}" required />
+              <select name="album" required>
+                {{range .Sections}}<option value="{{.Slug}}">{{.Label}}</option>{{end}}
+              </select>
             </label>
-            <datalist id="albums">
-              {{range .Albums}}<option value="{{.}}"></option>{{end}}
-            </datalist>
-            <p class="catalog-hint">png и jpeg пересохраняются в webp, gif остаётся собой, длинная сторона до 1600 px</p>
-            <p class="catalog-hint">[ EXIF не читается: кадр с телефона может приехать боком ]</p>
+            {{if .Tags}}
+            <fieldset class="admin-tag-pick">
+              <legend>теги</legend>
+              {{range .Tags}}
+              <label class="admin-tag">
+                <input type="checkbox" name="tag" value="{{.}}" />
+                <span>#{{.}}</span>
+              </label>
+              {{end}}
+            </fieldset>
+            {{end}}
+            {{if .Admin}}
+            <label>
+              новые теги
+              <input type="text" name="tags" placeholder="retro, tux" />
+            </label>
+            {{end}}
+            <p class="catalog-hint">
+              png и jpeg пересохраняются в webp, gif остаётся собой; длинная
+              сторона до 1600 px, больший gif не примется
+            </p>
+            <p class="catalog-hint">
+              теги берутся из базы, до 5 на кадр; новый тег заводит админ
+            </p>
+            <p class="catalog-hint">
+              [ EXIF не читается: кадр с телефона может приехать боком ]
+            </p>
             <button type="submit" class="tool-btn">загрузить</button>
           </form>
         </section>
@@ -56,25 +104,62 @@
         <section class="panel" id="list">
           <h2>✿ в альбоме: {{len .Photos}}</h2>
 
-          {{if not .Photos}}<p class="catalog-empty">[ снимков нет, загрузи первый ]</p>{{end}}
+          {{if not .Photos}}
+          <p class="catalog-empty">[ снимков нет, загрузи первый ]</p>
+          {{end}}
 
           <div class="admin-list">
             {{range .Photos}}
             <article class="admin-item">
-              <img class="admin-thumb" src="{{.URL}}" alt="{{.Name}}" loading="lazy" decoding="async" />
+              <img
+                class="admin-thumb"
+                src="{{.URL}}"
+                alt="{{.Name}}"
+                loading="lazy"
+                decoding="async"
+              />
               <div class="admin-meta">
                 <p class="admin-name">{{.Name}}</p>
-                <p>{{.Album}} · {{.Width}}×{{.Height}}{{if .Bytes}} · {{.Bytes}} Б{{end}}</p>
-                <p>{{if .UploadedBy}}{{.UploadedBy}} · {{end}}{{.CreatedAt}}</p>
-                {{if .Uploaded}}
-                <form method="post" action="/vault/album/delete">
+                <p>
+                  {{.Album}} · {{.Width}}×{{.Height}}{{if .Bytes}} · {{.Bytes}}
+                  Б{{end}}
+                </p>
+                <p>{{if .UploadedBy}}{{.UploadedBy}}{{else}}system{{end}} · {{.CreatedAt}}</p>
+                {{if .Tags}}
+                <p class="admin-tags">{{range .Tags}}#{{.}} {{end}}</p>
+                {{end}}
+                {{if .Uploaded}} {{if or $.Admin (eq .UploadedBy $.Login)}}
+                <form
+                  method="post"
+                  action="/vault/album/delete"
+                  onsubmit="return confirm('удалить кадр из альбома?')"
+                >
                   <input type="hidden" name="csrf" value="{{$.CSRF}}" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button type="submit" class="tool-btn">удалить</button>
                 </form>
                 {{else}}
-                <p class="catalog-hint">[ засев из статики, файл не удаляется ]</p>
-                {{end}}
+                <p class="catalog-hint">
+                  [ чужой кадр: удаляет автор или админ ]
+                </p>
+                {{end}} {{else}} {{if $.Admin}}
+                <form
+                  method="post"
+                  action="/vault/album/delete"
+                  onsubmit="return confirm('убрать запись засева из альбома? файл в статике останется')"
+                >
+                  <input type="hidden" name="csrf" value="{{$.CSRF}}" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button type="submit" class="tool-btn">убрать запись</button>
+                </form>
+                <p class="catalog-hint">
+                  [ засев из статики: файл в public/ останется ]
+                </p>
+                {{else}}
+                <p class="catalog-hint">
+                  [ засев из статики, файл не удаляется ]
+                </p>
+                {{end}} {{end}}
               </div>
             </article>
             {{end}}

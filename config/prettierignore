@@ -37,3 +37,5 @@ js/
 # шаблоны Go: {{if}} внутри тега (условный open у <dialog>) Prettier не разбирает;
 # каталог один (auth/templates), поэтому паттерн без пути
 templates/
+api-types.ts
+openapi.json

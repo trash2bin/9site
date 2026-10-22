@@ -20,7 +20,11 @@ function escapeHtml(value: string): string {
 function photoCard(photo: Photo): string {
   return `<figure class="part-card photo-card">
       <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.name)}" loading="lazy" decoding="async" />
-      <figcaption data-file="${escapeHtml(photo.url)}">${escapeHtml(photo.name)}</figcaption>
+      <figcaption data-file="${escapeHtml(photo.url)}">
+        ${escapeHtml(photo.name)}
+        <span class="photo-author"> · ${escapeHtml(photo.author)}</span>
+        ${photo.tags.length ? `<span class="photo-tags">${photo.tags.map((tag) => `#${escapeHtml(tag)}`).join(" ")}</span>` : ""}
+      </figcaption>
     </figure>`;
 }
 
