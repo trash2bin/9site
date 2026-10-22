@@ -42,7 +42,9 @@
   border: 1px solid #d78383;
   color: #fff;
   background: #8d2525;
-  font: bold 20px/1 "Courier New", monospace;
+  font:
+    bold 20px/1 "Courier New",
+    monospace;
   cursor: pointer;
 }
 
