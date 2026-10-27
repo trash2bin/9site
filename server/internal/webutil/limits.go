@@ -134,7 +134,7 @@ func (l *Limits) Middleware(name string, over, next http.Handler) http.Handler {
 			secs = 1
 		}
 		w.Header().Set("Retry-After", strconv.Itoa(secs))
-		l.log.Warn("лимит частоты", "бюджет", name, "ip", key, "ждал", wait.Round(time.Second))
+		l.log.Warn("rate limit exceeded", "budget", name, "ip", key, "retry_after", wait.Round(time.Second))
 		over.ServeHTTP(w, r)
 	})
 }

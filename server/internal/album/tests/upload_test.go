@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
 
@@ -28,6 +29,15 @@ func countPhotos(t *testing.T, env *testEnv) int {
 		t.Fatal(err)
 	}
 	return len(photos)
+}
+
+func hasAction(entries []store.Entry, event, login string) bool {
+	for _, entry := range entries {
+		if entry.Event == event && entry.Login == login {
+			return true
+		}
+	}
+	return false
 }
 
 // pngFile однотонный PNG заданного размера: дешёвый вход для ресайза.
@@ -176,6 +186,10 @@ func TestUserDeletesOwnButNotForeign(t *testing.T) {
 	if own.UploadedBy != "reader" {
 		t.Fatalf("автор %q, ожидался reader", own.UploadedBy)
 	}
+	actions, err := env.st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
+	if err != nil || !hasAction(actions, logging.EventPhotoUploaded, "reader") {
+		t.Fatalf("загрузка не попала в журнал: %v %+v", err, actions)
+	}
 
 	// Чужой кадр: запись другого автора, файла для проверки прав не нужно.
 	foreign, err := env.st.CreatePhoto(context.Background(), store.Photo{
@@ -200,6 +214,10 @@ func TestUserDeletesOwnButNotForeign(t *testing.T) {
 	if res := remove(foreign.ID); res.StatusCode != http.StatusForbidden {
 		t.Fatalf("чужой кадр: статус %d, ожидался 403", res.StatusCode)
 	}
+	actions, err = env.st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
+	if err != nil || !hasAction(actions, logging.EventPhotoDeleteDenied, "reader") {
+		t.Fatalf("отказ удаления не попал в журнал: %v %+v", err, actions)
+	}
 	if _, err := env.st.PhotoByID(context.Background(), foreign.ID); err != nil {
 		t.Fatalf("чужой кадр пропал из базы: %v", err)
 	}
@@ -220,6 +238,10 @@ func TestUserDeletesOwnButNotForeign(t *testing.T) {
 	path := filepath.Join(env.photosDir, filepath.Base(own.URL))
 	if res := remove(own.ID); res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("свой кадр: статус %d, ожидался 303", res.StatusCode)
+	}
+	actions, err = env.st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
+	if err != nil || !hasAction(actions, logging.EventPhotoDeleted, "reader") {
+		t.Fatalf("удаление не попало в журнал: %v %+v", err, actions)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("файл своего кадра остался: %v", err)

@@ -48,6 +48,7 @@ func newAuth(t *testing.T, cfg func(*auth.Config)) error {
 	c := auth.Config{
 		Users:      st,
 		Sessions:   st,
+		Actions:    st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
 		Throttle:   testThrottle(t, 10),
@@ -302,11 +303,13 @@ func TestVaultLinksByRole(t *testing.T) {
 		return string(page)
 	}
 
-	if page := links(reader); !strings.Contains(page, "/vault/album") || strings.Contains(page, "/vault/users") {
+	if page := links(reader); !strings.Contains(page, "/vault/album") ||
+		strings.Contains(page, "/vault/users") || strings.Contains(page, "/vault/actions") {
 		t.Fatalf("vault обычного юзера:\n%s", page)
 	}
-	if page := links(adminClient(t, env)); !strings.Contains(page, "/vault/users") {
-		t.Fatalf("vault админа без ссылки на права:\n%s", page)
+	if page := links(adminClient(t, env)); !strings.Contains(page, "/vault/users") ||
+		!strings.Contains(page, "/vault/actions") {
+		t.Fatalf("vault админа без служебных ссылок:\n%s", page)
 	}
 }
 

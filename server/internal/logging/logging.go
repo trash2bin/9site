@@ -13,7 +13,7 @@ import (
 // ActionSink куда дублируются действия пользователей; реализация в main.
 type ActionSink interface {
 	// Action сохраняет одно действие; ошибка не должна ронять запрос.
-	Action(login, action, ip string) error
+	Action(Action) error
 }
 
 // Config настройки логгера.
@@ -44,7 +44,7 @@ func New(cfg Config) (*Logger, error) {
 	level := slog.LevelInfo
 	if cfg.Level != "" {
 		if err := level.UnmarshalText([]byte(strings.ToLower(cfg.Level))); err != nil {
-			return nil, fmt.Errorf("уровень лога %q: %w", cfg.Level, err)
+			return nil, fmt.Errorf("log level %q: %w", cfg.Level, err)
 		}
 	}
 
@@ -69,13 +69,19 @@ func (l *Logger) Error(msg string, args ...any) { l.base.Error(msg, args...) }
 
 // Action записывает действие в общий лог и дубль в журнал; ошибка журнала
 // не роняет запрос, она сама уходит в лог.
-func (l *Logger) Action(login, action, ip string) {
-	l.base.Info("действие", "login", login, "action", action, "ip", ip)
+func (l *Logger) Action(action Action) {
+	l.base.Info("user action",
+		"login", action.Login,
+		"event", action.Event,
+		"target", action.Target,
+		"result", action.Result,
+		"ip", action.IP,
+	)
 
 	if l.actions == nil {
 		return
 	}
-	if err := l.actions.Action(login, action, ip); err != nil {
-		l.base.Error("журнал действий: запись не сохранена", "err", err)
+	if err := l.actions.Action(action); err != nil {
+		l.base.Error("action journal write failed", "err", err)
 	}
 }

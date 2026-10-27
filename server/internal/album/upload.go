@@ -158,7 +158,7 @@ func (s *Server) removeImageFile(url string) {
 		return
 	}
 	if err := os.Remove(s.photosFile(name)); err != nil && !os.IsNotExist(err) {
-		s.log.Warn("альбом: файл не удалён", "name", name, "err", err)
+		s.log.Warn("photo file not deleted", "name", name, "err", err)
 	}
 }
 

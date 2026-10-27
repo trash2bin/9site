@@ -35,7 +35,7 @@ func main() {
 	// Отдельный run, а не os.Exit внутри main: defer обязан отработать
 	// даже на фатальной ошибке.
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "стоп:", err)
+		fmt.Fprintln(os.Stderr, "stop:", err)
 		os.Exit(1)
 	}
 }
@@ -75,9 +75,9 @@ func run() error {
 
 	// Импорт legacy-счётчика: без файла вызов безвреден и ничего не делает.
 	if imported, err := st.ImportVisits(context.Background(), counterPath()); err != nil {
-		logger.Warn("импорт счётчика не завершён", "err", err)
+		logger.Warn("counter import failed", "err", err)
 	} else if imported {
-		logger.Info("счётчик перенесён из visits.dat в site.db")
+		logger.Info("counter imported from visits.dat into site.db")
 	}
 
 	// BASE_URL обязателен абсолютный: без схемы проверка Origin у формы
@@ -110,12 +110,13 @@ func run() error {
 	slices.Sort(names)
 	for _, name := range names {
 		b := budgets[name]
-		logger.Info("лимит частоты", "бюджет", name, "лимит", b.Limit, "окно", b.Window)
+		logger.Info("rate limit", "budget", name, "limit", b.Limit, "window", b.Window)
 	}
 
 	authServer, err := auth.New(auth.Config{
 		Users:         st,
 		Sessions:      st,
+		Actions:       st,
 		AvatarsDir:    filepath.Join(dataDir, "avatars"),
 		OutboxDir:     filepath.Join(dataDir, "outbox"),
 		BaseURL:       baseURL,
@@ -177,11 +178,11 @@ func run() error {
 	mux.Handle("/healthz", healthz.Handler(version, store.Version()))
 
 	if checkOnly {
-		logger.Info("проверка старта пройдена: бинарник готов к рестарту")
+		logger.Info("startup check passed: binary is ready to restart")
 		return nil
 	}
 
-	logger.Info("Ivan's Little Web запущен", "addr", "http://localhost:8080")
+	logger.Info("Ivan's Little Web started", "addr", "http://localhost:8080")
 
 	// ReadTimeout/WriteTimeout не ставим специально: общий таймер оборвал бы
 	// и загрузку аватара, и отдачу статики на медленном канале.
@@ -200,7 +201,7 @@ func run() error {
 		return fmt.Errorf("слушатель: %w", err)
 	}
 	if err := sdnotify.Ready(); err != nil {
-		logger.Warn("sd_notify не ушёл менеджеру", "err", err)
+		logger.Warn("sd_notify failed", "err", err)
 	}
 	return srv.Serve(ln)
 }
@@ -213,12 +214,18 @@ type journal struct {
 	st *store.Store
 }
 
-func (j journal) Action(login, action, ip string) error {
+func (j journal) Action(action logging.Action) error {
 	// Действие уже случилось: обрыв соединения браузером не должен его
 	// отменить, поэтому контекст без отмены.
 	return j.st.Record(
 		context.WithoutCancel(context.Background()),
-		store.Action{Login: login, Action: action, IP: ip},
+		store.Action{
+			Login:  action.Login,
+			Event:  action.Event,
+			Target: action.Target,
+			Result: action.Result,
+			IP:     action.IP,
+		},
 	)
 }
 
@@ -247,7 +254,7 @@ func envInt(name string, fallback int, log *logging.Logger) int {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		log.Warn("переменная окружения не число", "name", name, "value", v, "fallback", fallback)
+		log.Warn("environment variable is not a number", "name", name, "value", v, "fallback", fallback)
 		return fallback
 	}
 	return n
@@ -263,8 +270,8 @@ func limitBudget(log *logging.Logger, name string, def webutil.Budget) webutil.B
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 1 {
-		log.Warn("лимит: переменная окружения не положительное число",
-			"переменная", env, "значение", v, "взят дефолт", def.Limit)
+		log.Warn("rate limit environment variable is not a positive number",
+			"variable", env, "value", v, "fallback", def.Limit)
 		return def
 	}
 	return webutil.Budget{Limit: n, Window: def.Window}

@@ -2,6 +2,7 @@
 package album_test
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,7 +67,7 @@ func testServerWith(t *testing.T, access album.Access) *testEnv {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	log, err := logging.New(logging.Config{Output: io.Discard})
+	log, err := logging.New(logging.Config{Output: io.Discard, Actions: storeActionSink{store: st}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,6 +90,17 @@ func testServerWith(t *testing.T, access album.Access) *testEnv {
 	t.Cleanup(ts.Close)
 
 	return &testEnv{ts: ts, st: st, photosDir: photosDir}
+}
+
+type storeActionSink struct {
+	store *store.Store
+}
+
+func (s storeActionSink) Action(action logging.Action) error {
+	return s.store.Record(context.Background(), store.Action{
+		Login: action.Login, Event: action.Event, Target: action.Target,
+		Result: action.Result, IP: action.IP,
+	})
 }
 
 // noRedirect клиент, который не ходит по редиректам: статус 303 проверяется как есть.

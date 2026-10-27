@@ -12,15 +12,15 @@ import (
 
 // fakeSink - журнал в памяти, fail имитирует поломку журнала.
 type fakeSink struct {
-	entries []string
+	entries []logging.Action
 	fail    bool
 }
 
-func (f *fakeSink) Action(login, action, ip string) error {
+func (f *fakeSink) Action(action logging.Action) error {
 	if f.fail {
-		return errors.New("журнал недоступен")
+		return errors.New("journal unavailable")
 	}
-	f.entries = append(f.entries, login+"/"+action+"/"+ip)
+	f.entries = append(f.entries, action)
 	return nil
 }
 
@@ -31,14 +31,17 @@ func TestActionToSink(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	log.Action("demo", "вход", "127.0.0.1")
-	log.Action("demo", "выход", "127.0.0.1")
+	log.Action(logging.Action{Login: "demo", Event: "login", Result: "success", IP: "127.0.0.1"})
+	log.Action(logging.Action{Login: "demo", Event: "logout", Result: "success", IP: "127.0.0.1"})
 
 	if len(sink.entries) != 2 {
 		t.Fatalf("в журнале %d записей, ждали 2", len(sink.entries))
 	}
-	if sink.entries[0] != "demo/вход/127.0.0.1" || sink.entries[1] != "demo/выход/127.0.0.1" {
+	if sink.entries[0].Event != "login" || sink.entries[1].Event != "logout" {
 		t.Fatalf("журнал не тот: %v", sink.entries)
+	}
+	if sink.entries[0].Login != "demo" || sink.entries[0].IP != "127.0.0.1" {
+		t.Fatalf("запись прочитана криво: %+v", sink.entries[0])
 	}
 }
 
@@ -49,9 +52,9 @@ func TestActionSinkError(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	log.Action("demo", "вход", "127.0.0.1")
+	log.Action(logging.Action{Login: "demo", Event: "login", Result: "success", IP: "127.0.0.1"})
 
-	if !strings.Contains(buf.String(), "запись не сохранена") {
+	if !strings.Contains(buf.String(), "action journal write failed") {
 		t.Fatalf("ошибка журнала не попала в лог:\n%s", buf.String())
 	}
 }
@@ -61,7 +64,7 @@ func TestActionWithoutSink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	log.Action("demo", "вход", "127.0.0.1")
+	log.Action(logging.Action{Login: "demo", Event: "login", Result: "success", IP: "127.0.0.1"})
 }
 
 func TestLevel(t *testing.T) {
@@ -70,7 +73,6 @@ func TestLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-
 	log.Debug("невидимая запись")
 	log.Info("видимая запись")
 
@@ -78,7 +80,7 @@ func TestLevel(t *testing.T) {
 	if strings.Contains(out, "невидимая") {
 		t.Fatalf("debug-запись прошла при уровне info:\n%s", out)
 	}
-	if !strings.Contains(out, "видимая запись") {
+	if !strings.Contains(out, "видимая") {
 		t.Fatalf("info-запись потерялась:\n%s", out)
 	}
 }

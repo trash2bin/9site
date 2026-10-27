@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
@@ -44,10 +45,14 @@ func (s *Server) bootstrapAdmin() error {
 	}
 
 	if created {
-		s.log.Info("админ из окружения создан", "login", login)
+		s.log.Info("admin account created from environment", "login", login)
 	} else {
-		s.log.Info("админ из окружения обновлён", "login", login)
+		s.log.Info("admin account updated from environment", "login", login)
 	}
+	s.log.Action(logging.Action{
+		Login: "system", Event: logging.EventAdminBootstrapped, Target: login,
+		Result: logging.ResultSuccess, IP: "local",
+	})
 	return nil
 }
 
@@ -133,7 +138,11 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.log.Action(s.Login(r), "роль "+login+": "+role, webutil.ClientIP(r))
+	s.log.Action(logging.Action{
+		Login: s.Login(r), Event: logging.EventRoleChanged,
+		Target: fmt.Sprintf("%s: %s -> %s", login, target.Role, role),
+		Result: logging.ResultSuccess, IP: webutil.ClientIP(r),
+	})
 	http.Redirect(w, r, fmt.Sprintf("/vault/users?ok=role&page=%d", page), http.StatusSeeOther)
 }
 
@@ -185,6 +194,6 @@ func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, data usersD
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := usersTemplate.Execute(w, data); err != nil {
-		s.log.Error("шаблон users", "err", err)
+		s.log.Error("users template failed", "err", err)
 	}
 }

@@ -155,7 +155,7 @@ func (s *Server) writeAvatar(u *User, data []byte, ext string) (string, error) {
 
 	if u.Avatar != "" && avatarName.MatchString(u.Avatar) {
 		if err := os.Remove(filepath.Join(s.avatarDir, u.Avatar)); err != nil {
-			s.log.Warn("прежний аватар не удалён", "err", err)
+			s.log.Warn("previous avatar not deleted", "err", err)
 		}
 	}
 

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Ivan's Little Web - action journal</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <img class="header-tux" src="/assets/img/tux-winflag.gif" width="88" height="83" alt="Tux guards the journal" />
+        <p class="eyebrow">~ private section // action journal ~</p>
+        <h1>ACTION JOURNAL</h1>
+        <p class="tagline">signed in as {{.Login}} // recorded actions: {{.Total}}</p>
+      </header>
+
+      <nav class="site-nav" aria-label="Main navigation">
+        <strong>MENU:</strong>
+        <a href="/vault">vault</a><span class="sep">|</span> <a href="/vault/album">album</a><span class="sep">|</span>
+        <a href="/vault/users">users</a><span class="sep">|</span> <a href="/studio">studio</a><span class="sep">|</span>
+        <a href="/">home</a>
+      </nav>
+
+      <main id="content">
+        <section class="panel">
+          <h2>★ recorded actions</h2>
+          <p class="catalog-intro">
+            Authentication, profile changes, role changes, photo operations and form submissions. Timestamps are UTC.
+          </p>
+
+          <form class="auth-form actions-filters" method="get" action="/vault/actions">
+            <label>Login contains<input name="login" value="{{.LoginFilter}}" autocomplete="off" /></label>
+            <label>
+              Event
+              <select name="event">
+                <option value="">All events</option>
+                {{range .EventNames}}
+                <option value="{{.}}" {{if eq $.EventFilter .}}selected{{end}}>{{.}}</option>
+                {{end}}
+              </select>
+            </label>
+            <label>
+              Result
+              <select name="result">
+                <option value="">All results</option>
+                <option value="success" {{if eq .ResultFilter "success"}}selected{{end}}>success</option>
+                <option value="failure" {{if eq .ResultFilter "failure"}}selected{{end}}>failure</option>
+              </select>
+            </label>
+            <button type="submit" class="tool-btn">filter</button>
+          </form>
+
+          {{if not .Entries}}<p class="catalog-empty">[ no matching actions ]</p>{{end}}
+
+          <table class="users-table actions-table">
+            <thead>
+              <tr>
+                <th scope="col">time</th>
+                <th scope="col">login</th>
+                <th scope="col">event</th>
+                <th scope="col">target</th>
+                <th scope="col">result</th>
+                <th scope="col">ip</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Entries}}
+              <tr>
+                <td>{{.At}}</td>
+                <td>{{.Login}}</td>
+                <td>{{.Event}}</td>
+                <td>{{.Target}}</td>
+                <td>{{.Result}}</td>
+                <td>{{.IP}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+          <nav class="users-pager" aria-label="Journal pages">
+            {{if .Prev}}
+            <a class="tool-btn" href="/vault/actions?login={{.LoginFilter}}&event={{.EventFilter}}&result={{.ResultFilter}}&page={{.Prev}}">previous</a>
+            {{end}}
+            <span>page {{.Page}} of {{.Pages}} // total: {{.Total}}</span>
+            {{if .Next}}
+            <a class="tool-btn" href="/vault/actions?login={{.LoginFilter}}&event={{.EventFilter}}&result={{.ResultFilter}}&page={{.Next}}">next</a>
+            {{end}}
+          </nav>
+        </section>
+
+        <p class="auth-actions">
+          <a class="tool-btn" href="/vault">back to vault</a>
+          <a class="tool-btn" href="/vault/users">user roles</a>
+        </p>
+      </main>
+
+      <footer class="site-footer">
+        <p>&copy; 2077 Ivan223</p>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
@@ -24,7 +25,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	// Запрос с чужого сайта отсекаем, пустой Origin пропускаем: браузер
 	// присылает его всегда, curl и старые браузеры не присылают.
 	if origin := r.Header.Get("Origin"); origin != "" && origin != s.baseOrigin() {
-		s.log.Warn("форма Sign Up: чужой Origin", "ip", ip, "origin", origin)
+		s.log.Warn("sign-up form: foreign Origin", "ip", ip, "origin", origin)
 		http.Error(w, "запрос с чужого сайта", http.StatusForbidden)
 		return
 	}
@@ -37,7 +38,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	// Honeypot: заполненное скрытое поле означает бота. Отвечаем как
 	// успешной, бот не должен понять, что раскрыт.
 	if strings.TrimSpace(r.PostFormValue("company")) != "" {
-		s.log.Info("форма Sign Up: отсеян бот по honeypot", "ip", ip)
+		s.log.Info("sign-up form: bot rejected by honeypot", "ip", ip)
 		http.Redirect(w, r, "/maket#contact", http.StatusSeeOther)
 		return
 	}
@@ -50,7 +51,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		UserAgent: r.UserAgent(),
 	}
 	if errText := validateLead(lead); errText != "" {
-		s.log.Warn("форма Sign Up: невалидная заявка", "ip", ip, "причина", errText)
+		s.log.Warn("sign-up form: invalid lead", "ip", ip, "reason", errText)
 		http.Redirect(w, r, "/maket#contact", http.StatusSeeOther)
 		return
 	}
@@ -58,9 +59,17 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	// Потеря заявки не должна ломать ответ: сбой уходит в лог громкой
 	// ошибкой. Контекст без отмены, заявка уже принята.
 	if err := s.store.SaveLead(context.WithoutCancel(r.Context()), lead); err != nil {
-		s.log.Error("заявка не сохранена", "err", err)
+		s.log.Error("lead not saved", "err", err)
+		s.log.Action(logging.Action{
+			Login: "anonymous", Event: logging.EventLeadSubmitFailed,
+			Result: logging.ResultFailure, IP: ip,
+		})
+	} else {
+		s.log.Action(logging.Action{
+			Login: "anonymous", Event: logging.EventLeadSubmitted,
+			Result: logging.ResultSuccess, IP: ip,
+		})
 	}
-	s.log.Action("-", "заявка с формы Sign Up", ip)
 
 	http.Redirect(w, r, "/maket?sent=1#contact", http.StatusSeeOther)
 }

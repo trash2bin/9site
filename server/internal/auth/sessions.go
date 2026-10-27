@@ -27,7 +27,7 @@ func (s *Server) createSession(ctx context.Context, userID int64) (tokenValue, c
 	// бесконечно даже без внешней чистки.
 	if time.Now().Unix()%10 == 0 {
 		if _, err := s.sessions.PurgeExpiredSessions(ctx, time.Now()); err != nil {
-			s.log.Warn("протухшие сессии не прибраны", "err", err)
+			s.log.Warn("expired sessions not purged", "err", err)
 		}
 	}
 
@@ -44,7 +44,7 @@ func (s *Server) sessionByToken(ctx context.Context, tokenValue string) (*Sessio
 
 	if sess.ExpiresAt.Before(time.Now()) {
 		if err := s.sessions.DeleteSession(ctx, sess.TokenHash); err != nil {
-			s.log.Warn("протухшая сессия не удалена", "err", err)
+			s.log.Warn("expired session not deleted", "err", err)
 		}
 		return nil, store.ErrNotFound
 	}
@@ -53,7 +53,7 @@ func (s *Server) sessionByToken(ctx context.Context, tokenValue string) (*Sessio
 
 func (s *Server) deleteSession(ctx context.Context, tokenValue string) {
 	if err := s.sessions.DeleteSession(ctx, hashToken(tokenValue)); err != nil {
-		s.log.Warn("сессия не удалена", "err", err)
+		s.log.Warn("session not deleted", "err", err)
 	}
 }
 

@@ -55,11 +55,12 @@ func startEnv(t *testing.T, extra func(*auth.Config, *store.Store)) *testEnv {
 	outbox := filepath.Join(dir, "outbox")
 	st := openTestStore(t, dir)
 
-	log, _ := testLogger(t)
+	log, _ := testLoggerWithActions(t, st)
 
 	cfg := auth.Config{
 		Users:      st,
 		Sessions:   st,
+		Actions:    st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  outbox,
 		Throttle:   testThrottle(t, 1000),
@@ -126,6 +127,27 @@ func testLogger(t *testing.T) (*logging.Logger, *bytes.Buffer) {
 	t.Helper()
 	buf := &bytes.Buffer{}
 	log, err := logging.New(logging.Config{Output: buf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return log, buf
+}
+
+type storeActionSink struct {
+	store *store.Store
+}
+
+func (s storeActionSink) Action(action logging.Action) error {
+	return s.store.Record(context.Background(), store.Action{
+		Login: action.Login, Event: action.Event, Target: action.Target,
+		Result: action.Result, IP: action.IP,
+	})
+}
+
+func testLoggerWithActions(t *testing.T, st *store.Store) (*logging.Logger, *bytes.Buffer) {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	log, err := logging.New(logging.Config{Output: buf, Actions: storeActionSink{store: st}})
 	if err != nil {
 		t.Fatal(err)
 	}

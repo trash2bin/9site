@@ -36,6 +36,9 @@ var vaultHTML string
 //go:embed templates/users.html
 var usersHTML string
 
+//go:embed templates/actions.html
+var actionsHTML string
+
 // studioTemplate и гостевая «стена» закрытого раздела, и страница
 // авторизованного: различаются блоком {{if .User}}.
 var studioTemplate = template.Must(template.New("studio").Parse(studioHTML))
@@ -47,3 +50,6 @@ var vaultTemplate = template.Must(template.New("vault").Parse(vaultHTML))
 
 // usersTemplate управление правами; открывает только RequireAdmin.
 var usersTemplate = template.Must(template.New("users").Parse(usersHTML))
+
+// actionsTemplate журнал действий; открывает только RequireAdmin.
+var actionsTemplate = template.Must(template.New("actions").Parse(actionsHTML))

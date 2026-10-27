@@ -12,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/ivan223/web1-personal-site/server/internal/api"
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // photoFile допустимое имя файла загрузки: генерируется сервером, снаружи
@@ -23,20 +25,20 @@ var photoFile = regexp.MustCompile(`^p[0-9a-f]{16}\.(gif|webp)$`)
 func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 	photos, err := s.store.ListPhotos(r.Context())
 	if err != nil {
-		s.log.Error("альбом: список снимков не читается", "err", err)
+		s.log.Error("album: photo list cannot be read", "err", err)
 		http.Error(w, "список снимков не читается", http.StatusInternalServerError)
 		return
 	}
 
 	tags, err := s.store.Tags(r.Context())
 	if err != nil {
-		s.log.Error("альбом: список тегов не читается", "err", err)
+		s.log.Error("album: tag list cannot be read", "err", err)
 		http.Error(w, "список тегов не читается", http.StatusInternalServerError)
 		return
 	}
 	byPhoto, err := s.store.TagsByPhoto(r.Context())
 	if err != nil {
-		s.log.Error("альбом: теги кадров не читаются", "err", err)
+		s.log.Error("album: photo tags cannot be read", "err", err)
 		http.Error(w, "теги кадров не читаются", http.StatusInternalServerError)
 		return
 	}
@@ -69,7 +71,7 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(out); err != nil {
-		s.log.Error("альбом: ответ не ушёл", "err", err)
+		s.log.Error("album: response write failed", "err", err)
 	}
 }
 
@@ -220,8 +222,13 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.log.Info("альбом: кадр загружен",
-		"id", photo.ID, "размер", fmt.Sprintf("%dx%d", img.width, img.height), "байт", len(img.data))
+	s.log.Info("photo uploaded",
+		"id", photo.ID, "size", fmt.Sprintf("%dx%d", img.width, img.height), "bytes", len(img.data))
+	s.log.Action(logging.Action{
+		Login: s.access.Login(r), Event: logging.EventPhotoUploaded,
+		Target: fmt.Sprintf("photo:%d", photo.ID), Result: logging.ResultSuccess,
+		IP: webutil.ClientIP(r),
+	})
 	http.Redirect(w, r, "/vault/album?ok=1", http.StatusSeeOther)
 }
 
@@ -254,6 +261,11 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.access.IsAdmin(r) && existing.UploadedBy != s.access.Login(r) {
+		s.log.Action(logging.Action{
+			Login: s.access.Login(r), Event: logging.EventPhotoDeleteDenied,
+			Target: fmt.Sprintf("photo:%d", existing.ID), Result: logging.ResultFailure,
+			IP: webutil.ClientIP(r),
+		})
 		s.renderAdminCode(w, r, adminData{Error: "это чужой кадр: удаляет автор или админ"}, http.StatusForbidden)
 		return
 	}
@@ -269,7 +281,12 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.removeImageFile(photo.URL)
-	s.log.Info("альбом: кадр удалён", "id", photo.ID, "url", photo.URL)
+	s.log.Info("photo deleted", "id", photo.ID, "url", photo.URL)
+	s.log.Action(logging.Action{
+		Login: s.access.Login(r), Event: logging.EventPhotoDeleted,
+		Target: fmt.Sprintf("photo:%d", photo.ID), Result: logging.ResultSuccess,
+		IP: webutil.ClientIP(r),
+	})
 	http.Redirect(w, r, "/vault/album?deleted=1", http.StatusSeeOther)
 }
 
@@ -317,11 +334,11 @@ func (s *Server) renderAdminCode(w http.ResponseWriter, r *http.Request, data ad
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	if err := adminTemplate.Execute(w, data); err != nil {
-		s.log.Error("альбом: шаблон не отрисован", "err", err)
+		s.log.Error("album: template rendering failed", "err", err)
 	}
 }
 
 func (s *Server) internalError(w http.ResponseWriter, err error) {
-	s.log.Error("альбом: внутренняя ошибка", "err", err)
+	s.log.Error("album: internal error", "err", err)
 	http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
 }

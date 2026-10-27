@@ -39,8 +39,10 @@ const (
 
 // Алиасы типов store, чтобы код auth не зависел от пакета их объявления.
 type (
-	User    = store.User
-	Session = store.Session
+	User         = store.User
+	Session      = store.Session
+	ActionEntry  = store.Entry
+	ActionFilter = store.ActionFilter
 )
 
 var errLoginTaken = store.ErrLoginTaken
@@ -73,6 +75,12 @@ type Sessions interface {
 	ConsumeResetToken(ctx context.Context, tokenHash string) (int64, error)
 }
 
+// Actions gives the admin journal read access to stored user actions.
+type Actions interface {
+	ListActions(ctx context.Context, filter ActionFilter, limit, offset int) ([]ActionEntry, error)
+	CountActions(ctx context.Context, filter ActionFilter) (int, error)
+}
+
 // Throttle ограничение частоты; реализация *webutil.Limits, собирается в main.
 type Throttle interface {
 	// Middleware пропускает запросы, пока хватает бюджета name, при
@@ -97,6 +105,7 @@ type SMTPConfig struct {
 type Config struct {
 	Users    Users
 	Sessions Sessions
+	Actions  Actions
 	// AvatarsDir каталог файлов аватаров: аватар лежит на диске, не в базе.
 	AvatarsDir string
 	// OutboxDir куда складывать письма, когда SMTP не настроен.
@@ -119,6 +128,7 @@ type Config struct {
 type Server struct {
 	users     Users
 	sessions  Sessions
+	actions   Actions
 	cfg       Config
 	log       *logging.Logger
 	avatarDir string
@@ -130,8 +140,8 @@ type Server struct {
 // New готовит модуль: проверяет конфиг, создаёт каталоги, собирает почтовый
 // тракт. Базу не открывает: сюда приходят готовые хранилища.
 func New(cfg Config) (*Server, error) {
-	if cfg.Users == nil || cfg.Sessions == nil {
-		return nil, errors.New("auth: нужны хранилища Users и Sessions")
+	if cfg.Users == nil || cfg.Sessions == nil || cfg.Actions == nil {
+		return nil, errors.New("auth: нужны хранилища Users, Sessions и Actions")
 	}
 	if cfg.Throttle == nil {
 		return nil, errors.New("auth: нужен ограничитель частоты (Throttle)")
@@ -162,6 +172,7 @@ func New(cfg Config) (*Server, error) {
 	s := &Server{
 		users:     cfg.Users,
 		sessions:  cfg.Sessions,
+		actions:   cfg.Actions,
 		cfg:       cfg,
 		log:       cfg.Log,
 		avatarDir: cfg.AvatarsDir,
@@ -179,14 +190,14 @@ func New(cfg Config) (*Server, error) {
 		if provider == "" {
 			provider = "(свой сервер)"
 		}
-		s.log.Info("почта: SMTP настроен",
-			"провайдер", provider,
-			"адрес", fmt.Sprintf("%s:%d", s.cfg.SMTP.Host, s.cfg.SMTP.Port))
+		s.log.Info("mail: SMTP configured",
+			"provider", provider,
+			"address", fmt.Sprintf("%s:%d", s.cfg.SMTP.Host, s.cfg.SMTP.Port))
 		if hint != "" {
-			s.log.Info("почта: нужен пароль приложения, не обычный пароль аккаунта", "где взять", hint)
+			s.log.Info("mail: an app password is required instead of the account password", "hint", hint)
 		}
 	} else {
-		s.log.Info("почта: SMTP не настроен: письма копируются только в outbox")
+		s.log.Info("mail: SMTP not configured, emails are copied to outbox only")
 	}
 
 	return s, nil
@@ -199,6 +210,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /studio/{$}", s.handleStudio)
 	mux.HandleFunc("GET /vault", s.handleVault)
 	mux.Handle("GET /vault/users", s.RequireAdmin(http.HandlerFunc(s.handleUsers)))
+	mux.Handle("GET /vault/actions", s.RequireAdmin(http.HandlerFunc(s.handleActions)))
 	mux.Handle("POST /vault/users/role", s.RequireAdmin(http.HandlerFunc(s.handleUserRole)))
 	mux.Handle("POST /auth/register", s.throttled(BudgetRegister, "register",
 		"слишком много попыток регистрации: подождите несколько минут", s.handleRegister))

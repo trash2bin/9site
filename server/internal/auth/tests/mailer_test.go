@@ -23,6 +23,7 @@ func mailConfig(t *testing.T, log *logging.Logger, smtp auth.SMTPConfig) auth.Co
 	return auth.Config{
 		Users:      st,
 		Sessions:   st,
+		Actions:    st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
 		Throttle:   testThrottle(t, 1000),
@@ -40,7 +41,7 @@ func TestSMTPPreset(t *testing.T) {
 	})); err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if got := buf.String(); !strings.Contains(got, "почта: SMTP настроен") ||
+	if got := buf.String(); !strings.Contains(got, "mail: SMTP configured") ||
 		!strings.Contains(got, "smtp.gmail.com:587") {
 		t.Fatalf("в логе нет пресета gmail:\n%s", got)
 	}
@@ -109,7 +110,7 @@ func TestSMTPUnconfiguredOK(t *testing.T) {
 	if _, err := auth.New(mailConfig(t, log, auth.SMTPConfig{})); err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if got := buf.String(); !strings.Contains(got, "почта: SMTP не настроен") {
+	if got := buf.String(); !strings.Contains(got, "mail: SMTP not configured") {
 		t.Fatalf("нет строки о ненастроенной почте:\n%s", got)
 	}
 }

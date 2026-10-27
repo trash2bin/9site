@@ -111,9 +111,9 @@ func (s *Server) sendMail(ctx context.Context, to, subject, body string) error {
 	}
 
 	if s.cfg.SMTP.Configured() {
-		s.log.Info("письмо отправлено", "to", to, "smtp", s.cfg.SMTP.Host, "port", s.cfg.SMTP.Port)
+		s.log.Info("email sent", "to", to, "smtp", s.cfg.SMTP.Host, "port", s.cfg.SMTP.Port)
 	} else {
-		s.log.Info("SMTP не настроен: письмо сохранено только в outbox", "to", to)
+		s.log.Info("SMTP not configured: email saved to outbox only", "to", to)
 	}
 	return nil
 }

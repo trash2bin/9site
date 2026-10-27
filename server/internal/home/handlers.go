@@ -26,7 +26,7 @@ const thanksHTML = `<p class="thanks">Спасибо! Мы свяжемся с �
 func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 	page, err := os.ReadFile(s.indexFile())
 	if err != nil {
-		s.log.Error("index.html не читается", "err", err)
+		s.log.Error("index.html cannot be read", "err", err)
 		http.Error(w, "index.html не читается", http.StatusInternalServerError)
 		return
 	}
@@ -37,7 +37,7 @@ func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 	// Без no-store браузер и прокси могут показать вчерашний счёт.
 	w.Header().Set("Cache-Control", "no-store")
 	if _, err := w.Write([]byte(html)); err != nil {
-		s.log.Error("ответ не ушёл", "err", err)
+		s.log.Error("response write failed", "err", err)
 	}
 }
 
@@ -47,7 +47,7 @@ func (s *Server) hit(ctx context.Context) int {
 	// Контекст без отмены: визит уже случился, обрыв соединения его не отменяет.
 	n, err := s.store.Hit(context.WithoutCancel(ctx))
 	if err != nil {
-		s.log.Warn("счётчик: не сохранён", "err", err)
+		s.log.Warn("counter: not saved", "err", err)
 		return int(s.lastVisits.Load())
 	}
 	s.lastVisits.Store(int64(n))
@@ -77,7 +77,7 @@ func (s *Server) pageHandler(file string) http.HandlerFunc {
 
 		page, err := os.ReadFile(name)
 		if err != nil {
-			s.log.Error("страница не читается", "file", name, "err", err)
+			s.log.Error("page cannot be read", "file", name, "err", err)
 			http.Error(w, file+" не читается", http.StatusInternalServerError)
 			return
 		}
@@ -91,7 +91,7 @@ func (s *Server) pageHandler(file string) http.HandlerFunc {
 		// Без no-store браузер покажет вчерашний макет после правки вёрстки.
 		w.Header().Set("Cache-Control", "no-store")
 		if _, err := w.Write([]byte(body)); err != nil {
-			s.log.Error("ответ не ушёл", "err", err)
+			s.log.Error("response write failed", "err", err)
 		}
 	}
 }

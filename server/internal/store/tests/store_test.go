@@ -4,7 +4,9 @@ package store_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -410,12 +412,18 @@ func TestActionsAndLeads(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	if err := s.Record(ctx, store.Action{Login: "ivan", Action: "вход", IP: "127.0.0.1"}); err != nil {
+	if err := s.Record(ctx, store.Action{
+		Login: "ivan", Event: "auth.login.succeeded", Target: "photo:7",
+		Result: "success", IP: "127.0.0.1",
+	}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	entries, err := s.Recent(ctx, 10)
-	if err != nil || len(entries) != 1 || entries[0].Action != "вход" {
+	if err != nil || len(entries) != 1 || entries[0].Event != "auth.login.succeeded" {
 		t.Fatalf("Recent: %v %+v", err, entries)
+	}
+	if entries[0].Target != "photo:7" || entries[0].Result != "success" {
+		t.Fatalf("Recent: %+v", entries[0])
 	}
 
 	if err := s.SaveLead(ctx, store.Lead{Name: "Иван", Phone: "+70000000000", Email: "i@example.com", IP: "127.0.0.1"}); err != nil {
@@ -424,6 +432,120 @@ func TestActionsAndLeads(t *testing.T) {
 	leads, err := s.ListLeads(ctx, 10)
 	if err != nil || len(leads) != 1 || leads[0].Name != "Иван" {
 		t.Fatalf("ListLeads: %v %+v", err, leads)
+	}
+}
+
+func TestActionMigrationNormalizesLegacyRows(t *testing.T) {
+	dir := t.TempDir()
+	body, err := os.ReadFile("../migrations/0001_init.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", filepath.Join(dir, "site.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+CREATE TABLE schema_migrations (
+  version INTEGER PRIMARY KEY,
+  sha256 TEXT NOT NULL,
+  applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(string(body)); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(body)
+	if _, err := db.Exec(
+		`INSERT INTO schema_migrations (version, sha256) VALUES (1, ?)`,
+		hex.EncodeToString(sum[:]),
+	); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"вход", "вход не удался", "роль reader: admin"} {
+		if _, err := db.Exec(
+			`INSERT INTO actions (login, action, ip) VALUES ('reader', ?, '127.0.0.1')`, action,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	entries, err := st.Recent(t.Context(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := make(map[string]store.Entry)
+	for _, entry := range entries {
+		found[entry.Event] = entry
+	}
+	if entry := found["auth.login.succeeded"]; entry.Result != "success" {
+		t.Fatalf("успешный вход: %+v", entry)
+	}
+	if entry := found["auth.login.failed"]; entry.Result != "failure" {
+		t.Fatalf("неудачный вход: %+v", entry)
+	}
+	if entry := found["auth.role.changed"]; entry.Target != "reader: admin" {
+		t.Fatalf("смена роли: %+v", entry)
+	}
+}
+
+func TestActionFiltersAndPaging(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	actions := []store.Action{
+		{Login: "alpha", Event: "auth.login.succeeded", Result: "success", IP: "127.0.0.1"},
+		{Login: "alpha", Event: "album.photo.uploaded", Target: "photo:2", Result: "success", IP: "127.0.0.1"},
+		{Login: "beta", Event: "auth.login.failed", Result: "failure", IP: "127.0.0.2"},
+	}
+	for _, action := range actions {
+		if err := s.Record(ctx, action); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+
+	entries, err := s.ListActions(ctx, store.ActionFilter{Login: "alp"}, 10, 0)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("ListActions by login: %v %+v", err, entries)
+	}
+	if entries[0].Event != "album.photo.uploaded" {
+		t.Fatalf("свежая запись не первая: %+v", entries[0])
+	}
+
+	entries, err = s.ListActions(ctx, store.ActionFilter{Event: "auth.login.failed"}, 10, 0)
+	if err != nil || len(entries) != 1 || entries[0].Login != "beta" {
+		t.Fatalf("ListActions by event: %v %+v", err, entries)
+	}
+
+	entries, err = s.ListActions(ctx, store.ActionFilter{Result: "success"}, 1, 1)
+	if err != nil || len(entries) != 1 || entries[0].Login != "alpha" {
+		t.Fatalf("ListActions by result and offset: %v %+v", err, entries)
+	}
+
+	if err := s.Record(ctx, store.Action{
+		Login: "alpha%", Event: "test.literal", Result: "success", IP: "127.0.0.3",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = s.ListActions(ctx, store.ActionFilter{Login: "alpha%"}, 10, 0)
+	if err != nil || len(entries) != 1 || entries[0].Event != "test.literal" {
+		t.Fatalf("ListActions with literal wildcard: %v %+v", err, entries)
+	}
+
+	count, err := s.CountActions(ctx, store.ActionFilter{Login: "alpha"})
+	if err != nil || count != 3 {
+		t.Fatalf("CountActions: %v %d", err, count)
 	}
 }
 

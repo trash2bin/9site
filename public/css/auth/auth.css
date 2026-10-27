@@ -91,7 +91,8 @@ a.tool-btn {
   color: var(--bone);
 }
 
-.auth-form input {
+.auth-form input,
+.auth-form select {
   padding: 6px 8px;
   border: 2px inset var(--bevel);
   background: var(--deep);
@@ -212,6 +213,10 @@ a.tool-btn {
   .auth-form {
     min-width: 0;
   }
+
+  .actions-filters {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Таблица прав: на узком экране прокручивается сама, страница не едет. */
@@ -246,6 +251,18 @@ a.tool-btn {
 
 .users-role-user {
   color: #9fd3a3;
+}
+
+.actions-filters {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 2fr) minmax(9rem, 1fr) auto;
+  align-items: end;
+  max-width: none;
+  margin-bottom: 1rem;
+}
+
+.actions-filters .tool-btn {
+  align-self: end;
 }
 
 /* Пейджер списка: ссылки по краям, счётчик по центру. */

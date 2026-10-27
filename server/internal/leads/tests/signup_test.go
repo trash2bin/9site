@@ -34,7 +34,7 @@ func testServer(t *testing.T) (*httptest.Server, *store.Store) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	log, err := logging.New(logging.Config{Output: io.Discard})
+	log, err := logging.New(logging.Config{Output: io.Discard, Actions: storeActionSink{store: st}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +62,17 @@ func testServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Cleanup(ts.Close)
 
 	return ts, st
+}
+
+type storeActionSink struct {
+	store *store.Store
+}
+
+func (s storeActionSink) Action(action logging.Action) error {
+	return s.store.Record(context.Background(), store.Action{
+		Login: action.Login, Event: action.Event, Target: action.Target,
+		Result: action.Result, IP: action.IP,
+	})
 }
 
 // postSignup отправляет форму; дописывает заголовки поверх формы.
@@ -117,6 +128,13 @@ func TestSignupValid(t *testing.T) {
 	}
 	if n := leadCount(t, st); n != 1 {
 		t.Fatalf("заявок %d, ожидалась 1", n)
+	}
+	actions, err := st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
+	if err != nil || len(actions) != 1 || actions[0].Event != logging.EventLeadSubmitted {
+		t.Fatalf("заявка не попала в журнал: %v %+v", err, actions)
+	}
+	if actions[0].Result != logging.ResultSuccess {
+		t.Fatalf("результат заявки: %q", actions[0].Result)
 	}
 }
 

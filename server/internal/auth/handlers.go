@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
@@ -68,25 +69,29 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		// Сбой хранилища не «неверный пароль»: иначе поломка маскируется
 		// под опечатку пользователя и не видна в логах.
-		s.log.Error("вход: хранилище недоступно", "err", err)
+		s.log.Error("login: storage unavailable", "err", err)
 		s.loginWall(w, r, "не удалось войти: попробуйте позже")
 		return
 	}
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)) != nil {
 		// Одно и то же сообщение на неверный логин и неверный пароль:
 		// иначе форма превращается в перечислитель существующих логинов.
-		s.log.Action(login, "вход не удался", ip)
+		s.log.Action(logging.Action{
+			Login: login, Event: logging.EventLoginFailed, Result: logging.ResultFailure, IP: ip,
+		})
 		s.loginWall(w, r, "неверный логин или пароль")
 		return
 	}
 
 	if err := s.startSession(r.Context(), w, r, user); err != nil {
-		s.log.Error("сессия не создана", "err", err)
+		s.log.Error("session not created", "err", err)
 		s.loginWall(w, r, "не удалось войти: попробуйте позже")
 		return
 	}
 
-	s.log.Action(user.Login, "вход", ip)
+	s.log.Action(logging.Action{
+		Login: user.Login, Event: logging.EventLoginSucceeded, Result: logging.ResultSuccess, IP: ip,
+	})
 	http.Redirect(w, r, "/studio", http.StatusSeeOther)
 }
 
@@ -175,7 +180,9 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.log.Action(user.Login, "регистрация", ip)
+	s.log.Action(logging.Action{
+		Login: user.Login, Event: logging.EventRegistered, Result: logging.ResultSuccess, IP: ip,
+	})
 	if err := s.startSession(r.Context(), w, r, user); err != nil {
 		s.internalError(w, err)
 		return
@@ -196,11 +203,11 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	setCookie(w, r, cookieSID, "", -1)
 
-	login := "-"
 	if user != nil {
-		login = user.Login
+		s.log.Action(logging.Action{
+			Login: user.Login, Event: logging.EventLoggedOut, Result: logging.ResultSuccess, IP: ip,
+		})
 	}
-	s.log.Action(login, "выход", ip)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -219,6 +226,8 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	fullName := cleanName(r.PostFormValue("full_name"))
 	email := strings.TrimSpace(r.PostFormValue("email"))
 	newPassword := r.PostFormValue("new_password")
+	ip := webutil.ClientIP(r)
+	profileFields := changedProfileFields(user, fullName, email)
 
 	if errText := firstError(validateEmail(email)); errText != "" {
 		s.renderStudio(w, studioData{User: user, Avatar: avatarURL(user), Error: errText, CSRF: s.csrfToken(w, r)})
@@ -244,6 +253,9 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			s.internalError(w, err)
 			return
 		}
+		s.log.Action(logging.Action{
+			Login: user.Login, Event: logging.EventPasswordChanged, Result: logging.ResultSuccess, IP: ip,
+		})
 		// updatePassword гасит все сессии, включая текущую: без новой
 		// сессии пользователь вылетит сразу после смены пароля.
 		if err := s.startSession(r.Context(), w, r, user); err != nil {
@@ -260,6 +272,12 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		s.internalError(w, err)
 		return
+	}
+	if profileFields != "" {
+		s.log.Action(logging.Action{
+			Login: user.Login, Event: logging.EventProfileUpdated, Target: profileFields,
+			Result: logging.ResultSuccess, IP: ip,
+		})
 	}
 	user.FullName, user.Email = fullName, email
 
@@ -279,9 +297,12 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			s.internalError(w, err)
 			return
 		}
+		s.log.Action(logging.Action{
+			Login: user.Login, Event: logging.EventAvatarUpdated, Target: name,
+			Result: logging.ResultSuccess, IP: ip,
+		})
 	}
 
-	s.log.Action(user.Login, "профиль обновлён", webutil.ClientIP(r))
 	s.renderStudio(w, studioData{
 		User:    user,
 		Avatar:  avatarURL(user),
@@ -322,10 +343,13 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 			user.Login, s.cfg.BaseURL, link,
 		)
 
-		s.log.Action(user.Login, "запрос сброса пароля", ip)
+		s.log.Action(logging.Action{
+			Login: user.Login, Event: logging.EventPasswordResetAsked,
+			Result: logging.ResultSuccess, IP: ip,
+		})
 		mailErr = s.sendMail(r.Context(), user.Email, "Смена пароля на "+s.cfg.BaseURL, body)
 		if mailErr != nil {
-			s.log.Error("письмо не ушло", "to", user.Email, "err", mailErr)
+			s.log.Error("password reset email not sent", "to", user.Email, "err", mailErr)
 		}
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.internalError(w, err)
@@ -348,13 +372,13 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 			data.ResetLink = link
 			data.Message = "SMTP не настроен, поэтому ссылка показана здесь и сохранена в файл"
 		case mailErr != nil:
-			s.log.Warn("сброс пароля: письмо не доставлено, ссылка не показана, запрос не с localhost",
+			s.log.Warn("password reset email not delivered, link not shown, request was not from localhost",
 				"login", user.Login, "err", mailErr)
 			data.Message = "письмо не удалось отправить: напишите администратору"
 		default:
 			// Почта не настроена, а не «письмо не ушло»: сообщения должны
 			// отличаться, иначе администратор ищет поломку там, где её нет.
-			s.log.Warn("сброс пароля: SMTP не настроен, ссылка не показана, запрос не с localhost",
+			s.log.Warn("password reset SMTP not configured, link not shown, request was not from localhost",
 				"login", user.Login)
 			data.Message = "восстановление пароля пока не настроено: напишите администратору"
 		}
@@ -391,7 +415,7 @@ func (s *Server) handleResetApply(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		// Сбой хранилища, а не «ссылка сгорела»: правдивое сообщение и сбой в лог.
-		s.log.Error("сброс: хранилище недоступно", "err", err)
+		s.log.Error("password reset: storage unavailable", "err", err)
 		s.renderReset(w, resetData{Error: "не удалось проверить ссылку: попробуйте позже", CSRF: s.csrfToken(w, r)})
 		return
 	}
@@ -411,7 +435,10 @@ func (s *Server) handleResetApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.log.Action(user.Login, "пароль сброшен", webutil.ClientIP(r))
+	s.log.Action(logging.Action{
+		Login: user.Login, Event: logging.EventPasswordResetApplied,
+		Result: logging.ResultSuccess, IP: webutil.ClientIP(r),
+	})
 	http.Redirect(w, r, "/studio?auth=login&reset=1", http.StatusSeeOther)
 }
 
@@ -456,7 +483,7 @@ func (s *Server) sessionFrom(r *http.Request) (*Session, *User) {
 		return nil, nil
 	}
 	if err != nil {
-		s.log.Error("сессия не читается", "err", err)
+		s.log.Error("session cannot be read", "err", err)
 		return nil, nil
 	}
 
@@ -467,7 +494,7 @@ func (s *Server) sessionFrom(r *http.Request) (*Session, *User) {
 		return nil, nil
 	}
 	if err != nil {
-		s.log.Error("пользователь сессии не читается", "err", err)
+		s.log.Error("session user cannot be read", "err", err)
 		return nil, nil
 	}
 	return sess, user
@@ -525,7 +552,7 @@ func (s *Server) loginWall(w http.ResponseWriter, r *http.Request, errText strin
 
 // internalError непредвиденная ошибка: детали в ответ не уходят.
 func (s *Server) internalError(w http.ResponseWriter, err error) {
-	s.log.Error("внутренняя ошибка", "err", err)
+	s.log.Error("internal error", "err", err)
 	http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
 }
 
@@ -538,11 +565,22 @@ func firstError(errs ...string) string {
 	return ""
 }
 
+func changedProfileFields(user *User, fullName, email string) string {
+	var fields []string
+	if user.FullName != fullName {
+		fields = append(fields, "full_name")
+	}
+	if user.Email != email {
+		fields = append(fields, "email")
+	}
+	return strings.Join(fields, ",")
+}
+
 func (s *Server) renderStudio(w http.ResponseWriter, data studioData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := studioTemplate.Execute(w, data); err != nil {
-		s.log.Error("шаблон studio", "err", err)
+		s.log.Error("studio template failed", "err", err)
 	}
 }
 
@@ -550,7 +588,7 @@ func (s *Server) renderReset(w http.ResponseWriter, data resetData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := resetTemplate.Execute(w, data); err != nil {
-		s.log.Error("шаблон reset", "err", err)
+		s.log.Error("reset template failed", "err", err)
 	}
 }
 
@@ -558,6 +596,6 @@ func (s *Server) renderVault(w http.ResponseWriter, data studioData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := vaultTemplate.Execute(w, data); err != nil {
-		s.log.Error("шаблон vault", "err", err)
+		s.log.Error("vault template failed", "err", err)
 	}
 }

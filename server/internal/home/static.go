@@ -145,7 +145,7 @@ func (s *Server) checkStyles() error {
 		}
 	}
 
-	s.log.Info("стили подключены", "слоёв", imports, "входы", strings.Join(styleEntries, ", "))
+	s.log.Info("styles connected", "layers", imports, "entries", strings.Join(styleEntries, ", "))
 	return nil
 }
 
