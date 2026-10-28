@@ -24,6 +24,7 @@ func mailConfig(t *testing.T, log *logging.Logger, smtp auth.SMTPConfig) auth.Co
 		Users:      st,
 		Sessions:   st,
 		Actions:    st,
+		Views:      st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
 		Throttle:   testThrottle(t, 1000),

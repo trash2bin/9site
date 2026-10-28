@@ -56,7 +56,7 @@ func (s *Store) ListActions(ctx context.Context, filter ActionFilter, limit, off
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT at, login, action, target, result, ip FROM actions `+actionFilter+
 			` ORDER BY id DESC LIMIT ? OFFSET ?`,
-		filter.Login, filter.Event, filter.Result, actionLoginPattern(filter.Login), limit, offset,
+		filter.Login, filter.Event, filter.Result, likePattern(filter.Login), limit, offset,
 	)
 	if err != nil {
 		return nil, err
@@ -79,12 +79,14 @@ func (s *Store) CountActions(ctx context.Context, filter ActionFilter) (int, err
 	var count int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM actions `+actionFilter,
-		filter.Login, filter.Event, filter.Result, actionLoginPattern(filter.Login),
+		filter.Login, filter.Event, filter.Result, likePattern(filter.Login),
 	).Scan(&count)
 	return count, err
 }
 
-func actionLoginPattern(value string) string {
+// likePattern подстрока с экранированием метасимволов LIKE: % и _ в
+// значении не должны превращаться в wildcard.
+func likePattern(value string) string {
 	value = strings.ReplaceAll(value, `\`, `\\`)
 	value = strings.ReplaceAll(value, `%`, `\%`)
 	value = strings.ReplaceAll(value, `_`, `\_`)

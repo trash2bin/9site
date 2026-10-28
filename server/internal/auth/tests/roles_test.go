@@ -49,6 +49,7 @@ func newAuth(t *testing.T, cfg func(*auth.Config)) error {
 		Users:      st,
 		Sessions:   st,
 		Actions:    st,
+		Views:      st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  filepath.Join(dir, "outbox"),
 		Throttle:   testThrottle(t, 10),

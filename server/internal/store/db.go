@@ -33,12 +33,23 @@ type User struct {
 }
 
 // Session - активная сессия: кто вошёл, чем подписаны формы и до какого
-// срока cookie действует.
+// срока cookie действует. IP, UA и LastSeen штампует Identify, у сессий до
+// миграции 0008 пустые.
 type Session struct {
 	TokenHash string
 	UserID    int64
 	CSRF      string
 	ExpiresAt time.Time
+	IP        string
+	UA        string
+	LastSeen  string
+}
+
+// SessionMeta последние координаты сессии для админки.
+type SessionMeta struct {
+	IP       string
+	UA       string
+	LastSeen string
 }
 
 // ErrLoginTaken - логин уже занят (UNIQUE по login).

@@ -61,6 +61,7 @@ func startEnv(t *testing.T, extra func(*auth.Config, *store.Store)) *testEnv {
 		Users:      st,
 		Sessions:   st,
 		Actions:    st,
+		Views:      st,
 		AvatarsDir: filepath.Join(dir, "avatars"),
 		OutboxDir:  outbox,
 		Throttle:   testThrottle(t, 1000),

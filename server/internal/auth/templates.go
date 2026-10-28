@@ -39,6 +39,9 @@ var usersHTML string
 //go:embed templates/actions.html
 var actionsHTML string
 
+//go:embed templates/views.html
+var viewsHTML string
+
 // studioTemplate и гостевая «стена» закрытого раздела, и страница
 // авторизованного: различаются блоком {{if .User}}.
 var studioTemplate = template.Must(template.New("studio").Parse(studioHTML))
@@ -53,3 +56,6 @@ var usersTemplate = template.Must(template.New("users").Parse(usersHTML))
 
 // actionsTemplate журнал действий; открывает только RequireAdmin.
 var actionsTemplate = template.Must(template.New("actions").Parse(actionsHTML))
+
+// viewsTemplate журнал просмотров; открывает только RequireAdmin.
+var viewsTemplate = template.Must(template.New("views").Parse(viewsHTML))

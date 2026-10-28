@@ -43,6 +43,10 @@ type (
 	Session      = store.Session
 	ActionEntry  = store.Entry
 	ActionFilter = store.ActionFilter
+	ViewFilter   = store.ViewFilter
+	ViewEntry    = store.ViewEntry
+	PathCount    = store.PathCount
+	SessionMeta  = store.SessionMeta
 )
 
 var errLoginTaken = store.ErrLoginTaken
@@ -67,18 +71,27 @@ type Users interface {
 // Sessions шов подмены хранилища: ConsumeResetToken атомарен, DeleteUserSessions гасит все cookie при смене пароля.
 type Sessions interface {
 	CreateSession(ctx context.Context, userID int64, tokenHash, csrf string, expiresAt time.Time) error
+	TouchSession(ctx context.Context, tokenHash, ip, ua string) error
 	SessionByTokenHash(ctx context.Context, tokenHash string) (*Session, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteUserSessions(ctx context.Context, userID int64) error
 	PurgeExpiredSessions(ctx context.Context, before time.Time) (int64, error)
 	CreateResetToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
 	ConsumeResetToken(ctx context.Context, tokenHash string) (int64, error)
+	LastSessionMeta(ctx context.Context, userID int64) (SessionMeta, error)
 }
 
 // Actions gives the admin journal read access to stored user actions.
 type Actions interface {
 	ListActions(ctx context.Context, filter ActionFilter, limit, offset int) ([]ActionEntry, error)
 	CountActions(ctx context.Context, filter ActionFilter) (int, error)
+}
+
+// Views даёт админской странице просмотров доступ к журналу страниц.
+type Views interface {
+	ListViews(ctx context.Context, filter ViewFilter, limit, offset int) ([]ViewEntry, error)
+	CountViews(ctx context.Context, filter ViewFilter) (int, error)
+	TopPaths(ctx context.Context, filter ViewFilter, limit int) ([]PathCount, error)
 }
 
 // Throttle ограничение частоты; реализация *webutil.Limits, собирается в main.
@@ -106,6 +119,7 @@ type Config struct {
 	Users    Users
 	Sessions Sessions
 	Actions  Actions
+	Views    Views
 	// AvatarsDir каталог файлов аватаров: аватар лежит на диске, не в базе.
 	AvatarsDir string
 	// OutboxDir куда складывать письма, когда SMTP не настроен.
@@ -129,6 +143,7 @@ type Server struct {
 	users     Users
 	sessions  Sessions
 	actions   Actions
+	views     Views
 	cfg       Config
 	log       *logging.Logger
 	avatarDir string
@@ -140,8 +155,8 @@ type Server struct {
 // New готовит модуль: проверяет конфиг, создаёт каталоги, собирает почтовый
 // тракт. Базу не открывает: сюда приходят готовые хранилища.
 func New(cfg Config) (*Server, error) {
-	if cfg.Users == nil || cfg.Sessions == nil || cfg.Actions == nil {
-		return nil, errors.New("auth: нужны хранилища Users, Sessions и Actions")
+	if cfg.Users == nil || cfg.Sessions == nil || cfg.Actions == nil || cfg.Views == nil {
+		return nil, errors.New("auth: нужны хранилища Users, Sessions, Actions и Views")
 	}
 	if cfg.Throttle == nil {
 		return nil, errors.New("auth: нужен ограничитель частоты (Throttle)")
@@ -173,6 +188,7 @@ func New(cfg Config) (*Server, error) {
 		users:     cfg.Users,
 		sessions:  cfg.Sessions,
 		actions:   cfg.Actions,
+		views:     cfg.Views,
 		cfg:       cfg,
 		log:       cfg.Log,
 		avatarDir: cfg.AvatarsDir,
@@ -211,6 +227,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /vault", s.handleVault)
 	mux.Handle("GET /vault/users", s.RequireAdmin(http.HandlerFunc(s.handleUsers)))
 	mux.Handle("GET /vault/actions", s.RequireAdmin(http.HandlerFunc(s.handleActions)))
+	mux.Handle("GET /vault/views", s.RequireAdmin(http.HandlerFunc(s.handleViews)))
 	mux.Handle("POST /vault/users/role", s.RequireAdmin(http.HandlerFunc(s.handleUserRole)))
 	mux.Handle("POST /auth/register", s.throttled(BudgetRegister, "register",
 		"слишком много попыток регистрации: подождите несколько минут", s.handleRegister))

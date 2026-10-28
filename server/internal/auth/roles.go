@@ -56,9 +56,17 @@ func (s *Server) bootstrapAdmin() error {
 	return nil
 }
 
+// userRow пользователь плюс мета последней сессии для колонки активности.
+type userRow struct {
+	User
+	IP       string
+	UA       string
+	LastSeen string
+}
+
 // usersData данные страницы управления правами.
 type usersData struct {
-	Users   []User
+	Users   []userRow
 	Admins  int
 	Total   int
 	Page    int
@@ -178,7 +186,18 @@ func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, data usersD
 		return
 	}
 
-	data.Users = users
+	data.Users = make([]userRow, 0, len(users))
+	for _, u := range users {
+		row := userRow{User: u}
+		meta, err := s.sessions.LastSessionMeta(r.Context(), u.ID)
+		if err == nil {
+			row.IP, row.UA, row.LastSeen = meta.IP, meta.UA, meta.LastSeen
+		} else if !errors.Is(err, store.ErrNotFound) {
+			s.internalError(w, err)
+			return
+		}
+		data.Users = append(data.Users, row)
+	}
 	data.Admins = admins
 	data.Total = total
 	data.Pages = pages

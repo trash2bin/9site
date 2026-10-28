@@ -80,6 +80,13 @@ func run() error {
 		logger.Info("counter imported from visits.dat into site.db")
 	}
 
+	// Журнал просмотров живёт 90 дней; чистим на старте, рестарты бывают часто.
+	if purged, err := st.PurgeViews(context.Background(), time.Now().Add(-90*24*time.Hour)); err != nil {
+		logger.Warn("page views purge failed", "err", err)
+	} else if purged > 0 {
+		logger.Info("old page views purged", "rows", purged)
+	}
+
 	// BASE_URL обязателен абсолютный: без схемы проверка Origin у формы
 	// Sign Up отвергла бы все заявки (403).
 	baseURL := strings.TrimRight(envOr("BASE_URL", "http://localhost:8080"), "/")
@@ -117,6 +124,7 @@ func run() error {
 		Users:         st,
 		Sessions:      st,
 		Actions:       st,
+		Views:         st,
 		AvatarsDir:    filepath.Join(dataDir, "avatars"),
 		OutboxDir:     filepath.Join(dataDir, "outbox"),
 		BaseURL:       baseURL,
@@ -177,6 +185,14 @@ func run() error {
 	albumServer.Register(mux)
 	mux.Handle("/healthz", healthz.Handler(version, store.Version()))
 
+	// Снаружи Identify: он штампует мету сессии и кладёт логин в контекст,
+	// до того как ViewLog прочитает его для записи просмотра.
+	viewLog := webutil.ViewLog{
+		Sink:  views{st: st},
+		Login: authServer.Login,
+		Log:   logger,
+	}
+
 	if checkOnly {
 		logger.Info("startup check passed: binary is ready to restart")
 		return nil
@@ -188,7 +204,7 @@ func run() error {
 	// и загрузку аватара, и отдачу статики на медленном канале.
 	srv := &http.Server{
 		Addr:              "127.0.0.1:8080",
-		Handler:           mux,
+		Handler:           authServer.Identify(viewLog.Middleware(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -227,6 +243,21 @@ func (j journal) Action(action logging.Action) error {
 			IP:     action.IP,
 		},
 	)
+}
+
+// views адаптер журнала просмотров (webutil.ViewSink) поверх store.
+type views struct {
+	st *store.Store
+}
+
+func (v views) RecordView(ctx context.Context, view webutil.View) error {
+	return v.st.RecordView(ctx, store.View{
+		Login:   view.Login,
+		Path:    view.Path,
+		IP:      view.IP,
+		UA:      view.UA,
+		Referer: view.Referer,
+	})
 }
 
 func envOr(name, fallback string) string {

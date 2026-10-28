@@ -23,9 +23,9 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash string) (*Sess
 		expires string
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT token_hash, user_id, csrf, expires_at FROM sessions WHERE token_hash = $1`,
+		`SELECT token_hash, user_id, csrf, expires_at, ip, ua, last_seen FROM sessions WHERE token_hash = $1`,
 		tokenHash,
-	).Scan(&sess.TokenHash, &sess.UserID, &sess.CSRF, &expires)
+	).Scan(&sess.TokenHash, &sess.UserID, &sess.CSRF, &expires, &sess.IP, &sess.UA, &sess.LastSeen)
 	if err != nil {
 		return nil, noRows(err)
 	}
@@ -35,6 +35,28 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash string) (*Sess
 	}
 	sess.ExpiresAt = exp
 	return &sess, nil
+}
+
+// LastSessionMeta самая свежая по активности сессия пользователя; ErrNotFound,
+// если сессий не было. Строки с пустой last_seen сортируются последними.
+func (s *Store) LastSessionMeta(ctx context.Context, userID int64) (SessionMeta, error) {
+	var m SessionMeta
+	err := s.db.QueryRowContext(ctx,
+		`SELECT ip, ua, last_seen FROM sessions WHERE user_id = $1
+		 ORDER BY last_seen DESC LIMIT 1`, userID,
+	).Scan(&m.IP, &m.UA, &m.LastSeen)
+	return m, noRows(err)
+}
+
+// TouchSession штампует мету активности; повтор внутри минуты не пишется,
+// чтобы каждый просмотр страницы не доставал базу.
+func (s *Store) TouchSession(ctx context.Context, tokenHash, ip, ua string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET ip = $2, ua = $3, last_seen = datetime('now')
+		 WHERE token_hash = $1 AND last_seen < datetime('now', '-60 seconds')`,
+		tokenHash, ip, ua,
+	)
+	return err
 }
 
 // DeleteSession гасит одну сессию («выйти»).

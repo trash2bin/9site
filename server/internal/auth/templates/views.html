@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Ivan's Little Web - журнал просмотров</title>
+    <link rel="icon" type="image/gif" href="/assets/favicon.gif" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <img class="header-tux" src="/assets/img/tux-winflag.gif" width="88" height="83" alt="Tux стоит на посту" />
+        <p class="eyebrow">~ закрытый раздел // журнал просмотров ~</p>
+        <h1>PAGE VIEWS</h1>
+        <p class="tagline">вошёл как {{.Login}} // записей: {{.Total}}</p>
+      </header>
+
+      <nav class="site-nav" aria-label="Основная навигация">
+        <strong>MENU:</strong>
+        <a href="/vault">vault</a><span class="sep">|</span> <a href="/vault/album">альбом</a><span class="sep">|</span>
+        <a href="/vault/users">users</a><span class="sep">|</span> <a href="/vault/actions">action journal</a><span class="sep">|</span>
+        <a href="/studio">studio</a><span class="sep">|</span> <a href="/">главная</a>
+      </nav>
+
+      <main id="content">
+        <section class="panel">
+          <h2>★ популярные страницы</h2>
+          <p class="catalog-intro">Сколько раз страницу открыли за выбранный период. Время в журнале UTC.</p>
+
+          {{if not .Top}}<p class="catalog-empty">[ за этот период просмотров нет ]</p>{{end}}
+          {{if .Top}}
+          <table class="users-table views-top">
+            <thead>
+              <tr>
+                <th scope="col">страница</th>
+                <th scope="col">просмотров</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Top}}
+              <tr>
+                <td>{{.Path}}</td>
+                <td>{{.N}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+          {{end}}
+
+          <h2>★ лента просмотров</h2>
+
+          <form class="auth-form views-filters" method="get" action="/vault/views">
+            <label>Логин содержит<input name="login" value="{{.LoginFilter}}" autocomplete="off" /></label>
+            <label>Путь содержит<input name="path" value="{{.PathFilter}}" autocomplete="off" /></label>
+            <label>
+              Кто
+              <select name="audience">
+                <option value="">все</option>
+                <option value="users" {{if eq .Audience "users"}}selected{{end}}>вошедшие</option>
+                <option value="anonymous" {{if eq .Audience "anonymous"}}selected{{end}}>анонимы</option>
+              </select>
+            </label>
+            <label>
+              Период
+              <select name="period">
+                <option value="">всё время</option>
+                <option value="today" {{if eq .Period "today"}}selected{{end}}>сегодня</option>
+                <option value="7" {{if eq .Period "7"}}selected{{end}}>7 дней</option>
+                <option value="30" {{if eq .Period "30"}}selected{{end}}>30 дней</option>
+              </select>
+            </label>
+            <button type="submit" class="tool-btn">показать</button>
+          </form>
+
+          {{if not .Entries}}<p class="catalog-empty">[ ничего не найдено ]</p>{{end}}
+
+          <table class="users-table actions-table">
+            <thead>
+              <tr>
+                <th scope="col">время</th>
+                <th scope="col">логин</th>
+                <th scope="col">страница</th>
+                <th scope="col">ip</th>
+                <th scope="col">браузер</th>
+                <th scope="col">откуда</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Entries}}
+              <tr>
+                <td>{{.At}}</td>
+                <td>{{.Login}}</td>
+                <td>{{.Path}}</td>
+                <td>{{.IP}}</td>
+                <td>{{.UA}}</td>
+                <td>{{.Referer}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+          <nav class="users-pager" aria-label="Страницы журнала">
+            {{if .Prev}}
+            <a class="tool-btn" href="/vault/views?login={{.LoginFilter}}&path={{.PathFilter}}&period={{.Period}}&audience={{.Audience}}&page={{.Prev}}">назад</a>
+            {{end}}
+            <span>страница {{.Page}} из {{.Pages}} // всего: {{.Total}}</span>
+            {{if .Next}}
+            <a class="tool-btn" href="/vault/views?login={{.LoginFilter}}&path={{.PathFilter}}&period={{.Period}}&audience={{.Audience}}&page={{.Next}}">вперёд</a>
+            {{end}}
+          </nav>
+        </section>
+
+        <p class="auth-actions">
+          <a class="tool-btn" href="/vault">← в vault</a>
+          <a class="tool-btn" href="/vault/actions">action journal</a>
+          <a class="tool-btn" href="/vault/users">users</a>
+        </p>
+      </main>
+
+      <footer class="site-footer">
+        <p>© 2077 Ivan223</p>
+      </footer>
+    </div>
+  </body>
+</html>

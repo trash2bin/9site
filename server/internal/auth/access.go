@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ivan223/web1-personal-site/server/internal/store"
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // caller авторизованный пользователь в контексте запроса.
@@ -49,6 +50,31 @@ func (s *Server) RequireAdmin(next http.Handler) http.Handler {
 func (s *Server) Login(r *http.Request) string {
 	who, _ := r.Context().Value(callerKey{}).(caller)
 	return who.Login
+}
+
+// Identify тихо резолвит сессию на обычных HTML-страницах: логин уходит в
+// контекст (читается Login), активность сессии штампуется метой. Гостей не
+// уводит, для POST мета не пишется: их обработчики берут сессию сами.
+func (s *Server) Identify(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !webutil.PageView(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		sess, user := s.sessionFrom(r)
+		if user == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if err := s.sessions.TouchSession(r.Context(), sess.TokenHash,
+			webutil.ClientIP(r), r.UserAgent()); err != nil {
+			s.log.Warn("session touch failed", "err", err)
+		}
+
+		who := caller{Login: user.Login, Role: user.Role}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callerKey{}, who)))
+	})
 }
 
 // IsAdmin пришёл ли запрос от админа.

@@ -253,6 +253,14 @@ a.tool-btn {
   color: #9fd3a3;
 }
 
+/* Колонка активности: адрес и браузер переносятся, страница не едет. */
+.users-device {
+  color: #9a9a9a;
+  font-size: 0.8rem;
+  white-space: normal;
+  word-break: break-all;
+}
+
 .actions-filters {
   display: grid;
   grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 2fr) minmax(9rem, 1fr) auto;
@@ -262,6 +270,19 @@ a.tool-btn {
 }
 
 .actions-filters .tool-btn {
+  align-self: end;
+}
+
+/* Фильтры журнала просмотров: два поля ввода, два списка, кнопка. */
+.views-filters {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1fr) minmax(11rem, 1fr) minmax(8rem, auto) minmax(8rem, auto) auto;
+  align-items: end;
+  max-width: none;
+  margin-bottom: 1rem;
+}
+
+.views-filters .tool-btn {
   align-self: end;
 }
 
