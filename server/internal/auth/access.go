@@ -68,7 +68,7 @@ func (s *Server) Identify(next http.Handler) http.Handler {
 			return
 		}
 		if err := s.sessions.TouchSession(r.Context(), sess.TokenHash,
-			webutil.ClientIP(r), r.UserAgent()); err != nil {
+			webutil.ClientIP(r), webutil.TruncateRunes(r.UserAgent(), webutil.MaxUA)); err != nil {
 			s.log.Warn("session touch failed", "err", err)
 		}
 

@@ -54,6 +54,7 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	// Лимит висит в Register, здесь ip только для журнала.
 	ip := webutil.ClientIP(r)
 
@@ -76,8 +77,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)) != nil {
 		// Одно и то же сообщение на неверный логин и неверный пароль:
 		// иначе форма превращается в перечислитель существующих логинов.
+		// В журнал попадает обрезанный логин: валидация в этой ветке не прошла.
 		s.log.Action(logging.Action{
-			Login: login, Event: logging.EventLoginFailed, Result: logging.ResultFailure, IP: ip,
+			Login: webutil.TruncateRunes(login, 30), Event: logging.EventLoginFailed, Result: logging.ResultFailure, IP: ip,
 		})
 		s.loginWall(w, r, "неверный логин или пароль")
 		return
@@ -96,6 +98,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	ip := webutil.ClientIP(r)
 
 	if !s.csrfOK(r) {
@@ -191,6 +194,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if !s.csrfOK(r) {
 		http.Redirect(w, r, "/studio", http.StatusSeeOther)
 		return
@@ -213,6 +217,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // handleProfile смена регистрационных данных; логин не меняется.
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	_, user := s.sessionFrom(r)
 	if user == nil {
 		http.Redirect(w, r, "/studio?auth=login", http.StatusSeeOther)
@@ -314,6 +319,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 // handleForgot заявка на восстановление пароля; ответ всегда одинаковый,
 // иначе форма выдала бы, какие почты зарегистрированы на сайте.
 func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	ip := webutil.ClientIP(r)
 
 	if !s.csrfOK(r) {
@@ -322,6 +328,11 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := strings.TrimSpace(r.PostFormValue("email"))
+	// Аккаунт с пустой почтой (админ из env) не должен получить токен сброса.
+	if msg := validateEmail(email); msg != "" {
+		s.renderStudio(w, studioData{Error: msg, Open: "forgot", CSRF: s.csrfToken(w, r)})
+		return
+	}
 	user, err := s.userByEmail(r.Context(), email)
 
 	link := ""
@@ -388,7 +399,7 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleResetForm(w http.ResponseWriter, r *http.Request) {
 	tokenValue := r.URL.Query().Get("token")
-	if tokenValue == "" {
+	if !tokenPattern.MatchString(tokenValue) {
 		http.Redirect(w, r, "/studio?auth=login", http.StatusSeeOther)
 		return
 	}
@@ -396,11 +407,16 @@ func (s *Server) handleResetForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleResetApply(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	tokenValue := r.PostFormValue("token")
 	password := r.PostFormValue("password")
 
 	if !s.csrfOK(r) {
 		s.renderReset(w, resetData{Token: tokenValue, Error: "форма устарела: откройте ссылку из письма заново", CSRF: s.csrfToken(w, r)})
+		return
+	}
+	if !tokenPattern.MatchString(tokenValue) {
+		s.renderReset(w, resetData{Error: "ссылка недействительна или уже использована", CSRF: s.csrfToken(w, r)})
 		return
 	}
 	if errText := validatePassword(password); errText != "" {
@@ -452,6 +468,7 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", contentTypeFor(name))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFile(w, r, filepath.Join(s.avatarDir, name))
 }

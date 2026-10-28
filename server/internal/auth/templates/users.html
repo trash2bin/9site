@@ -34,8 +34,8 @@
           {{if .Message}}<p class="auth-flash auth-flash-ok" role="status">{{.Message}}</p>{{end}}
 
           <p class="catalog-intro">
-            user грузит кадры в общий альбом и удаляет свои, admin удаляет любые. Снять админа с последнего аккаунта
-            нельзя.
+            user грузит кадры в общий альбом и удаляет свои, admin удаляет любые. Роль admin здесь только выдаётся,
+            снять её можно только в базе.
           </p>
 
           {{if not .Users}}<p class="catalog-empty">[ пусто ]</p>{{end}}
@@ -67,8 +67,7 @@
                     <input type="hidden" name="login" value="{{.Login}}" />
                     <input type="hidden" name="page" value="{{$.Page}}" />
                     {{if .IsAdmin}}
-                    <input type="hidden" name="role" value="user" />
-                    <button type="submit" class="tool-btn">снять админа</button>
+                    <span class="users-device">снять можно только в базе</span>
                     {{else}}
                     <input type="hidden" name="role" value="admin" />
                     <button type="submit" class="tool-btn">сделать админом</button>

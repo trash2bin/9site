@@ -105,8 +105,12 @@ func (s *Store) UpdateAvatar(ctx context.Context, id int64, name string) error {
 	return err
 }
 
-// SetUserRole меняет роль по логину: ErrNotFound, если такого логина нет.
+// SetUserRole меняет роль по логину: ErrInvalidRole для чужой роли,
+// ErrNotFound, если такого логина нет.
 func (s *Store) SetUserRole(ctx context.Context, login, role string) error {
+	if !ValidRole(role) {
+		return ErrInvalidRole
+	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE users SET role = $1 WHERE login = $2`, role, login,
 	)

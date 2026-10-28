@@ -21,6 +21,8 @@ import (
 var (
 	loginPattern = regexp.MustCompile(`^[a-zA-Z0-9]{3,30}$`)
 	avatarName   = regexp.MustCompile(`^u[0-9]+-[0-9a-f]+\.(gif|png|jpg|webp)$`)
+	// tokenPattern токен сброса пароля: base64url до 128 байт; мусор не хешируется.
+	tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 )
 
 func validateLogin(login string) string {
@@ -47,14 +49,16 @@ func validateEmail(email string) string {
 	return ""
 }
 
-// cleanName убирает управляющие символы из ФИО; экранирование от XSS делает html/template.
+// cleanName убирает управляющие символы из ФИО и обрезает до 100 рун;
+// экранирование от XSS делает html/template.
 func cleanName(name string) string {
-	return strings.Map(func(r rune) rune {
+	cleaned := strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
 			return -1
 		}
 		return r
 	}, strings.TrimSpace(name))
+	return webutil.TruncateRunes(cleaned, 100)
 }
 
 func hashPassword(password string) (string, error) {

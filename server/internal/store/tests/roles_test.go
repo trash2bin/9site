@@ -28,6 +28,9 @@ func TestUserRole(t *testing.T) {
 	if err := s.SetUserRole(ctx, "nobody", store.RoleAdmin); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("неизвестный логин: %v, ожидался ErrNotFound", err)
 	}
+	if err := s.SetUserRole(ctx, "reader", "root"); !errors.Is(err, store.ErrInvalidRole) {
+		t.Fatalf("непонятная роль: %v, ожидался ErrInvalidRole", err)
+	}
 
 	// Чтение по логину и по id отдаёт ту же роль.
 	for _, get := range []func() (*store.User, error){

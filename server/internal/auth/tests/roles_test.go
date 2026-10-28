@@ -195,8 +195,8 @@ func setRole(t *testing.T, c *http.Client, base, csrf, login, role string) (int,
 	return res.StatusCode, string(body)
 }
 
-// TestUsersPageRoles: админ видит список и меняет роли, последнего админа
-// снять нельзя, обычный юзер на страницу не попадает.
+// TestUsersPageRoles: админ видит список и выдаёт роль admin; снять её из
+// интерфейса нельзя никому, обычный юзер на страницу не попадает.
 func TestUsersPageRoles(t *testing.T) {
 	env := adminEnv(t)
 
@@ -225,18 +225,24 @@ func TestUsersPageRoles(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("страница прав: %d\n%s", res.StatusCode, text)
 	}
-	for _, want := range []string{"owner", "reader", "reader@example.com", "сделать админом", "снять админа"} {
+	for _, want := range []string{"owner", "reader", "reader@example.com", "сделать админом", "снять можно только в базе"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("на странице нет %q:\n%s", want, text)
 		}
 	}
+	if strings.Contains(text, "снять админа") {
+		t.Fatalf("кнопка снятия админа не должна попадать в разметку:\n%s", text)
+	}
 
 	csrf := pageCSRF(t, admin, env.ts.URL+"/vault/users")
 
-	// Единственного админа снять нельзя.
+	// Снять роль admin (в первую очередь свою) из интерфейса нельзя.
 	if code, body := setRole(t, admin, env.ts.URL, csrf, "owner", store.RoleUser); code != http.StatusOK ||
-		!strings.Contains(body, "последнего админа снять нельзя") {
-		t.Fatalf("снятие последнего админа: %d\n%s", code, body)
+		!strings.Contains(body, "роль admin из интерфейса не снимается") {
+		t.Fatalf("снятие админа: %d\n%s", code, body)
+	}
+	if user, err := env.st.UserByLogin(t.Context(), "owner"); err != nil || !user.IsAdmin() {
+		t.Fatalf("роль owner после попытки снятия: %+v, %v", user, err)
 	}
 
 	// Обычного юзера повышаем: теперь админов двое.
@@ -259,25 +265,20 @@ func TestUsersPageRoles(t *testing.T) {
 		}
 	}
 
-	// Снимаем админа с себя: роль читается из базы на каждом запросе,
-	// поэтому дальше тот же клиент уже не админ.
-	if code, body := setRole(t, admin, env.ts.URL, csrf, "owner", store.RoleUser); code != http.StatusSeeOther {
-		t.Fatalf("снятие с себя: %d\n%s", code, body)
-	}
-	if res, err := admin.Get(env.ts.URL + "/vault/users"); err != nil {
-		t.Fatal(err)
-	} else {
-		_ = res.Body.Close()
-		if res.StatusCode != http.StatusForbidden {
-			t.Fatalf("бывший админ на странице прав: %d, ожидался 403", res.StatusCode)
-		}
+	// Второй админ равен первому: снять роль у пира тоже нельзя.
+	readerCSRF := pageCSRF(t, reader, env.ts.URL+"/vault/users")
+	if code, body := setRole(t, reader, env.ts.URL, readerCSRF, "owner", store.RoleUser); code != http.StatusOK ||
+		!strings.Contains(body, "роль admin из интерфейса не снимается") {
+		t.Fatalf("снятие пира: %d\n%s", code, body)
 	}
 
-	// Reader остался единственным админом: снять роль с него нельзя.
-	readerCSRF := pageCSRF(t, reader, env.ts.URL+"/vault/users")
-	if code, body := setRole(t, reader, env.ts.URL, readerCSRF, "reader", store.RoleUser); code != http.StatusOK ||
-		!strings.Contains(body, "последнего админа снять нельзя") {
-		t.Fatalf("снятие единственного админа: %d\n%s", code, body)
+	// Повторное повышение админа: роль уже такая, без ошибки и без записи в журнал.
+	if code, _ := setRole(t, admin, env.ts.URL, csrf, "owner", store.RoleAdmin); code != http.StatusSeeOther {
+		t.Fatalf("повышение уже админа: %d", code)
+	}
+
+	if n, err := env.st.AdminCount(t.Context()); err != nil || n != 2 {
+		t.Fatalf("админов %d (%v), ждали ровно 2", n, err)
 	}
 }
 

@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
+
+	"github.com/ivan223/web1-personal-site/server/internal/webutil"
 )
 
 // pageGet запрос страницы с Accept браузера: Identify пропускает всё остальное.
@@ -111,5 +114,46 @@ func TestIdentifyResolvesLoginAndTouchesSession(t *testing.T) {
 	}
 	if string(page) != "login=" {
 		t.Fatalf("запрос без Accept: %q, логин не должен попадать в контекст", page)
+	}
+}
+
+// TestIdentifyTruncatesUserAgent: жирный User-Agent обрезается перед базой,
+// мета сессии не растит строку без края.
+func TestIdentifyTruncatesUserAgent(t *testing.T) {
+	env := testServer(t)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /page", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	ts := httptest.NewServer(env.srv.Identify(mux))
+	t.Cleanup(ts.Close)
+
+	c := client(t)
+	if code, page := register(t, c, env.ts.URL, "fatua", "secret-pass-1", "", "fatua@example.com", nil); code != http.StatusSeeOther {
+		t.Fatalf("регистрация: %d\n%s", code, page)
+	}
+	if code := loginForm(t, c, env.ts.URL, "fatua", "secret-pass-1"); code != http.StatusSeeOther {
+		t.Fatalf("вход: %d", code)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/page", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	req.Header.Set("User-Agent", strings.Repeat("u", 400))
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+
+	sess, err := env.st.SessionByTokenHash(context.Background(), sessionHash(t, c, ts.URL))
+	if err != nil {
+		t.Fatalf("SessionByTokenHash: %v", err)
+	}
+	if n := len([]rune(sess.UA)); n > webutil.MaxUA {
+		t.Fatalf("UA в сессии %d рун, лимит %d", n, webutil.MaxUA)
 	}
 }

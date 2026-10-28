@@ -22,6 +22,12 @@ type ViewSink interface {
 	RecordView(ctx context.Context, v View) error
 }
 
+// Пределы строк записи просмотра: сырьё клиента не растит строку без края.
+const (
+	maxViewPath    = 300
+	maxViewReferer = 512
+)
+
 // viewSkip маршруты, которые не страницы браузера: healthz, JSON API,
 // картинки. Расширение имени файла отсекает PageView отдельно.
 var viewSkip = []string{"/healthz", "/api/", "/avatars/", "/photos/"}
@@ -61,10 +67,10 @@ func (v ViewLog) Middleware(next http.Handler) http.Handler {
 			}
 			err := v.Sink.RecordView(r.Context(), View{
 				Login:   login,
-				Path:    r.URL.Path,
+				Path:    TruncateRunes(r.URL.Path, maxViewPath),
 				IP:      ClientIP(r),
-				UA:      r.UserAgent(),
-				Referer: r.Referer(),
+				UA:      TruncateRunes(r.UserAgent(), MaxUA),
+				Referer: TruncateRunes(r.Referer(), maxViewReferer),
 			})
 			if err != nil && v.Log != nil {
 				v.Log.Warn("page view write failed", "err", err)

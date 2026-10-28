@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
@@ -122,5 +123,34 @@ func TestViewLogMiddleware(t *testing.T) {
 	h2.ServeHTTP(rec, r2)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("код при ошибке записи: %d", rec.Code)
+	}
+}
+
+// TestViewLogTruncates: сырьё от клиента обрезается до пределов журнала.
+func TestViewLogTruncates(t *testing.T) {
+	sink := &viewSink{}
+	vl := webutil.ViewLog{Sink: sink}
+	h := vl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	r := httptest.NewRequest("GET", "/"+strings.Repeat("a", 500), nil)
+	r.Header.Set("Accept", "text/html")
+	r.Header.Set("User-Agent", strings.Repeat("u", 400))
+	r.Header.Set("Referer", "https://example.com/?q="+strings.Repeat("r", 600))
+	h.ServeHTTP(httptest.NewRecorder(), r)
+
+	if len(sink.views) != 1 {
+		t.Fatalf("записей: %d", len(sink.views))
+	}
+	v := sink.views[0]
+	if n := len([]rune(v.Path)); n > 300 {
+		t.Fatalf("path %d рун, лимит 300", n)
+	}
+	if n := len([]rune(v.UA)); n > 256 {
+		t.Fatalf("ua %d рун, лимит 256", n)
+	}
+	if n := len([]rune(v.Referer)); n > 512 {
+		t.Fatalf("referer %d рун, лимит 512", n)
 	}
 }

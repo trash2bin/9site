@@ -19,6 +19,7 @@ func (s *Server) tooMany(w http.ResponseWriter, _ *http.Request) {
 // handleSignup принимает форму Sign Up, сохраняет заявку, далее PRG-редирект
 // с ?sent=1. Защита: honeypot, лимитер и Origin; CSRF не нужен, форма анонимна.
 func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	// Адрес идёт в заявку и журнал, тот же ключ считает лимит в Register.
 	ip := webutil.ClientIP(r)
 

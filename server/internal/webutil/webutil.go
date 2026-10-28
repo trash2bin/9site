@@ -1,5 +1,6 @@
 // Package webutil общие для нескольких пакетов мелочи: адрес клиента
-// (ClientIP), ограничители частоты (Limits) и проверка почты (ValidEmail).
+// (ClientIP), ограничители частоты (Limits), проверка почты (ValidEmail)
+// и обрезка строк (TruncateRunes).
 package webutil
 
 import (
@@ -26,6 +27,21 @@ func ClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// MaxUA длина строки User-Agent, которая уходит в базу.
+const MaxUA = 256
+
+// TruncateRunes обрезает строку до n рун, не рассекая многобайтовые символы.
+func TruncateRunes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n])
 }
 
 // emailPattern почта, одна на все формы (auth и leads): без крайностей

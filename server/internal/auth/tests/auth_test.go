@@ -527,6 +527,9 @@ func TestAvatar(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("аватар отдал %d, ждали 200", res.StatusCode)
 	}
+	if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("аватар без nosniff: %q", got)
+	}
 
 	_, page := register(t, c, env.ts.URL, "evil", "secret-pass-1", "", "evil@example.com",
 		strings.NewReader("<html><script>alert(1)</script></html>"))
@@ -618,6 +621,146 @@ func TestForgotWithoutSMTPHidesLink(t *testing.T) {
 	matches, _ := filepath.Glob(filepath.Join(env.outbox, "*.eml"))
 	if len(matches) != 1 {
 		t.Fatalf("в почтовом ящике %d писем, ждали 1", len(matches))
+	}
+}
+
+// TestForgotRejectsInvalidEmail: битая почта не доходит до поиска, иначе
+// токен сброса получил бы аккаунт с пустой почтой, админ из окружения.
+func TestForgotRejectsInvalidEmail(t *testing.T) {
+	env := adminEnv(t)
+	c := client(t)
+
+	for _, email := range []string{"", "без-собаки", "a@b@c"} {
+		res, err := c.PostForm(env.ts.URL+"/auth/forgot", url.Values{
+			"email": {email},
+			"csrf":  {formCSRF(t, c, env.ts.URL)},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("почта %q: статус %d", email, res.StatusCode)
+		}
+		if !bytes.Contains(page, []byte("корректный адрес почты")) {
+			t.Fatalf("почта %q не отклонена:\n%s", email, page)
+		}
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(env.outbox, "*.eml"))
+	if len(matches) != 0 {
+		t.Fatalf("токен сброса создан для битой почты: %v", matches)
+	}
+}
+
+// TestLoginJournalCapsLogin: неудачный вход пишет в журнал обрезанный
+// логин: журнал не чистится, расти он обязан умеренно.
+func TestLoginJournalCapsLogin(t *testing.T) {
+	env := testServer(t)
+	c := client(t)
+
+	form := url.Values{
+		"login":    {strings.Repeat("x", 400)},
+		"password": {"nope"},
+		"csrf":     {formCSRF(t, c, env.ts.URL)},
+	}
+	res, err := c.PostForm(env.ts.URL+"/auth/login", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+
+	entries, err := env.st.ListActions(t.Context(), store.ActionFilter{Event: logging.EventLoginFailed}, 10, 0)
+	if err != nil {
+		t.Fatalf("ListActions: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("записей о неудачном входе: %d", len(entries))
+	}
+	if n := len([]rune(entries[0].Login)); n > 30 {
+		t.Fatalf("логин в журнале %d рун, лимит 30", n)
+	}
+}
+
+// TestRegisterCapsFullName: ФИО длиннее 100 рун обрезается до базы,
+// иначе страница прав раздувается чужими мегабайтами.
+func TestRegisterCapsFullName(t *testing.T) {
+	env := testServer(t)
+	c := client(t)
+
+	name := strings.Repeat("Иван Палыч ", 300)
+	if code, page := register(t, c, env.ts.URL, "longname", "secret-pass-1", name, "long@example.com", nil); code != http.StatusSeeOther {
+		t.Fatalf("регистрация: %d\n%s", code, page)
+	}
+	user, err := env.st.UserByLogin(t.Context(), "longname")
+	if err != nil {
+		t.Fatalf("UserByLogin: %v", err)
+	}
+	if n := len([]rune(user.FullName)); n > 100 {
+		t.Fatalf("ФИО %d рун, лимит 100", n)
+	}
+}
+
+// TestRegisterBodyLimited: тело больше мегабайта отсекается на входе:
+// аккаунт не создаётся, парсер мусор не видит.
+func TestRegisterBodyLimited(t *testing.T) {
+	env := testServer(t)
+	c := client(t)
+
+	form := url.Values{
+		"login":     {"fatbody"},
+		"password":  {"secret-pass-1"},
+		"email":     {"fat@example.com"},
+		"full_name": {strings.Repeat("x", 2<<20)},
+		"csrf":      {formCSRF(t, c, env.ts.URL)},
+	}
+	res, err := c.PostForm(env.ts.URL+"/auth/register", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if !bytes.Contains(page, []byte("форма устарела")) {
+		t.Fatalf("тело без лимита не отсечено:\n%s", page)
+	}
+	if _, err := env.st.UserByLogin(t.Context(), "fatbody"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("аккаунт fatbody создался: %v", err)
+	}
+}
+
+// TestResetTokenFormat: мусорный токен не доходит до хеширования:
+// GET уводит на вход, POST отвечает как сгоревшая ссылка.
+func TestResetTokenFormat(t *testing.T) {
+	env := testServer(t)
+	c := client(t)
+
+	junk := strings.Repeat("a", 129)
+	res, err := c.Get(env.ts.URL + "/reset?token=" + junk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("GET с мусорным токеном: %d, ждался 303", res.StatusCode)
+	}
+	if loc := res.Header.Get("Location"); !strings.Contains(loc, "/studio") {
+		t.Fatalf("редирект с мусорным токеном: %q", loc)
+	}
+
+	form := url.Values{
+		"token":    {junk},
+		"password": {"brand-new-pass-9"},
+		"csrf":     {formCSRF(t, c, env.ts.URL)},
+	}
+	res, err = c.PostForm(env.ts.URL+"/reset", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if !bytes.Contains(page, []byte("недействительна")) {
+		t.Fatalf("мусорный токен не отбит:\n%s", page)
 	}
 }
 

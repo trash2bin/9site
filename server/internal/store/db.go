@@ -63,6 +63,9 @@ var ErrEmailTaken = errors.New("email taken")
 // database/sql ради ошибки «не найдено».
 var ErrNotFound = errors.New("not found")
 
+// ErrInvalidRole - роль вне набора admin|user; в базу не уходит.
+var ErrInvalidRole = errors.New("invalid role")
+
 func noRows(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound

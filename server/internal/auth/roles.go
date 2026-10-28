@@ -97,8 +97,8 @@ func pageNumber(raw string) int {
 	return n
 }
 
-// handleUserRole выдаёт и снимает роль admin. Последнего админа не снимаем:
-// иначе страница прав останется без того, кто может её открыть.
+// handleUserRole выдаёт роль admin. Снимать её из интерфейса нельзя:
+// админ равен админу, возврат к юзеру только через базу или env.
 func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	if err := r.ParseForm(); err != nil {
@@ -130,15 +130,12 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if role == store.RoleUser && target.IsAdmin() {
-		admins, err := s.users.AdminCount(ctx)
-		if err != nil {
-			s.internalError(w, err)
-			return
-		}
-		if admins <= 1 {
-			s.renderUsers(w, r, usersData{Error: "последнего админа снять нельзя"})
-			return
-		}
+		s.renderUsers(w, r, usersData{Error: "роль admin из интерфейса не снимается"})
+		return
+	}
+	if target.Role == role {
+		http.Redirect(w, r, fmt.Sprintf("/vault/users?ok=role&page=%d", page), http.StatusSeeOther)
+		return
 	}
 
 	if err := s.users.SetUserRole(ctx, login, role); err != nil {
