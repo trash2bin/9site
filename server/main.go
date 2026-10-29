@@ -204,7 +204,7 @@ func run() error {
 	// и загрузку аватара, и отдачу статики на медленном канале.
 	srv := &http.Server{
 		Addr:              "127.0.0.1:8080",
-		Handler:           authServer.Identify(viewLog.Middleware(mux)),
+		Handler:           webutil.SecurityHeaders(authServer.Identify(viewLog.Middleware(mux))),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
