@@ -50,7 +50,7 @@ func (s *Server) bootstrapAdmin() error {
 		s.log.Info("admin account updated from environment", "login", login)
 	}
 	s.log.Action(logging.Action{
-		Login: "system", Event: logging.EventAdminBootstrapped, Target: login,
+		Login: "system", Event: EventAdminBootstrapped, Target: login,
 		Result: logging.ResultSuccess, IP: "local",
 	})
 	return nil
@@ -144,7 +144,7 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Action(logging.Action{
-		Login: s.Login(r), Event: logging.EventRoleChanged,
+		Login: s.Login(r), Event: EventRoleChanged,
 		Target: fmt.Sprintf("%s: %s -> %s", login, target.Role, role),
 		Result: logging.ResultSuccess, IP: webutil.ClientIP(r),
 	})

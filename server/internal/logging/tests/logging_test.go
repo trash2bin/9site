@@ -10,6 +10,12 @@ import (
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
 )
 
+var (
+	testEvents = logging.NewRegistrar("tests")
+	evLogin    = testEvents.Register("login", "вход в тесте")
+	evLogout   = testEvents.Register("logout", "выход в тесте")
+)
+
 // fakeSink - журнал в памяти, fail имитирует поломку журнала.
 type fakeSink struct {
 	entries []logging.Action
@@ -31,13 +37,13 @@ func TestActionToSink(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	log.Action(logging.Action{Login: "demo", Event: "login", Result: "success", IP: "127.0.0.1"})
-	log.Action(logging.Action{Login: "demo", Event: "logout", Result: "success", IP: "127.0.0.1"})
+	log.Action(logging.Action{Login: "demo", Event: evLogin, Result: "success", IP: "127.0.0.1"})
+	log.Action(logging.Action{Login: "demo", Event: evLogout, Result: "success", IP: "127.0.0.1"})
 
 	if len(sink.entries) != 2 {
 		t.Fatalf("в журнале %d записей, ждали 2", len(sink.entries))
 	}
-	if sink.entries[0].Event != "login" || sink.entries[1].Event != "logout" {
+	if sink.entries[0].Event.Name() != evLogin.Name() || sink.entries[1].Event.Name() != evLogout.Name() {
 		t.Fatalf("журнал не тот: %v", sink.entries)
 	}
 	if sink.entries[0].Login != "demo" || sink.entries[0].IP != "127.0.0.1" {
@@ -52,7 +58,7 @@ func TestActionSinkError(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	log.Action(logging.Action{Login: "demo", Event: "login", Result: "success", IP: "127.0.0.1"})
+	log.Action(logging.Action{Login: "demo", Event: evLogin, Result: "success", IP: "127.0.0.1"})
 
 	if !strings.Contains(buf.String(), "action journal write failed") {
 		t.Fatalf("ошибка журнала не попала в лог:\n%s", buf.String())
@@ -64,7 +70,7 @@ func TestActionWithoutSink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	log.Action(logging.Action{Login: "demo", Event: "login", Result: "success", IP: "127.0.0.1"})
+	log.Action(logging.Action{Login: "demo", Event: evLogin, Result: "success", IP: "127.0.0.1"})
 }
 
 func TestLevel(t *testing.T) {

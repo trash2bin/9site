@@ -140,7 +140,7 @@ type storeActionSink struct {
 
 func (s storeActionSink) Action(action logging.Action) error {
 	return s.store.Record(context.Background(), store.Action{
-		Login: action.Login, Event: action.Event, Target: action.Target,
+		Login: action.Login, Event: action.Event.Name(), Target: action.Target,
 		Result: action.Result, IP: action.IP,
 	})
 }
@@ -671,7 +671,7 @@ func TestLoginJournalCapsLogin(t *testing.T) {
 	}
 	_ = res.Body.Close()
 
-	entries, err := env.st.ListActions(t.Context(), store.ActionFilter{Event: logging.EventLoginFailed}, 10, 0)
+	entries, err := env.st.ListActions(t.Context(), store.ActionFilter{Event: auth.EventLoginFailed.Name()}, 10, 0)
 	if err != nil {
 		t.Fatalf("ListActions: %v", err)
 	}

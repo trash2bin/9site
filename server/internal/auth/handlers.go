@@ -79,7 +79,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// иначе форма превращается в перечислитель существующих логинов.
 		// В журнал попадает обрезанный логин: валидация в этой ветке не прошла.
 		s.log.Action(logging.Action{
-			Login: webutil.TruncateRunes(login, 30), Event: logging.EventLoginFailed, Result: logging.ResultFailure, IP: ip,
+			Login: webutil.TruncateRunes(login, 30), Event: EventLoginFailed, Result: logging.ResultFailure, IP: ip,
 		})
 		s.loginWall(w, r, "неверный логин или пароль")
 		return
@@ -92,7 +92,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Action(logging.Action{
-		Login: user.Login, Event: logging.EventLoginSucceeded, Result: logging.ResultSuccess, IP: ip,
+		Login: user.Login, Event: EventLoginSucceeded, Result: logging.ResultSuccess, IP: ip,
 	})
 	http.Redirect(w, r, "/studio", http.StatusSeeOther)
 }
@@ -184,7 +184,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Action(logging.Action{
-		Login: user.Login, Event: logging.EventRegistered, Result: logging.ResultSuccess, IP: ip,
+		Login: user.Login, Event: EventRegistered, Result: logging.ResultSuccess, IP: ip,
 	})
 	if err := s.startSession(r.Context(), w, r, user); err != nil {
 		s.internalError(w, err)
@@ -209,7 +209,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	if user != nil {
 		s.log.Action(logging.Action{
-			Login: user.Login, Event: logging.EventLoggedOut, Result: logging.ResultSuccess, IP: ip,
+			Login: user.Login, Event: EventLoggedOut, Result: logging.ResultSuccess, IP: ip,
 		})
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -259,7 +259,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.log.Action(logging.Action{
-			Login: user.Login, Event: logging.EventPasswordChanged, Result: logging.ResultSuccess, IP: ip,
+			Login: user.Login, Event: EventPasswordChanged, Result: logging.ResultSuccess, IP: ip,
 		})
 		// updatePassword гасит все сессии, включая текущую: без новой
 		// сессии пользователь вылетит сразу после смены пароля.
@@ -280,7 +280,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if profileFields != "" {
 		s.log.Action(logging.Action{
-			Login: user.Login, Event: logging.EventProfileUpdated, Target: profileFields,
+			Login: user.Login, Event: EventProfileUpdated, Target: profileFields,
 			Result: logging.ResultSuccess, IP: ip,
 		})
 	}
@@ -303,7 +303,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.log.Action(logging.Action{
-			Login: user.Login, Event: logging.EventAvatarUpdated, Target: name,
+			Login: user.Login, Event: EventAvatarUpdated, Target: name,
 			Result: logging.ResultSuccess, IP: ip,
 		})
 	}
@@ -355,7 +355,7 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 		)
 
 		s.log.Action(logging.Action{
-			Login: user.Login, Event: logging.EventPasswordResetAsked,
+			Login: user.Login, Event: EventPasswordResetAsked,
 			Result: logging.ResultSuccess, IP: ip,
 		})
 		mailErr = s.sendMail(r.Context(), user.Email, "Смена пароля на "+s.cfg.BaseURL, body)
@@ -452,7 +452,7 @@ func (s *Server) handleResetApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Action(logging.Action{
-		Login: user.Login, Event: logging.EventPasswordResetApplied,
+		Login: user.Login, Event: EventPasswordResetApplied,
 		Result: logging.ResultSuccess, IP: webutil.ClientIP(r),
 	})
 	http.Redirect(w, r, "/studio?auth=login&reset=1", http.StatusSeeOther)

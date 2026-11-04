@@ -62,12 +62,12 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveLead(context.WithoutCancel(r.Context()), lead); err != nil {
 		s.log.Error("lead not saved", "err", err)
 		s.log.Action(logging.Action{
-			Login: "anonymous", Event: logging.EventLeadSubmitFailed,
+			Login: "anonymous", Event: EventLeadSubmitFailed,
 			Result: logging.ResultFailure, IP: ip,
 		})
 	} else {
 		s.log.Action(logging.Action{
-			Login: "anonymous", Event: logging.EventLeadSubmitted,
+			Login: "anonymous", Event: EventLeadSubmitted,
 			Result: logging.ResultSuccess, IP: ip,
 		})
 	}

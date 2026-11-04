@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ivan223/web1-personal-site/server/internal/auth"
 	"github.com/ivan223/web1-personal-site/server/internal/logging"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
@@ -50,7 +51,7 @@ func TestActionsPageAccess(t *testing.T) {
 	}
 	foundLogin := false
 	for _, entry := range entries {
-		if entry.Login == "owner" && entry.Event == logging.EventLoginSucceeded && entry.Result == logging.ResultSuccess {
+		if entry.Login == "owner" && entry.Event == auth.EventLoginSucceeded.Name() && entry.Result == logging.ResultSuccess {
 			foundLogin = true
 		}
 	}
@@ -65,7 +66,7 @@ func TestActionsPageAccess(t *testing.T) {
 	if res.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("Cache-Control: %q", res.Header.Get("Cache-Control"))
 	}
-	for _, want := range []string{"ACTION JOURNAL", "owner", logging.EventLoginSucceeded} {
+	for _, want := range []string{"ACTION JOURNAL", "owner", auth.EventLoginSucceeded.Name()} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("на странице нет %q:\n%s", want, page)
 		}

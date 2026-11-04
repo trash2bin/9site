@@ -72,13 +72,18 @@ func (l *Logger) Error(msg string, args ...any) { l.base.Error(msg, args...) }
 func (l *Logger) Action(action Action) {
 	l.base.Info("user action",
 		"login", action.Login,
-		"event", action.Event,
+		"event", action.Event.Name(),
 		"target", action.Target,
 		"result", action.Result,
 		"ip", action.IP,
 	)
 
 	if l.actions == nil {
+		return
+	}
+	// Строка без имени в фильтре журнала не находится: молча не пишем.
+	if action.Event.Name() == "" {
+		l.base.Error("action without event, journal skipped")
 		return
 	}
 	if err := l.actions.Action(action); err != nil {

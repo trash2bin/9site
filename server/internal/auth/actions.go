@@ -22,7 +22,7 @@ type actionView struct {
 
 type actionsData struct {
 	Entries      []actionView
-	EventNames   []string
+	Events       []logging.Event
 	LoginFilter  string
 	EventFilter  string
 	ResultFilter string
@@ -64,7 +64,7 @@ func (s *Server) handleActions(w http.ResponseWriter, r *http.Request) {
 
 	data := actionsData{
 		Entries:      make([]actionView, 0, len(entries)),
-		EventNames:   logging.EventNames(),
+		Events:       logging.Events(),
 		LoginFilter:  filter.Login,
 		EventFilter:  filter.Event,
 		ResultFilter: filter.Result,

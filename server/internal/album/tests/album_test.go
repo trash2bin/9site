@@ -98,7 +98,7 @@ type storeActionSink struct {
 
 func (s storeActionSink) Action(action logging.Action) error {
 	return s.store.Record(context.Background(), store.Action{
-		Login: action.Login, Event: action.Event, Target: action.Target,
+		Login: action.Login, Event: action.Event.Name(), Target: action.Target,
 		Result: action.Result, IP: action.IP,
 	})
 }

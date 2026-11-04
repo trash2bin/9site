@@ -70,7 +70,7 @@ type storeActionSink struct {
 
 func (s storeActionSink) Action(action logging.Action) error {
 	return s.store.Record(context.Background(), store.Action{
-		Login: action.Login, Event: action.Event, Target: action.Target,
+		Login: action.Login, Event: action.Event.Name(), Target: action.Target,
 		Result: action.Result, IP: action.IP,
 	})
 }
@@ -130,7 +130,7 @@ func TestSignupValid(t *testing.T) {
 		t.Fatalf("заявок %d, ожидалась 1", n)
 	}
 	actions, err := st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
-	if err != nil || len(actions) != 1 || actions[0].Event != logging.EventLeadSubmitted {
+	if err != nil || len(actions) != 1 || actions[0].Event != leads.EventLeadSubmitted.Name() {
 		t.Fatalf("заявка не попала в журнал: %v %+v", err, actions)
 	}
 	if actions[0].Result != logging.ResultSuccess {

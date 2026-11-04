@@ -237,7 +237,7 @@ func (j journal) Action(action logging.Action) error {
 		context.WithoutCancel(context.Background()),
 		store.Action{
 			Login:  action.Login,
-			Event:  action.Event,
+			Event:  action.Event.Name(),
 			Target: action.Target,
 			Result: action.Result,
 			IP:     action.IP,

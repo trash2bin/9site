@@ -39,8 +39,8 @@
               Event
               <select name="event">
                 <option value="">All events</option>
-                {{range .EventNames}}
-                <option value="{{.}}" {{if eq $.EventFilter .}}selected{{end}}>{{.}}</option>
+                {{range .Events}}
+                <option value="{{.Name}}" {{if eq $.EventFilter .Name}}selected{{end}}>{{.Name}} ({{.Desc}})</option>
                 {{end}}
               </select>
             </label>

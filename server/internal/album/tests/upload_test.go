@@ -17,7 +17,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ivan223/web1-personal-site/server/internal/logging"
+	"github.com/ivan223/web1-personal-site/server/internal/album"
 	"github.com/ivan223/web1-personal-site/server/internal/store"
 )
 
@@ -187,7 +187,7 @@ func TestUserDeletesOwnButNotForeign(t *testing.T) {
 		t.Fatalf("автор %q, ожидался reader", own.UploadedBy)
 	}
 	actions, err := env.st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
-	if err != nil || !hasAction(actions, logging.EventPhotoUploaded, "reader") {
+	if err != nil || !hasAction(actions, album.EventPhotoUploaded.Name(), "reader") {
 		t.Fatalf("загрузка не попала в журнал: %v %+v", err, actions)
 	}
 
@@ -215,7 +215,7 @@ func TestUserDeletesOwnButNotForeign(t *testing.T) {
 		t.Fatalf("чужой кадр: статус %d, ожидался 403", res.StatusCode)
 	}
 	actions, err = env.st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
-	if err != nil || !hasAction(actions, logging.EventPhotoDeleteDenied, "reader") {
+	if err != nil || !hasAction(actions, album.EventPhotoDeleteDenied.Name(), "reader") {
 		t.Fatalf("отказ удаления не попал в журнал: %v %+v", err, actions)
 	}
 	if _, err := env.st.PhotoByID(context.Background(), foreign.ID); err != nil {
@@ -240,7 +240,7 @@ func TestUserDeletesOwnButNotForeign(t *testing.T) {
 		t.Fatalf("свой кадр: статус %d, ожидался 303", res.StatusCode)
 	}
 	actions, err = env.st.ListActions(context.Background(), store.ActionFilter{}, 10, 0)
-	if err != nil || !hasAction(actions, logging.EventPhotoDeleted, "reader") {
+	if err != nil || !hasAction(actions, album.EventPhotoDeleted.Name(), "reader") {
 		t.Fatalf("удаление не попало в журнал: %v %+v", err, actions)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {

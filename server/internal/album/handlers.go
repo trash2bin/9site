@@ -225,7 +225,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("photo uploaded",
 		"id", photo.ID, "size", fmt.Sprintf("%dx%d", img.width, img.height), "bytes", len(img.data))
 	s.log.Action(logging.Action{
-		Login: s.access.Login(r), Event: logging.EventPhotoUploaded,
+		Login: s.access.Login(r), Event: EventPhotoUploaded,
 		Target: fmt.Sprintf("photo:%d", photo.ID), Result: logging.ResultSuccess,
 		IP: webutil.ClientIP(r),
 	})
@@ -262,7 +262,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.access.IsAdmin(r) && existing.UploadedBy != s.access.Login(r) {
 		s.log.Action(logging.Action{
-			Login: s.access.Login(r), Event: logging.EventPhotoDeleteDenied,
+			Login: s.access.Login(r), Event: EventPhotoDeleteDenied,
 			Target: fmt.Sprintf("photo:%d", existing.ID), Result: logging.ResultFailure,
 			IP: webutil.ClientIP(r),
 		})
@@ -283,7 +283,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	s.removeImageFile(photo.URL)
 	s.log.Info("photo deleted", "id", photo.ID, "url", photo.URL)
 	s.log.Action(logging.Action{
-		Login: s.access.Login(r), Event: logging.EventPhotoDeleted,
+		Login: s.access.Login(r), Event: EventPhotoDeleted,
 		Target: fmt.Sprintf("photo:%d", photo.ID), Result: logging.ResultSuccess,
 		IP: webutil.ClientIP(r),
 	})
