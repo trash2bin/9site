@@ -190,13 +190,17 @@ e2e:
     - apt-get install -y --no-install-recommends rsync openssh-client
     - mkdir -p "$HOME/.ssh"
     - |
-      # A File variable is a path, an environment variable holds the key.
+      # A File variable is a path, an environment variable holds the key. Both
+      # go through printf: OpenSSH refuses a key whose last line has no
+      # trailing newline, and a File variable is written byte for byte.
       if [ -f "$SSH_PRIVATE_KEY" ]; then
-        cp "$SSH_PRIVATE_KEY" "$HOME/.ssh/deploy_key"
+        key="$(cat "$SSH_PRIVATE_KEY")"
       else
-        printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/deploy_key"
+        key="$SSH_PRIVATE_KEY"
       fi
+      printf '%s\n' "$key" >"$HOME/.ssh/deploy_key"
       chmod 600 "$HOME/.ssh/deploy_key"
+      ssh-keygen -y -f "$HOME/.ssh/deploy_key" >/dev/null
       ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >>"$HOME/.ssh/known_hosts" 2>/dev/null
     - |
       export DEPLOY_PATH="${DEPLOY_PATH:-/var/www/9site}"
