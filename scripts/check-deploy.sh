@@ -40,6 +40,19 @@ else
   skipped+='actionlint '
 fi
 
+# --- the GitLab pipeline, which no linter here covers --------------------
+# GitLab validates the file on push and refuses the whole pipeline on a YAML
+# error, so a syntax check locally is the cheapest way to avoid a red push.
+if python3 -c 'import yaml' >/dev/null 2>&1; then
+  if python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' .gitlab-ci.yml; then
+    note 'gitlab-ci yaml: parses'
+  else
+    bad '.gitlab-ci.yml does not parse'
+  fi
+else
+  skipped+='python3-yaml '
+fi
+
 # --- the deploy scripts, with stubbed server commands --------------------
 if command -v bats >/dev/null; then
   if bats deploy/tests/lib.bats deploy/tests/remote.bats; then

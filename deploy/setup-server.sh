@@ -56,11 +56,11 @@ fi
 say "Папка $DEPLOY_PATH"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 "$DEPLOY_PATH"
 
-say "SSH-ключ для GitHub Actions"
+say "SSH-ключ для CI"
 SSH_DIR="/home/$DEPLOY_USER/.ssh"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 700 "$SSH_DIR"
 if [ ! -f "$SSH_DIR/ci_ed25519" ]; then
-  ssh-keygen -t ed25519 -C "github-actions@9site" -f "$SSH_DIR/ci_ed25519" -N "" -q
+  ssh-keygen -t ed25519 -C "ci@9site" -f "$SSH_DIR/ci_ed25519" -N "" -q
   chown "$DEPLOY_USER:$DEPLOY_USER" "$SSH_DIR/ci_ed25519" "$SSH_DIR/ci_ed25519.pub"
   echo "  ключевая пара создана"
 else
@@ -195,17 +195,20 @@ fi
 say "Что дальше"
 cat <<INFO
 Сайт: https://$DOMAIN
-Пропиши эти значения в GitHub, в Settings -> Secrets and variables -> Actions.
 
-Переменные (вкладка Variables):
+GitLab: Settings -> CI/CD -> Variables. Пять переменных, тип Variable
+(кроме SSH_PRIVATE_KEY, для неё удобнее File), все Protected:
+
   DEPLOY_ENABLED      = true
-
-Секреты (вкладка Secrets):
   SSH_HOST            = IP этого сервера
   SSH_PORT            = $SSH_PORT
   SSH_USER            = $DEPLOY_USER
   DEPLOY_PATH         = $DEPLOY_PATH
   SSH_PRIVATE_KEY     = ключ ниже, целиком
+
+Зеркало на GitHub, если оно ещё живо: те же имена в
+Settings -> Secrets and variables -> Actions (DEPLOY_ENABLED во вкладке
+Variables, остальные в Secrets).
 
 Приватный ключ (скопируй вместе со строками BEGIN и END):
 

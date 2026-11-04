@@ -100,10 +100,12 @@
 
 ## Деплой
 
-`.github/workflows/ci.yml`: отдельные job'ы на тулчейн — `format`, `css`,
-`ts`, `go`, `shell`, `size` — и **deploy** только main, когда все job'ы
-зелёные и `vars.DEPLOY_ENABLED == 'true'`. Feedback (имена шагов, echo,
-вывод) — по-английски ключевое:
+Два файла, один пайплайн: `.gitlab-ci.yml` (основной) и зеркало
+`.github/workflows/ci.yml`. Отдельные job'ы на тулчейн — `format`, `css`,
+`ts`, `go` (`go` и `lint-go`), `govulncheck`, `shell`, `size` — и **deploy**
+только с дефолтной ветки, когда все job'ы зелёные и `DEPLOY_ENABLED`
+(`true` для GitLab, `vars.DEPLOY_ENABLED` для GitHub). Feedback (имена
+шагов, echo, вывод) — по-английски ключевое:
 
 1. Статика — rsync; **юнит и окружение — `install` из репо** (иначе сервер
    живёт на unit файле старого релиза: `EnvironmentFile` теряется, бинарь
@@ -119,7 +121,8 @@
    симлинк возвращается на прошлый релиз (`var/release-before`), база — на
    `site.db.pre-<sha>` (миграции только вперёд: старый бинарник обязан
    подняться на новой схеме), рестарт. Ручной откат — тот же скрипт в
-   обратную сторону, workflow `.github/workflows/rollback.yml`.
+   обратную сторону, job `rollback` в `.gitlab-ci.yml`, workflow
+   `.github/workflows/rollback.yml`.
 4. Рестарт + smoke: витрина 200, закрытый раздел 303, чужие файлы и
    оглавления каталогов 404, счётчик не ниже снятого до деплоя.
 
@@ -129,13 +132,16 @@
 ## CI/CD, как расширять
 
 - **Job на тулчейн**: новый линтер или проверка = один самодостаточный job
-  (checkout, свой setup, один tool). Не сцеплять с соседним.
-- **Плагинг деплоя в одном источнике**: `.github/actions/deploy` ставит
-  ssh-ключ и публикует `SSH_*`, `DEPLOY_PATH`, `TARGET`, `SSH_OPTS` в
-  `$GITHUB_ENV`. Deploy и rollback делают `uses:` его и не копируют env.
-  Окружение сервиса сюда не входит: оно в `deploy/deploy.env` (один файл на
-  юнит и скрипты), имя юнита — константа в `lib.sh`, рестарт — свойство
-  юнита. Смена пути или секрета = одна правка.
+  в **обоих** файлах (GitLab-джоб и GH-джоб с тем же именем): зеркало иначе
+  тихо расходится. Не сцеплять с соседним.
+- **Плагинг деплоя в одном источнике**: `.deploy-env` в `.gitlab-ci.yml` и
+  `.github/actions/deploy` ставят ssh-ключ и публикуют `SSH_*`,
+  `DEPLOY_PATH`, `TARGET`, `SSH_OPTS` (GitLab — через `export` в
+  `before_script`, GitHub — в `$GITHUB_ENV`). Deploy и rollback наследуют их
+  и не копируют env. Окружение сервиса сюда не входит: оно в
+  `deploy/deploy.env` (один файл на юнит и скрипты), имя юнита — константа в
+  `lib.sh`, рестарт — свойство юнита. Смена пути или секрета = одна правка
+  в обоих.
 - **Шаг вне релиза** = `deploy/remote/<name>.sh` + тест в `deploy/tests/`, в
   workflow — обычный `run:` через `run.sh` (prepare, preflight,
   install-unit, journal-report). Сам релиз — один скрипт
@@ -149,8 +155,10 @@
   `Restart=on-failure` держит сайт в 502.
 - **smoke** = один список `deploy/smoke-urls.txt`, его читают и deploy, и
   e2e: новая страница или маршрут попадает в проверку сама.
-- **e2e** репетирует deploy целиком на user-systemd, пока вне гейта
-  `deploy.needs`: дрейф он ловит, но флак не блокирует прод. Запуск:
+- **e2e** репетирует deploy целиком на user-systemd, пока вне гейта деплоя
+  (GitLab — job только по `RUN_E2E=true` вручную, GitHub — `deploy.needs`):
+  дрейф он ловит, но флак не блокирует прод. Ему нужен привилегированный
+  контейнер с systemd, на shared-раннерах его нет. Запуск локально:
   `bash deploy/tests/e2e/docker.sh` (docker + systemd-контейнер, проверяет всё,
   включая журнал). После правок `main.go`, юнита или `deploy.env` добавляй
   `bash deploy/tests/e2e/real-unit.sh`: он поднимает настоящий бинарник под

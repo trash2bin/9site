@@ -1,0 +1,299 @@
+# GitLab mirror of .github/workflows/ci.yml. Both files are the same pipeline:
+# one job per toolchain, deploy only from the default branch and only when
+# DEPLOY_ENABLED is set, rollback manual. A change to a check belongs in both.
+#
+# CI/CD variables the deploy reads (Settings -> CI/CD -> Variables):
+#   DEPLOY_ENABLED   "true" switches the deploy on
+#   SSH_HOST         server host
+#   SSH_PRIVATE_KEY  key of the deploy user, a File variable or the key itself
+#   SSH_PORT         ssh port, 22 by default
+#   SSH_USER         deploy user, "deploy" by default
+#   DEPLOY_PATH      /var/www/9site by default
+# SSH_HOST, SSH_PRIVATE_KEY and DEPLOY_PATH stay protected: a protected
+# variable never reaches a pipeline started from a merge request.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # A branch with an open MR has its checks in the MR pipeline already.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - test
+  - e2e
+  - deploy
+
+variables:
+  # HTML+CSS budget in bytes (64 KiB). Raised from 60 KiB for the studio
+  # button on the main page (css/studio-link.css).
+  SIZE_LIMIT: "65536"
+  # Both caches live inside the project dir, so one cache entry covers every
+  # image the pipeline uses.
+  GOMODCACHE: $CI_PROJECT_DIR/.go/pkg/mod
+  GOCACHE: $CI_PROJECT_DIR/.go/cache
+  NPM_CONFIG_CACHE: $CI_PROJECT_DIR/.npm
+
+.node:
+  image: node:24
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [.npm/]
+  before_script:
+    - npm ci --prefer-offline --no-audit
+
+.go:
+  image: golang:1.27
+  cache:
+    key:
+      files: [go.sum]
+    paths:
+      - .go/pkg/mod/
+      - .go/cache/
+
+# Prettier is one tool for html, css, ts, json, md and yaml, and its ignore
+# list is tuned for the whole repo: splitting it per language would pay npm ci
+# three times over.
+format:
+  extends: .node
+  interruptible: true
+  script:
+    - npm run format:check
+
+css:
+  extends: .node
+  interruptible: true
+  script:
+    - npm run lint:css
+
+ts:
+  extends: .node
+  interruptible: true
+  script:
+    - npm run lint:ts
+    - |
+      npm run api:types
+      if [ -n "$(git status --porcelain src/api-types.ts)" ]; then
+        echo "Generated API types do not match openapi.json: run npm run api:types"
+        git --no-pager diff -- src/api-types.ts
+        exit 1
+      fi
+      echo "OK"
+    - |
+      npm run build:ts
+      if [ -n "$(git status --porcelain public/js/)" ]; then
+        echo "Compiled public/js/ does not match src/: run npm run build:ts"
+        git status --porcelain public/js/
+        exit 1
+      fi
+      echo "OK"
+
+lint-go:
+  stage: test
+  image: golangci/golangci-lint:v2.14.0-alpine
+  interruptible: true
+  cache:
+    key:
+      files: [go.sum]
+    paths:
+      - .go/pkg/mod/
+      - .go/cache/
+  script:
+    - golangci-lint run ./...
+
+# -race is mandatory: the backend is fully parallel (atomic counter, limiter
+# mutexes, WAL) and only this check catches a race.
+go:
+  extends: .go
+  interruptible: true
+  script:
+    - |
+      set -euo pipefail
+      # gofmt goes over git files: ./... would pick up the flatted package
+      # inside node_modules, which is not our code. xargs -0 -r instead of
+      # $(): an empty pipe used to run bare gofmt and swallow a typo.
+      unformatted="$(git ls-files -z '*.go' | xargs -0 -r gofmt -l)"
+      if [ -n "$unformatted" ]; then
+        echo "Not formatted: $unformatted"
+        git ls-files -z '*.go' | xargs -0 -r gofmt -d
+        exit 1
+      fi
+      echo "OK"
+    - go list ./... | grep -v node_modules | xargs -r go vet
+    - go list ./... | grep -v node_modules | xargs -r go test -race
+    - go build -o /tmp/site-server ./server
+
+# Non-blocking: a new vulnerability in a transitive dependency must not hold
+# the deploy hostage until a fix we do not control lands. Read the log, fix
+# separately.
+govulncheck:
+  extends: .go
+  allow_failure: true
+  interruptible: true
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
+
+# Both checks are plain bash: no node, no Go.
+shell:
+  stage: test
+  image: golang:1.27
+  interruptible: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends shellcheck bats python3-yaml
+    - go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+    - export PATH="$PATH:$(go env GOPATH)/bin"
+  script:
+    - |
+      shellcheck -S warning \
+        scripts/*.sh deploy/*.sh deploy/remote/*.sh deploy/tests/fakessh
+    # The workflows of the GitHub mirror, the GitLab YAML and the behaviour of
+    # the deploy scripts with stubbed server commands.
+    - bash scripts/check-deploy.sh
+
+# Counts the main page: index.html and the style layers from public/css.
+# Layout layers (public/css/design/) stay out of the budget.
+size:
+  stage: test
+  image: debian:bookworm-slim
+  interruptible: true
+  script:
+    - bash scripts/check-size.sh
+
+# Full rehearsal of the deploy on a real systemd, as the deploy user over ssh,
+# no sudo anywhere. It needs a privileged container with systemd, which the
+# shared runners do not give: the job only appears when the pipeline is
+# started by hand with RUN_E2E=true, and a failure never blocks a deploy.
+e2e:
+  stage: e2e
+  image: debian:bookworm-slim
+  rules:
+    - if: $RUN_E2E == "true"
+      when: manual
+  allow_failure: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends
+      docker.io openssh-server openssh-client rsync systemd
+  script:
+    - bash deploy/tests/e2e/run.sh
+
+.deploy-env:
+  image: golang:1.27
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends rsync openssh-client
+    - mkdir -p "$HOME/.ssh"
+    - |
+      # A File variable is a path, an environment variable holds the key.
+      if [ -f "$SSH_PRIVATE_KEY" ]; then
+        cp "$SSH_PRIVATE_KEY" "$HOME/.ssh/deploy_key"
+      else
+        printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/deploy_key"
+      fi
+      chmod 600 "$HOME/.ssh/deploy_key"
+      ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >>"$HOME/.ssh/known_hosts" 2>/dev/null
+    - |
+      export DEPLOY_PATH="${DEPLOY_PATH:-/var/www/9site}"
+      export TARGET="${SSH_USER:-deploy}@$SSH_HOST"
+      export SSH_OPTS="ssh -i $HOME/.ssh/deploy_key -p ${SSH_PORT:-22} -o StrictHostKeyChecking=yes"
+      echo "deploy target: $TARGET:$DEPLOY_PATH"
+
+deploy:
+  extends: .deploy-env
+  stage: deploy
+  needs: [format, css, ts, go, lint-go, shell, size]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ENABLED == "true"
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENABLED == "true"
+  environment:
+    name: production
+    url: https://9swag.myftp.biz
+  # A newer pipeline must not cancel a deploy in flight: it would cut rsync or
+  # a restart in half and leave the server with a new binary and old static
+  # files. The next deploy simply waits.
+  resource_group: deploy-production
+  interruptible: false
+  script:
+    # main.version through ldflags: /healthz reports it and the deploy
+    # compares the binary that came up with the one it built.
+    - |
+      GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+        go build -trimpath -ldflags="-s -w -X main.version=$CI_COMMIT_SHA" \
+        -o build/site-server ./server
+    - bash deploy/upload-static.sh
+    # The deploy user prepares its own runtime: the unit directory and the
+    # linger that keeps the user manager up. No root, so a fresh server is
+    # ready with no human step: the one-time root setup is
+    # deploy/setup-server.sh.
+    - bash deploy/remote/run.sh prepare "DEPLOY_PATH=$DEPLOY_PATH"
+    - bash deploy/remote/run.sh preflight "DEPLOY_PATH=$DEPLOY_PATH"
+    - |
+      set -euo pipefail
+      # Private directory under the deploy path, not /tmp: deploy.env holds
+      # the SMTP password once it is filled in.
+      $SSH_OPTS "$TARGET" "rm -rf '$DEPLOY_PATH/.incoming' && \
+        mkdir -p '$DEPLOY_PATH/.incoming' && chmod 700 '$DEPLOY_PATH/.incoming'"
+      rsync -az -e "$SSH_OPTS" deploy/9site.service deploy/deploy.env \
+        "$TARGET:$DEPLOY_PATH/.incoming/"
+      bash deploy/remote/run.sh install-unit "DEPLOY_PATH=$DEPLOY_PATH"
+    - |
+      set -euo pipefail
+      $SSH_OPTS "$TARGET" "mkdir -p '$DEPLOY_PATH/releases/$CI_COMMIT_SHA'"
+      rsync -az -e "$SSH_OPTS" build/site-server \
+        "$TARGET:$DEPLOY_PATH/releases/$CI_COMMIT_SHA/site-server"
+      echo "release $CI_COMMIT_SHA uploaded"
+    # One script on the server does the release end to end: snapshot the
+    # database, run the startup checks, flip the current symlink, restart,
+    # check the site. Whatever fails after the flip it undoes itself.
+    - |
+      set -euo pipefail
+      urls="$(grep -v '^#' deploy/smoke-urls.txt)"
+      bash deploy/remote/run.sh deploy "SHA=$CI_COMMIT_SHA" "URLS=$urls" \
+        "DEPLOY_PATH=$DEPLOY_PATH"
+    - echo "Deployed commit $CI_COMMIT_SHA"
+
+# Diagnosis of why the new binary failed ("стоп: ..." from its stderr): without
+# it the rollback treats the symptom and the cause stays invisible.
+journal:
+  extends: .deploy-env
+  stage: deploy
+  when: on_failure
+  needs: [deploy]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ENABLED == "true"
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENABLED == "true"
+  script:
+    - bash deploy/remote/run.sh journal-report
+
+# The same script the deploy uses to undo its own failure, so the manual path
+# and the automatic one cannot drift apart. Manual on purpose: it is needed
+# when a deploy failed after the flip and its own rollback did not help.
+rollback:
+  extends: .deploy-env
+  stage: deploy
+  needs: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ENABLED == "true"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENABLED == "true"
+      when: manual
+  allow_failure: true
+  environment:
+    name: production
+  # The same group as the deploy: a rollback must not run next to a deploy,
+  # they fight over one server.
+  resource_group: deploy-production
+  interruptible: false
+  script:
+    - bash deploy/remote/run.sh journal-report
+    - |
+      set -euo pipefail
+      urls="$(grep -v '^#' deploy/smoke-urls.txt)"
+      bash deploy/remote/run.sh rollback "URLS=$urls" "DEPLOY_PATH=$DEPLOY_PATH"
+    - echo "Rolled back to the previous release from commit $CI_COMMIT_SHA"
