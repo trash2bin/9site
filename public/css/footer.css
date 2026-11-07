@@ -9,7 +9,7 @@
 }
 
 .swag-panel h2 {
-  background: #7a0b12 url("/assets/img/leopard-red.svg") repeat;
+  background: #7a0b12 url("/assets/img/leopard-red.svg");
   background-size: 60px 60px;
 }
 
@@ -39,16 +39,12 @@
 .site-footer {
   padding: 15px 12px 14px;
   color: var(--bone);
-  background: var(--deep) url("/assets/img/leopard-red.svg") repeat;
+  background: var(--deep) url("/assets/img/leopard-red.svg");
   background-size: 130px 130px;
   background-blend-mode: multiply;
   border-top: 4px inset var(--bevel);
   text-align: center;
   font-size: 14px;
-}
-
-.footer-tools {
-  display: block;
 }
 
 .counter {
@@ -73,10 +69,6 @@
   border: 1px inset var(--bevel);
 }
 
-.button-row {
-  display: block;
-}
-
 .button-row a {
   display: inline-block;
   margin: 3px 1px;
@@ -86,44 +78,20 @@
 
 .button-row img {
   border: 1px solid var(--bevel);
-  image-rendering: auto;
 }
 
 .button-row a:hover {
   transform: rotate(-2deg) scale(1.04);
 }
 
-.button88 {
+/* Бейджи-картинки без ссылки: размер задаёт CSS, в разметке только alt="". */
+.swag-banners > img,
+.button-row > img {
   display: inline-block;
   width: 88px;
   height: 31px;
   margin: 3px 2px;
-  padding: 3px 2px;
-  overflow: hidden;
-  color: var(--bone) !important;
-  background: var(--slab);
-  border: 2px outset var(--bevel);
-  font:
-    bold 9px/10px "Courier New",
-    monospace;
-  text-align: center;
-  text-decoration: none;
   vertical-align: top;
-}
-
-.button88:hover {
-  transform: rotate(-3deg);
-  color: #000 !important;
-  background: var(--yellow);
-}
-
-.button88.hot {
-  background: var(--blood);
-}
-
-.button88.cyan {
-  color: #000 !important;
-  background: var(--cyan);
 }
 
 .site-footer p {

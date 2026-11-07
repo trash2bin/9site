@@ -12,7 +12,6 @@
 }
 
 .parts-grid {
-  display: block;
   font-size: 0;
   margin: 12px 0 2px;
 }
@@ -113,7 +112,6 @@
   font-family: Georgia, serif;
   transform: rotate(0.8deg);
   background-image: url("/assets/img/texture-badge.gif");
-  background-repeat: repeat;
   background-blend-mode: multiply;
 }
 
@@ -129,30 +127,14 @@
   color: #e8c8d4;
 }
 
-.inventory-log {
-  margin: 13px 0 5px;
-  padding: 9px;
-  color: var(--matrix);
-  background: #050505;
-  border: 3px inset var(--bevel);
-  font:
-    12px/1.55 "Courier New",
-    monospace;
-}
-
-.inventory-log b {
-  color: #ffff00;
-}
-
 .rotation-panel {
-  background: #1a0709 url("/assets/img/leopard-red.svg") repeat;
+  background: #1a0709 url("/assets/img/leopard-red.svg");
   background-size: 120px 120px;
   background-blend-mode: multiply;
   transform: rotate(0.18deg);
 }
 
 .album-row {
-  display: block;
   font-size: 0;
   margin: 10px 0 2px;
   white-space: nowrap;

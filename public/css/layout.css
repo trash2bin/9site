@@ -50,7 +50,7 @@
   padding: 18px 16px 14px;
   text-align: center;
   color: var(--bone);
-  background: #a3121f url("/assets/img/leopard-red.svg") repeat;
+  background: #a3121f url("/assets/img/leopard-red.svg");
   background-size: 72px 72px;
   border-bottom: 4px outset var(--bevel);
 }
@@ -59,7 +59,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: url("/assets/img/texture-hyper.gif") repeat;
+  background: url("/assets/img/texture-hyper.gif");
   background-size: 321px 61px;
   mix-blend-mode: overlay;
   opacity: 0.75;
@@ -200,7 +200,7 @@ h1 {
 .site-nav {
   padding: 9px 14px;
   color: var(--bone);
-  background: var(--void) url("/assets/img/texture-hyper.gif") repeat;
+  background: var(--void) url("/assets/img/texture-hyper.gif");
   background-blend-mode: multiply;
   background-size: 321px 61px;
   border-bottom: 3px groove var(--bevel);
@@ -230,7 +230,7 @@ main {
 .panel {
   margin: 0 0 14px;
   padding: 13px 15px 14px;
-  background: var(--coal) url("/assets/img/texture-hyper.gif") repeat;
+  background: var(--coal) url("/assets/img/texture-hyper.gif");
   background-size: 642px 122px;
   background-blend-mode: multiply;
   border: 3px ridge var(--bevel-d);

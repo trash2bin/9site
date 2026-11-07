@@ -10,7 +10,7 @@
   margin: -2px -3px 12px;
   padding: 5px 8px;
   color: var(--yellow);
-  background: #c00000 url("/assets/img/texture-hyper.gif") repeat;
+  background: #c00000 url("/assets/img/texture-hyper.gif");
   background-blend-mode: overlay;
   background-size: 321px 61px;
   border: 2px outset var(--bevel);
@@ -64,7 +64,8 @@ p {
     monospace;
 }
 
-.pixel-note img {
+.pixel-note img,
+.sticker-line img {
   vertical-align: middle;
   image-rendering: pixelated;
 }
@@ -103,29 +104,7 @@ p {
   text-align: center;
 }
 
-.sticker-line img {
-  vertical-align: middle;
-  image-rendering: pixelated;
-}
-
-.wide-collage {
-  display: block;
-  width: 100%;
-  height: 190px;
-  object-fit: cover;
-  object-position: center;
-  border: 4px outset var(--bevel);
-  image-rendering: auto;
-  filter: saturate(1.25) contrast(1.1);
-}
-
-.parts-image {
-  height: 170px;
-  object-position: center 47%;
-}
-
 .hardware-row {
-  display: block;
   font-size: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -182,7 +161,6 @@ p {
 }
 
 .banner-strip {
-  display: block;
   margin: 12px 0 2px;
   text-align: center;
 }

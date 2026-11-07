@@ -23,6 +23,7 @@ http://127.0.0.1:8080/auth/login 404
 http://127.0.0.1:8080/css/ 404
 http://127.0.0.1:8080/css/auth/ 404
 http://127.0.0.1:8080/assets/ 404
+http://127.0.0.1:8080/assets/banners/11-continue-insert-200.gif 200
 http://127.0.0.1:8080/js/ 404
 http://127.0.0.1:8080/var/site.db 404
 http://127.0.0.1:8080/var/auth.db 404
